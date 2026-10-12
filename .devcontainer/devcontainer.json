@@ -1,6 +1,6 @@
 {
   "name": "AOI Labs - by Tim",
-  "image": "mcr.microsoft.com/devcontainers/universal:2",
+  "image": "mcr.microsoft.com/devcontainers/python:1-3.12-bookworm",
   "features": {
     "ghcr.io/devcontainers/features/docker-in-docker:2": {}
   },
