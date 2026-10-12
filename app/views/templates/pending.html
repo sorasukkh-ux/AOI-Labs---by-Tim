@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% from "_macros.html" import page_head %}
+{% block content %}
+{{ page_head(t(label_key) if label_key else menu.MENU_NAME, url_for('home.index', g=group)) }}
+<div class="card gap">
+  <p class="card-title mb10">{{ t('plannedTitle') }}</p>
+  <p class="desc-text">{{ t('plannedDesc') }}</p>
+</div>
+{% endblock %}

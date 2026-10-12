@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block content %}
+<div id="login-screen">
+  <div class="card">
+    <p class="card-title">{{ t('loginTitle') }}</p>
+    <p class="hint">{{ t('loginDesc') }}</p>
+    {% if no_users %}<p class="notice warn">{{ t('loginNoUsers') }}</p>{% endif %}
+    <form id="login-form" method="post" autocomplete="on">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="field-row">
+        <label class="field-label" for="login-user">{{ t('usrLblId') }}</label>
+        <input type="text" id="login-user" name="user_id" value="{{ entered_user }}" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+      </div>
+      <div class="field-row">
+        <label class="field-label" for="login-password">{{ t('usrLblPassword') }}</label>
+        <input type="password" id="login-password" name="password" autocomplete="current-password" required>
+      </div>
+      <div class="field-row">
+        <label class="field-label" for="login-branch">{{ t('loginBranchLabel') }}</label>
+        <select id="login-branch" name="branch">
+          {% for b in branches %}<option value="{{ b }}"{% if b == chosen %} selected{% endif %}>{{ branch_label(b) }}</option>{% endfor %}
+        </select>
+        <p class="cap-note" id="login-branch-note">{{ t('loginBranchHint') }}</p>
+      </div>
+      <p class="login-error{% if error %} show{% endif %}" id="login-error" role="alert">{{ error or '' }}</p>
+      <button type="submit" class="action primary" id="login-btn">{{ t('loginBtn') }}</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% from "_macros.html" import page_head %}
+{% block content %}
+<div id="tab-customer">
+{{ page_head(None, next_url or url_for('home.index', g='AD')) }}
+<div class="card mb14">
+  <form method="get" action="{{ url_for('admin_customers.customer_list') }}" id="cust-search-form">
+    <div class="row-inline">
+      <label class="field-label" for="cust-scan">{{ t('scanQR') }}</label>
+      <input type="text" id="cust-scan" name="scan" value="{{ scan }}" placeholder="{{ t('customerIdPh') }}" autocapitalize="characters" spellcheck="false">
+    </div>
+    <div class="row-inline">
+      <label class="field-label" for="cust-search-name">{{ t('custNameLabel') }}</label>
+      <input type="text" id="cust-search-name" name="q" value="{{ query }}" placeholder="{{ t('customerNamePh') }}">
+      <button type="submit" class="icon-btn" id="cust-search-btn" title="{{ t('btnSearch') }}" aria-label="{{ t('btnSearch') }}">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="10.5" cy="10.5" r="6.5" stroke="#F5F5F5" stroke-width="2.6"/><line x1="15.3" y1="15.3" x2="21" y2="21" stroke="#F5F5F5" stroke-width="2.6" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+  </form>
+  <div id="cust-result-list" class="cust-result-list">
+    {% for c in customers %}
+    <a class="demo-row cust-row{% if customer and c.CUST_CODE == customer.CUST_CODE %} selected{% endif %}" href="{{ url_for('admin_customers.customer_view', code=c.CUST_CODE, q=query or None, next=next_url or None) }}" data-cust-code="{{ c.CUST_CODE }}">
+      <span class="demo-id">{{ c.CUST_NAME }}</span><span class="demo-meta">{{ c.CUST_CODE }} &middot; {{ c.MOBILE_NO }}</span>
+      {% if c.DISTANCE_KM is not none %}<span class="badge manual">{{ c.DISTANCE_KM|num }} {{ t('unitKm') }}</span>{% endif %}
+    </a>
+    {% else %}
+    <p class="hint home-empty">{{ t('custListEmpty') }}</p>
+    {% endfor %}
+  </div>
+
+  {% if mode == 'view' %}
+  <div class="two-col mb14" id="cust-view-actions">
+    {% if can_create %}<a class="action" id="cust-new-btn" href="{{ url_for('admin_customers.customer_new', next=next_url or None) }}">{{ t('btnNew') }}</a>{% else %}<span></span>{% endif %}
+    {% if can_edit and customer %}<a class="action" id="cust-edit-btn" href="{{ url_for('admin_customers.customer_view', code=customer.CUST_CODE, edit=1, next=next_url or None) }}">{{ t('btnEdit') }}</a>
+    {% else %}<button class="action" id="cust-edit-btn" type="button" disabled>{{ t('btnEdit') }}</button>{% endif %}
+  </div>
+  {% endif %}
+
+  <form method="post" autocomplete="off" id="cust-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <fieldset {% if mode == 'view' %}disabled{% endif %} class="plain">
+    <div class="two-col field-row">
+      <div><label class="field-label" for="cust-code">{{ t('fieldCode') }}</label><input type="text" id="cust-code" value="{{ customer.CUST_CODE if customer and mode != 'new' else (t('custCodeAuto') if mode == 'new' else '') }}" disabled></div>
+      <div><label class="field-label" for="cust-lineid">{{ t('fieldLineId') }}</label><input type="text" id="cust-lineid" name="LINE_ID" value="{{ values.get('LINE_ID') or '' }}" maxlength="50" autocapitalize="none"></div>
+    </div>
+    <div class="two-col field-row">
+      <div><label class="field-label" for="cust-phone">{{ t('fieldPhone') }}</label><input type="text" id="cust-phone" name="MOBILE_NO" value="{{ values.get('MOBILE_NO') or '' }}" inputmode="tel" maxlength="20"></div>
+      <div><label class="field-label" for="cust-name">{{ t('custNameLabel') }}</label><input type="text" id="cust-name" name="CUST_NAME" value="{{ values.get('CUST_NAME') or '' }}" maxlength="200"></div>
+    </div>
+    <div class="field-row">
+      <label class="field-label" for="cust-address">{{ t('fieldAddress') }}</label><input type="text" id="cust-address" name="ADDRESS" value="{{ values.get('ADDRESS') or '' }}" maxlength="200">
+    </div>
+    <div class="field-row mb0">
+      <label class="field-label" for="cust-distance">{{ t('fieldDistance') }}</label><input type="number" min="0" step="0.1" id="cust-distance" name="DISTANCE_KM" value="{{ values.get('DISTANCE_KM')|plain }}">
+    </div>
+    </fieldset>
+    {% if mode != 'view' %}
+    <div class="two-col mt14" id="cust-edit-actions">
+      <a class="action" id="cust-cancel-btn" href="{{ next_url or (url_for('admin_customers.customer_view', code=customer.CUST_CODE) if customer else url_for('admin_customers.customer_list')) }}">{{ t('btnCancel') }}</a>
+      <button class="action primary" type="submit" id="cust-save-btn">{{ t('btnSave') }}</button>
+    </div>
+    {% endif %}
+  </form>
+</div>
+
+{% if customer and mode != 'new' %}
+<p class="tv-section-title plain">{{ t('historyTitle') }}</p>
+<div class="table-scroll">
+  <table class="tv-table wide">
+    <thead><tr><th>{{ t('colDate') }}</th><th>{{ t('colService') }}</th><th>{{ t('colStatus') }}</th><th>{{ t('colIncome') }}</th><th>{{ t('colOutcome') }}</th><th>{{ t('colDetails') }}</th></tr></thead>
+    <tbody>
+      {% for order in history %}
+      <tr>
+        <td>{{ fmt_datetime(order.REGIST_DATE) }}</td><td>{{ t('svcMilling') }}</td><td>{{ t(status_keys[order.MILL_STATUS]) }}</td>
+        <td class="amount-in">+{{ order.pay_total|num }}</td><td>0</td>
+        <td>{% if can_open_orders %}<a class="action small-btn" href="{{ url_for('service_milling.order_detail', ord_id=order.ORD_ID) }}" data-popup>{{ t('colDetails') }}</a>{% endif %}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6">{{ t('noOrders') }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+</div>
+{% endblock %}

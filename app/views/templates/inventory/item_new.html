@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block content %}
+<div id="tab-inventory-form">
+<a class="back-btn" href="{{ url_for('inventory.item_list') }}">&larr; <span>{{ t('tabInventoryList') }}</span></a>
+<p class="tv-section-title plain" id="inv-form-title">{{ t('invFormAddTitle') }}</p>
+<div class="card mt14">
+  <form method="post" id="inv-add-form" class="inv-form" autocomplete="off">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="field-row">
+      <label class="field-label" for="inv-form-sku">{{ t('lblSkuName') }}</label>
+      <select id="inv-form-sku" name="MAT_CODE">
+        {% for m in materials %}<option value="{{ m }}"{% if values.get('MAT_CODE') == m %} selected{% endif %}>{{ mat_name(m) }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="two-col field-row">
+      <div><label class="field-label" for="inv-form-lot">{{ t('colLot') }}</label>
+        <input type="text" id="inv-form-lot" name="SUB_1" value="{{ values.get('SUB_1', '') }}" maxlength="20" placeholder="{{ t('invLotPh') }}"></div>
+      <div><label class="field-label" for="inv-form-unit">{{ t('colUnit') }}</label><input type="text" id="inv-form-unit" value="kg" disabled></div>
+    </div>
+    <div class="two-col field-row">
+      <div><label class="field-label" for="inv-form-loc">{{ t('lblLocation') }}</label>
+        <input type="text" id="inv-form-loc" name="LOC_ID" value="{{ values.get('LOC_ID', suggest_loc) }}" placeholder="01-002-005" pattern="[0-9]{2}-[0-9]{3}-[0-9]{3}" maxlength="10" inputmode="numeric" required></div>
+      <div><label class="field-label" for="inv-form-qty">{{ t('colQty') }} (kg)</label>
+        <input type="number" id="inv-form-qty" name="INV_QTY" value="{{ values.get('INV_QTY', '') }}" min="0.001" step="0.001" required></div>
+    </div>
+    <div class="field-row">
+      <label class="field-label" for="inv-form-status">{{ t('colStatus') }}</label>
+      <select id="inv-form-status" name="INV_STATUS">
+        {% for c, key in inv_status_keys.items() %}<option value="{{ c }}"{% if values.get('INV_STATUS') == c %} selected{% endif %}>{{ t(key) }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="field-row">
+      <label class="field-label" for="inv-form-optype">{{ t('lblOperationType') }}</label>
+      <select id="inv-form-optype" name="OPE_TYPE">
+        {% for c in ['I', 'AI'] %}<option value="{{ c }}"{% if values.get('OPE_TYPE') == c %} selected{% endif %}>{{ t(ope_keys[c]) }}</option>{% endfor %}
+      </select>
+    </div>
+    {% with group='increase' %}{% include "inventory/_reason.html" %}{% endwith %}
+    <div class="field-row inv-remark-row" hidden>
+      <label class="field-label" for="inv-form-remark">{{ t('lblRemark') }}</label>
+      <input type="text" id="inv-form-remark" name="REMARK" value="{{ values.get('REMARK', '') }}" maxlength="180" placeholder="{{ t('remarkPlaceholder') }}">
+    </div>
+    <p class="cap-note">{{ t('invAddNote') }}</p>
+    <div class="btn-pair mt14">
+      <a class="action" id="inv-form-cancel" href="{{ url_for('inventory.item_list') }}">{{ t('btnCancel') }}</a>
+      <button class="action primary" type="submit" id="inv-form-save">{{ t('btnSave') }}</button>
+    </div>
+  </form>
+</div>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/inventory.js') }}" defer></script>{% endblock %}

@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block content %}
+<a class="back-btn" href="{{ url_for('service_milling.order_list') }}">&larr; <span>{{ t('tabUpdateStatus') }}</span></a>
+<div class="card" id="order-detail" data-order="{{ order.ORD_ID }}">
+  {% include "service/_order_details.html" %}
+</div>
+{% if order.ORDER_TYPE == 'T' %}
+<div class="card mt14">
+  <div class="qr-preview-wrap mt6">
+    <p>{{ t('qrPreviewLabel') }}</p>
+    <div class="qr-label" id="qr-label" data-label='{{ label|tojson }}'></div>
+  </div>
+  <div class="result-actions">
+    <button class="action" type="button" id="print-label-btn" data-print>{{ t('btnPrintQR') }}</button>
+    <a class="action" href="{{ url_for('service_milling.new_order') }}">{{ t('tabService') }}</a>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

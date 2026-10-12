@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% from "_macros.html" import page_head %}
+{% block content %}
+<div id="tab-market" class="auto-page">
+{{ page_head(t('mkSourceTitle'), url_for('finance.pricing')) }}
+<div class="card gap"><p class="desc-text">{{ t('mkSourceDesc') }}</p>
+  <p class="cap-note tight mono-wrap">{{ t('mkSourceUrl') }}: <a href="{{ source_url }}" rel="noopener noreferrer" target="_blank">{{ source_url }}</a></p>
+  <p class="cap-note tight">{{ t('mkAutoOn', hour=hour) if auto else t('mkAutoOff') }}</p>
+</div>
+
+<div class="card mt14" id="market-status">
+  <div class="card-head">
+    <p class="card-title">{{ t('mkLastReport') }}</p>
+    {% if report %}<span class="badge approved">{{ t('mkReportOf', date=fmt_date(report.REPORT_DATE) if report.REPORT_DATE else '-') }}</span>{% endif %}
+  </div>
+  {% if report %}
+  <p class="cap-note tight">{{ t('mkFetchedAt', time=fmt_datetime(report.FETCH_DATE)) }} &middot; {{ t('mkRows', n=rows|length) }}
+    &middot; <span class="mono-wrap">{{ report.SOURCE_URL }}</span></p>
+  {% else %}<p class="hint">{{ t('mkNoReport') }}</p>{% endif %}
+  {% if last and last.REPORT_STATUS == 'ERR' %}<p class="notice warn">{{ t('mkLastError', time=fmt_datetime(last.FETCH_DATE), error=t(last.ERROR_KEY or 'mkErrDownload')) }}</p>{% endif %}
+  {% if can_edit %}
+  <div class="btn-pair mt6">
+    <form method="post" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="fetch">
+      <button class="action primary" type="submit" id="mk-fetch-btn">{{ t('mkFetchNow') }}</button></form>
+    {% if report %}<form method="post" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="apply">
+      <button class="action" type="submit" id="mk-apply-btn">{{ t('mkApplyAgain') }}</button></form>{% endif %}
+  </div>
+  <form method="post" enctype="multipart/form-data" class="od-inline mt14" id="mk-upload-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="upload">
+    <input type="file" name="REPORT_PDF" accept="application/pdf,.pdf" required aria-label="{{ t('mkUpload') }}">
+    <button class="action" type="submit">{{ t('mkUpload') }}</button>
+  </form>
+  <p class="cap-note">{{ t('mkUploadNote') }}</p>
+  {% endif %}
+</div>
+
+<div class="card mt14" id="market-map">
+  <p class="card-title">{{ t('mkMapTitle') }}</p>
+  <p class="cap-note tight">{{ t('mkMapNote2', pct=max_jump|int) }}</p>
+  <form method="post" id="mk-map-form" autocomplete="off">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="map">
+    <datalist id="mk-row-list">{% for r in rows %}<option value="{{ r.label }}">{% endfor %}</datalist>
+    <fieldset class="plain" {% if not can_edit %}disabled{% endif %}>
+    {% for m in maps %}
+    <div class="mk-map-row" data-mat="{{ m.MAT_CODE }}">
+      <p class="card-title sub">{{ m.name }}
+        {% if m.SOURCE == 'NABC' %}{% if m.nabc %}<span class="badge approved">{{ t('mkResult', kg=m.nabc.kg|num) }}</span>{% else %}<span class="badge blocked">{{ t('npNoPrice') }}</span>{% endif %}
+        {% elif m.SOURCE == 'TRMA' %}{% if m.found and m.found.kg %}<span class="badge approved">{{ t('mkResult', kg=m.found.kg|num) }}</span>{% else %}<span class="badge blocked">{{ t('mkNotFound') }}</span>{% endif %}
+        {% else %}<span class="badge neutral">{{ t('mkManual') }}</span>{% endif %}
+        {% if m.applied == 'jump' %}<span class="badge pending">{{ t('mkJump', pct=max_jump|int) }}</span>{% endif %}</p>
+      <div class="mk-map-fields mk-src-row">
+        <div><label class="field-label" for="mks-{{ m.MAT_CODE }}">{{ t('mkSource') }}</label>
+          <select id="mks-{{ m.MAT_CODE }}" name="SRC__{{ m.MAT_CODE }}">{% for sname in sources %}<option value="{{ sname }}"{% if m.SOURCE == sname %} selected{% endif %}>{{ t('mkSrc_' ~ sname) }}</option>{% endfor %}</select></div>
+        <div><label class="field-label" for="mknp-{{ m.MAT_CODE }}">{{ t('npProduct') }}</label>
+          <input type="text" id="mknp-{{ m.MAT_CODE }}" name="NP__{{ m.MAT_CODE }}" value="{{ m.NABC_PRODUCT or '' }}" maxlength="200" placeholder="ข้าวเปลือกเจ้าหอมมะลิ 105"></div>
+        <div><label class="field-label" for="mknv-{{ m.MAT_CODE }}">{{ t('npProvinces') }}</label>
+          <input type="text" id="mknv-{{ m.MAT_CODE }}" name="NPV__{{ m.MAT_CODE }}" value="{{ m.NABC_PROVINCES or '' }}" maxlength="300" placeholder="{{ t('npProvincesPh') }}"></div>
+        <div><label class="field-label" for="mkns-{{ m.MAT_CODE }}">{{ t('npStat') }}</label>
+          <select id="mkns-{{ m.MAT_CODE }}" name="NPS__{{ m.MAT_CODE }}">{% for st in stats %}<option value="{{ st }}"{% if (m.NABC_STAT or 'median') == st %} selected{% endif %}>{{ t('npStat_' ~ st) }}</option>{% endfor %}</select></div>
+      </div>
+      {% if m.SOURCE == 'NABC' and m.nabc %}<p class="cap-note tight">{{ t('npCalc', kg=m.nabc.kg|num, n=m.nabc.n, low=m.nabc.low|num, high=m.nabc.high|num, date=m.nabc.date) }}</p>{% endif %}
+      <div class="mk-map-fields">
+        <div><label class="field-label" for="mkr-{{ m.MAT_CODE }}">{{ t('mkRow') }}</label>
+          <input type="text" id="mkr-{{ m.MAT_CODE }}" name="ROW__{{ m.MAT_CODE }}" list="mk-row-list" value="{{ m.row.label if m.row else (m.ROW_TEXT or m.ROW_KEY or '') }}" maxlength="120" placeholder="{{ t('mkRowPh') }}"></div>
+        <div><label class="field-label" for="mkc-{{ m.MAT_CODE }}">{{ t('mkCol') }}</label>
+          <select id="mkc-{{ m.MAT_CODE }}" name="COL__{{ m.MAT_CODE }}">{% for i in range(6) %}<option value="{{ i }}"{% if (m.COL_INDEX or 0) == i %} selected{% endif %}>{{ t('mkColN', n=i + 1) }}{% if m.row and i < m.row['values']|length %} ({{ '{:,.0f}'.format(m.row['values'][i][0]) }}{% if m.row['values'][i][1] != m.row['values'][i][0] %}-{{ '{:,.0f}'.format(m.row['values'][i][1]) }}{% endif %}){% endif %}</option>{% endfor %}</select></div>
+        <div><label class="field-label" for="mkp-{{ m.MAT_CODE }}">{{ t('mkPick') }}</label>
+          <select id="mkp-{{ m.MAT_CODE }}" name="PICK__{{ m.MAT_CODE }}">{% for p in picks %}<option value="{{ p }}"{% if (m.COL_PICK or 'avg') == p %} selected{% endif %}>{{ t('mkPick_' ~ p) }}</option>{% endfor %}</select></div>
+        <div><label class="field-label" for="mku-{{ m.MAT_CODE }}">{{ t('mkUnit') }}</label>
+          <select id="mku-{{ m.MAT_CODE }}" name="UNIT__{{ m.MAT_CODE }}">{% for u in units %}<option value="{{ u }}"{% if (m.UNIT or 'auto') == u %} selected{% endif %}>{{ t('mkUnit_' ~ u) }}</option>{% endfor %}</select></div>
+      </div>
+      {% if m.SOURCE == 'TRMA' and m.found and m.found.raw is not none %}<p class="cap-note tight">{{ t('mkCalc', raw='{:,.2f}'.format(m.found.raw), factor=m.found.factor, kg=m.found.kg|num) }}</p>{% endif %}
+    </div>
+    {% endfor %}
+    {% if can_edit %}<button class="action primary full mt14" type="submit" id="mk-map-save">{{ t('mkMapSave') }}</button>{% endif %}
+    </fieldset>
+  </form>
+</div>
+
+<div class="card mt14" id="nabc-prices">
+  <p class="card-title">{{ t('npTitle') }}</p>
+  <p class="cap-note tight">{{ t('npNote') }} <span class="mono-wrap">{{ nabc_url }}</span></p>
+  {% for product, found in nabc_products %}
+  <p class="card-title sub">{{ product }}{% if found %} &middot; {{ found.date }} &middot; {{ t('mkResult', kg=found.kg|num) }}{% endif %}</p>
+  {% if found %}
+  <div class="inv-table-wrap"><table class="tv-table nabc-table">
+    <thead><tr><th>{{ t('npProvince') }}</th><th>{{ t('npMarket') }}</th><th class="num">{{ t('npDayPrice') }}</th><th class="num">{{ t('mkUnit_kg') }}</th></tr></thead>
+    <tbody>{% for r, kg in found.rows %}<tr><td>{{ r.PROVINCE }}</td><td>{{ r.MARKET_NAME }}</td><td class="num nowrap">{{ '{:,.0f}'.format(r.DAY_PRICE) }} {{ r.UNIT }}</td><td class="num">{{ kg|num }}</td></tr>{% endfor %}</tbody>
+  </table></div>
+  {% else %}<p class="hint">{{ t('npNoPrice') }}</p>{% endif %}
+  {% else %}<p class="hint">{{ t('npNone') }}</p>{% endfor %}
+</div>
+
+<div class="card mt14" id="market-rows">
+  <p class="card-title">{{ t('mkRowsTitle') }}</p>
+  <p class="cap-note tight">{{ t('mkRowsNote') }}</p>
+  <div class="inv-table-wrap"><table class="tv-table" id="mk-row-table">
+    <thead><tr><th>{{ t('mkRow') }}</th>{% for i in range(4) %}<th class="num">{{ t('mkColN', n=i + 1) }}</th>{% endfor %}</tr></thead>
+    <tbody>{% for r in rows %}<tr><td>{{ r.label }}</td>{% for i in range(4) %}<td class="num nowrap">{% if i < r['values']|length %}{{ '{:,.0f}'.format(r['values'][i][0]) }}{% if r['values'][i][1] != r['values'][i][0] %}-{{ '{:,.0f}'.format(r['values'][i][1]) }}{% endif %}{% endif %}</td>{% endfor %}</tr>
+    {% else %}<tr><td colspan="5" class="hint center">{{ t('autoNoData') }}</td></tr>{% endfor %}</tbody>
+  </table></div>
+</div>
+
+<div class="card mt14">
+  <p class="card-title sub">{{ t('mkHistory') }}</p>
+  <div class="inv-table-wrap"><table class="tv-table" id="mk-history">
+    <thead><tr><th>{{ t('colTime') }}</th><th>{{ t('mkReportDate') }}</th><th>{{ t('colStatus') }}</th><th>{{ t('colRef') }}</th></tr></thead>
+    <tbody>{% for h in history %}<tr><td class="nowrap">{{ fmt_datetime(h.FETCH_DATE) }}</td><td>{{ fmt_date(h.REPORT_DATE) if h.REPORT_DATE else '-' }}</td>
+      <td>{{ t('mkStatusOk') if h.REPORT_STATUS == 'OK' else t(h.ERROR_KEY or 'mkErrDownload') }}</td><td>{{ h.OPE_USER }}</td></tr>
+    {% else %}<tr><td colspan="4" class="hint center">{{ t('autoNoData') }}</td></tr>{% endfor %}</tbody>
+  </table></div>
+</div>
+</div>
+{% endblock %}

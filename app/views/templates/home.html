@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block content %}
+<div id="home-screen">
+{% if not groups %}
+  <p class="hint home-empty" id="home-empty">{{ t('homeNoAccess') }}</p>
+{% else %}
+  <div class="group-toggle">
+    {% for g in groups %}
+    <a class="group-btn{% if g.code == active %} active{% endif %}{% if g.alert %} has-alert{% endif %}" href="{{ url_for('home.index', g=g.code) }}" data-group="{{ g.code }}">{{ t(g.label_key) }}</a>
+    {% endfor %}
+  </div>
+  {% for g in groups if g.code == active %}
+  <div class="home-group active" id="grp-{{ g.code }}">
+    {% for section in g.sections %}
+    {% if section.label_key %}
+    <section class="home-subgroup{% if loop.first %} sub-first{% endif %}">
+      <h3 class="home-sub-title">{{ t(section.label_key) }}</h3>
+    {% endif %}
+      <div class="home-grid">
+        {% for tile in section.tiles %}
+        <a class="home-tile{% if not tile.built %} planned{% endif %}" href="{{ tile.url }}" data-menu="{{ tile.code }}">
+          <span class="home-tile-badge{% if tile.badge %} show{% endif %}">!</span>
+          <span class="icon" aria-hidden="true">{{ tile.icon }}</span>
+          <span class="label">{{ t(tile.label_key) if tile.label_key else tile.name }}</span>
+          {% if not tile.built %}<span class="tile-note">{{ t('plannedTag') }}</span>{% endif %}
+        </a>
+        {% endfor %}
+      </div>
+    {% if section.label_key %}</section>{% endif %}
+    {% endfor %}
+  </div>
+  {% endfor %}
+{% endif %}
+</div>
+{% endblock %}

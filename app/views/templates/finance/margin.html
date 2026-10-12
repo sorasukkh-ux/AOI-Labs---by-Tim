@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% from "_macros.html" import page_head, branch_picker %}
+{% block content %}
+<div id="tab-margin">
+{{ page_head(t('tabMargin'), url_for('home.index', g='FN')) }}
+<div class="card branch-pick-card">
+  {{ branch_picker('finance.margin', branch, branches, 'margin-branch-select') }}
+  <p class="cap-note">{{ t('maintBranchNote') }}</p>
+</div>
+<div class="search-wrap">
+  <span class="icon">&#128269;</span>
+  <input type="text" id="sku-search" placeholder="{{ t('searchPlaceholder') }}" data-card-search="#margin-list .margin-card">
+</div>
+<form method="post" id="margin-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="branch" value="{{ branch }}">
+  <fieldset class="plain" {% if not can_edit %}disabled{% endif %}>
+  <div class="card mb14" id="margin-bulk">
+    <p class="card-title sub">{{ t('bulkTitle') }}</p>
+    <div class="two-col field-row">
+      <div><label class="field-label" for="bulk-buy-target">{{ t('buyTarget') }}</label><input type="number" id="bulk-buy-target" placeholder="5" step="0.1" data-bulk="buy_target"></div>
+      <div><label class="field-label" for="bulk-sell-target">{{ t('sellTarget') }}</label><input type="number" id="bulk-sell-target" placeholder="8" step="0.1" data-bulk="sell_target"></div>
+    </div>
+    <div class="two-col field-row">
+      <div><label class="field-label" for="bulk-buy-range">{{ t('buyRange') }}</label><input type="text" id="bulk-buy-range" placeholder="3-7" data-bulk="buy_range"></div>
+      <div><label class="field-label" for="bulk-sell-range">{{ t('sellRange') }}</label><input type="text" id="bulk-sell-range" placeholder="6-10" data-bulk="sell_range"></div>
+    </div>
+    <button class="action" type="button" id="margin-bulk-apply">{{ t('btnApply') }}</button>
+  </div>
+  <div class="list" id="margin-list">
+    {% for c in cards %}
+    <div class="card margin-card" data-search="{{ c.name|lower }} {{ c.MAT_CODE|lower }}">
+      <div class="card-head">
+        <div class="checkline"><input type="checkbox" class="margin-pick" aria-label="{{ c.name }}" {% if c.custom %}disabled{% endif %}><p class="card-title">{{ c.name }}</p></div>
+        {% if c.custom %}<span class="badge manual">{{ t('manualNoMargin') }}</span>{% endif %}
+      </div>
+      {% if not c.custom %}
+      <div class="two-col field-row">
+        <div><label class="field-label" for="bt-{{ c.MAT_CODE }}">{{ t('buyTarget') }}</label><input type="number" step="0.1" min="0" max="100" id="bt-{{ c.MAT_CODE }}" name="buy_target__{{ c.MAT_CODE }}" value="{{ c.MG_BUY_TARGET|plain }}" data-field="buy_target"></div>
+        <div><label class="field-label" for="st-{{ c.MAT_CODE }}">{{ t('sellTarget') }}</label><input type="number" step="0.1" min="0" id="st-{{ c.MAT_CODE }}" name="sell_target__{{ c.MAT_CODE }}" value="{{ c.MG_SELL_TARGET|plain }}" data-field="sell_target"></div>
+      </div>
+      <div class="two-col field-row">
+        <div><label class="field-label" for="br-{{ c.MAT_CODE }}">{{ t('buyRange') }}</label><input type="text" id="br-{{ c.MAT_CODE }}" name="buy_range__{{ c.MAT_CODE }}" value="{{ c.buy_range }}" placeholder="3-7" data-field="buy_range"></div>
+        <div><label class="field-label" for="sr-{{ c.MAT_CODE }}">{{ t('sellRange') }}</label><input type="text" id="sr-{{ c.MAT_CODE }}" name="sell_range__{{ c.MAT_CODE }}" value="{{ c.sell_range }}" placeholder="6-10" data-field="sell_range"></div>
+      </div>
+      <div class="two-col">
+        <div><label class="field-label" for="fl-{{ c.MAT_CODE }}">{{ t('floorLabel') }}</label><input type="number" step="0.01" min="0" id="fl-{{ c.MAT_CODE }}" name="floor__{{ c.MAT_CODE }}" value="{{ c.MG_BUY_MIN|plain }}"></div>
+        <div><label class="field-label" for="ce-{{ c.MAT_CODE }}">{{ t('ceilingLabel') }}</label><input type="number" step="0.01" min="0" id="ce-{{ c.MAT_CODE }}" name="ceiling__{{ c.MAT_CODE }}" value="{{ c.MG_BUY_MAX|plain }}"></div>
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+    <p id="no-results" class="hint" hidden>{{ t('noResults') }}</p>
+  </div>
+  <p class="cap-note">{{ t('marginNote') }}</p>
+  {% if can_edit %}<button class="action primary full" type="submit" id="margin-save-btn">{{ t('btnSave') }}</button>{% endif %}
+  {% if can('FN_PRICING') %}<p class="cap-note"><a href="{{ url_for('finance.pricing', branch=branch) }}">{{ t('tabPricing') }} &rarr;</a></p>{% endif %}
+  </fieldset>
+</form>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/finance.js') }}" defer></script>{% endblock %}

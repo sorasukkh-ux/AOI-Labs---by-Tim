@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card gap">
+  <p class="card-title mb10">{{ code }}</p>
+  <p class="desc-text" id="error-message">{{ message }}</p>
+  <p class="mt14"><a class="action" href="{{ url_for('home.index') }}">&larr; {{ t('backHomeLabel') }}</a></p>
+</div>
+{% endblock %}

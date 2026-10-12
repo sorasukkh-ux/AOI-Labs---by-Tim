@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% from "_macros.html" import page_head, branch_picker %}
+{% block content %}
+<div id="tab-marketing">
+{{ page_head(t('tabMarketing'), url_for('home.index', g='FN')) }}
+<div class="card gap"><p class="desc-text">{{ t('mkDesc') }}</p></div>
+<div class="card branch-pick-card">
+  {{ branch_picker('finance.marketing', branch, branches, 'mk-branch-select') }}
+  <p class="cap-note">{{ t('mkBranchNote') }}</p>
+</div>
+<div class="card">
+  <div class="card-head">
+    <p class="card-title">{{ t('mkMillPromoTitle') }}</p>
+    <span class="badge {{ {'running': 'approved', 'inactive': 'manual', 'scheduled': 'pending', 'expired': 'blocked'}[state] }}" id="mk-mill-state">{{ t({'running': 'mkStateRunning', 'inactive': 'mkStateInactive', 'scheduled': 'mkStateScheduled', 'expired': 'mkStateExpired'}[state]) }}</span>
+  </div>
+  <p class="hint">{{ t('mkMillPromoDesc') }}</p>
+  <form method="post" id="mk-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="branch" value="{{ branch }}">
+    <fieldset class="plain" {% if not can_edit %}disabled{% endif %}>
+    <div class="field-row"><label class="checkline" for="mk-mill-active"><input type="checkbox" id="mk-mill-active" name="PROMO_STATUS" value="A"{% if promo.PROMO_STATUS == 'A' %} checked{% endif %}><span>{{ t('mkLblActive') }}</span></label></div>
+    <div class="field-row"><label class="field-label" for="mk-mill-pct">{{ t('mkLblDiscount') }}</label>
+      <input type="number" min="0" max="100" step="0.5" id="mk-mill-pct" name="DISCOUNT_PCT" value="{{ pct|plain }}" required></div>
+    <div class="two-col field-row">
+      <div><label class="field-label" for="mk-mill-from">{{ t('mkLblFrom') }}</label><input type="date" id="mk-mill-from" name="VALID_FROM" value="{{ valid_from }}"></div>
+      <div><label class="field-label" for="mk-mill-to">{{ t('mkLblTo') }}</label><input type="date" id="mk-mill-to" name="VALID_TO" value="{{ valid_to }}"></div>
+    </div>
+    <p class="cap-note">{{ t('mkDatesNote') }}</p>
+    <div class="suggest-box" id="mk-mill-example">
+      <p class="suggest-label">{{ t('mkExampleTitle') }}</p>
+      <div class="suggest-values">
+        {% for e in examples %}<span>{{ e.name }} {{ '%.2f'|format(e.sell) }}{% if state == 'running' and pct > 0 %} &rarr; <b>{{ '%.2f'|format(e.discounted) }}</b>{% endif %}</span>{% endfor %}
+      </div>
+      {% if not (state == 'running' and pct > 0) %}<p class="suggest-reason">{{ t('mkExampleNone') }}</p>{% endif %}
+    </div>
+    {% if can_edit %}<button class="action primary full" id="mk-mill-save-btn" type="submit">{{ t('btnSave') }}</button>{% endif %}
+    </fieldset>
+  </form>
+</div>
+</div>
+{% endblock %}

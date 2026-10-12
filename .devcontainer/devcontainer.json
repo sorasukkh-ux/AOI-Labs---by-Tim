@@ -1,0 +1,12 @@
+{
+  "name": "AOI Labs - by Tim",
+  "image": "mcr.microsoft.com/devcontainers/universal:2",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+  },
+  "forwardPorts": [5000],
+  "portsAttributes": {
+    "5000": { "label": "AOI Labs", "onAutoForward": "openBrowser" }
+  },
+  "postCreateCommand": "pip install -r requirements.txt"
+}

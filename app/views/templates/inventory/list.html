@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% from "_macros.html" import page_head %}
+{% block content %}
+<div id="tab-inventory-list">
+{{ page_head(None, url_for('home.index', g='IV')) }}
+<div class="toolbar">
+  <p class="tv-section-title plain mb0">{{ t('tabInventoryList') }}</p>
+  <div class="inv-toolbar-actions">
+    {% if can_create %}<a class="action" id="inv-add-btn" href="{{ url_for('inventory.item_new') }}">{{ t('btnAdd') }}</a>{% endif %}
+    {% if can_edit %}<a class="action" id="inv-transfer-btn" href="{{ url_for('inventory.transfer') }}">{{ t('btnTransfer') }}</a>{% endif %}
+  </div>
+</div>
+<form method="get" class="inv-search">
+  <input type="search" name="q" value="{{ q }}" placeholder="{{ t('invSearchPh') }}" aria-label="{{ t('invSearchPh') }}">
+  <button class="action" type="submit">{{ t('btnSearch') }}</button>
+</form>
+<div class="inv-table-wrap">
+<table class="tv-table" id="inv-list-table">
+  <thead><tr><th>{{ t('colSku') }}</th><th>{{ t('colLot') }}</th><th class="num">{{ t('colOnHand') }}</th><th>{{ t('colUnit') }}</th><th>{{ t('colStatus') }}</th></tr></thead>
+  <tbody id="inv-list-body">
+  {% for item in items %}
+    <tr class="inv-row" data-inv="{{ item.INV_ID }}">
+      <td><a class="inv-link" href="{{ url_for('inventory.item_edit', inv_id=item.INV_ID) }}">{{ item.name }}</a>
+        <small class="inv-sub">{{ item.loc_text }}</small>
+        {% if item.kept_for %}<small class="inv-kept">{{ t('invKeptFor') }}: {{ item.kept_for }}</small>{% endif %}</td>
+      <td>{{ item.SUB_1 or '-' }}</td>
+      <td class="num">{{ item.qty|num }}</td>
+      <td>{{ item.UOM_CODE|lower }}</td>
+      <td><span class="badge {{ status_badge[item.INV_STATUS] }}">{{ t(inv_status_keys[item.INV_STATUS]) }}</span></td>
+    </tr>
+  {% else %}
+    <tr><td colspan="5" class="hint">{{ t('invEmpty') }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+</div>
+{% endblock %}

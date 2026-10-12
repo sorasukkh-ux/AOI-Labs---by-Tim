@@ -1,0 +1,115 @@
+{# Order details in the design prototype's layout. Shown in the pop-up on the list and on the page after registration.
+   With the Edit right and an open order, customer, delivery, remark and (before Finished) quantities are editable. #}
+{% set edit = can_edit and order.is_open %}
+<div class="order-details{% if edit %} od-editable{% endif %}" data-order="{{ order.ORD_ID }}">
+  <p class="od-title">{{ t('detTitle', id=order.QR_ID) }}</p>
+  <p class="od-section">{{ t('detSecOrder') }}</p>
+  <div class="od-row"><span class="od-label">{{ t('colStatus') }}</span><span class="od-value" id="od-status">{{ t(status_keys[order.MILL_STATUS]) }}{% if order.CANCEL_REQ_FLG == 'P' %} &middot; {{ t('detCancelPending') }}{% elif order.CANCEL_REQ_FLG == 'A' and order.is_open %} &middot; {{ t('cancelApprovedTag') }}{% endif %}</span></div>
+  <div class="od-row"><span class="od-label">{{ t('lblDeliveryType') }}</span><span class="od-value">{{ t(type_keys[order.ORDER_TYPE]) }}</span></div>
+  <div class="od-row"><span class="od-label">{{ t('lblPriority') }}</span><span class="od-value">{{ t(priority_keys[order.MILL_PRIORITY]) }}</span></div>
+  <div class="od-row"><span class="od-label">{{ t('detRegistered') }}</span><span class="od-value">{{ fmt_datetime(order.REGIST_DATE) }}</span></div>
+  {% if order.MILL_STATUS == 'H' %}
+  <div class="od-row"><span class="od-label">{{ t('lblHoldReason') }}</span><span class="od-value" id="od-hold-reason">{{ order.HOLD_REASON or '-' }}</span></div>
+  {% endif %}
+  {% if order.CANCEL_REQ_FLG == 'R' %}
+  <div class="od-row"><span class="od-label">{{ t('detRejectReason') }}</span><span class="od-value">{{ order.CANCEL_REJECT_REASON or '-' }}</span></div>
+  {% endif %}
+  {% if order.ORDER_TYPE == 'D' and order.DELIVERY_ARRIVAL_TIME %}
+  <div class="od-row"><span class="od-label">{{ t('lblArrivalTime') }}</span><span class="od-value">{{ fmt_datetime(order.DELIVERY_ARRIVAL_TIME) }}{% if order.DELIVERY_CONFIRM_FLG %} &#10003;{% endif %}</span></div>
+  {% endif %}
+  {% if edit %}
+  <form method="post" action="{{ url_for('service_milling.update_details', ord_id=order.ORD_ID) }}" class="od-edit-form" id="od-edit-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="back" value="{{ 'list' if popup else 'detail' }}">
+    <input type="hidden" name="CUST_CODE" value="{{ order.CUST_CODE }}" data-cust-code-field>
+  {% endif %}
+  <p class="od-section">{{ t('colCustomer') }}</p>
+  <div class="od-row"><span class="od-label">{{ t('custNameLabel') }}</span><span class="od-value" data-cust-name>{{ order.customer.get('CUST_NAME', order.CUST_CODE) }}</span></div>
+  <div class="od-row"><span class="od-label">{{ t('lblCustMobile') }}</span><span class="od-value" data-cust-mobile>{{ order.customer.get('MOBILE_NO') or '-' }}</span></div>
+  {% if edit %}
+  <div class="od-field od-cust-search">
+    <label class="field-label" for="od-cust-q-{{ order.ORD_ID }}">{{ t('detChangeCustomer') }}</label>
+    <div class="od-inline">
+      <input type="text" id="od-cust-q-{{ order.ORD_ID }}" data-cust-query placeholder="{{ t('custSearchPh') }}" autocomplete="off">
+      <button type="button" class="action" data-cust-search="{{ url_for('service_milling.customer_search') }}" data-empty="{{ t('custListEmpty') }}">{{ t('btnSearch') }}</button>
+    </div>
+    <div class="od-cust-results" data-cust-results hidden></div>
+  </div>
+  {% endif %}
+  {% if order.ORDER_TYPE == 'D' %}
+  {% if edit %}
+  <div class="od-field"><label class="field-label" for="od-addr-{{ order.ORD_ID }}">{{ t('lblCustAddress') }}</label>
+    <input type="text" id="od-addr-{{ order.ORD_ID }}" name="DELIVERY_ADDRESS" value="{{ order.DELIVERY_ADDRESS or '' }}" maxlength="200" data-cust-address></div>
+  <div class="od-field"><label class="field-label" for="od-km-{{ order.ORD_ID }}">{{ t('lblDistanceKm') }}</label>
+    <input type="number" id="od-km-{{ order.ORD_ID }}" name="DELIVERY_DISTANCE" value="{{ order.DELIVERY_DISTANCE|plain }}" min="0" step="0.1" data-cust-distance></div>
+  {% else %}
+  <div class="od-row"><span class="od-label">{{ t('lblCustAddress') }}</span><span class="od-value">{{ order.DELIVERY_ADDRESS or '-' }}</span></div>
+  <div class="od-row"><span class="od-label">{{ t('lblDistanceKm') }}</span><span class="od-value">{{ order.DELIVERY_DISTANCE|num }}</span></div>
+  {% endif %}
+  {% endif %}
+  <p class="od-section">{{ t('svcMilling') }}</p>
+  {% set ov = order.RICE_VARIETY or 'WH' %}
+  {% if edit and order.qty_editable %}
+  <div class="od-field"><label class="field-label" for="od-variety-{{ order.ORD_ID }}">{{ t('lblVariety') }}</label>
+    <select id="od-variety-{{ order.ORD_ID }}" name="RICE_VARIETY">{% for v in varieties %}<option value="{{ v }}"{% if v == ov %} selected{% endif %}>{{ t(var_keys[v]) }}</option>{% endfor %}</select></div>
+  <div class="od-field"><label class="field-label" for="od-paddy-{{ order.ORD_ID }}">{{ t('lblPaddyInput') }}</label>
+    <input type="number" id="od-paddy-{{ order.ORD_ID }}" name="REGIST_PADDY" value="{{ order.REGIST_PADDY|plain }}" min="0.01" step="0.01" required></div>
+  {% else %}
+  <div class="od-row"><span class="od-label">{{ t('lblVariety') }}</span><span class="od-value">{{ t(var_keys[ov]) }}</span></div>
+  <div class="od-row"><span class="od-label">{{ t('lblPaddyInput') }}</span><span class="od-value">{{ order.REGIST_PADDY|num }}</span></div>
+  {% endif %}
+  <div class="od-row"><span class="od-label">{{ t('lblRiceOut') }}</span><span class="od-value">{{ order.EXPCT_RICE|num }}</span></div>
+  <div class="od-row"><span class="od-label">{{ t('lblBranOut') }}</span><span class="od-value">{{ order.EXPCT_BRAN|num }}</span></div>
+  <div class="od-row"><span class="od-label">{{ t('lblBrokenOut') }}</span><span class="od-value">{{ order.EXPCT_BROKE|num }}</span></div>
+  <div class="od-row"><span class="od-label">{{ t('lblHuskOut') }}</span><span class="od-value">{{ order.EXPCT_HUSK|num }}</span></div>
+  {% if edit and order.qty_editable %}
+  <div class="two-col od-field">
+    <div><label class="field-label" for="od-bran-{{ order.ORD_ID }}">{{ t('lblTakeBran') }}</label>
+      <input type="number" id="od-bran-{{ order.ORD_ID }}" name="BRAN_ORDER" value="{{ (order.BRAN_ORDER or 0)|plain }}" min="0" step="0.01"></div>
+    <div><label class="field-label" for="od-broken-{{ order.ORD_ID }}">{{ t('lblTakeBroken') }}</label>
+      <input type="number" id="od-broken-{{ order.ORD_ID }}" name="BROKE_ORDER" value="{{ (order.BROKE_ORDER or 0)|plain }}" min="0" step="0.01"></div>
+  </div>
+  {% else %}
+  <div class="od-row"><span class="od-label">{{ t('lblTakeBran') }}</span><span class="od-value">{{ order.BRAN_ORDER|num }}</span></div>
+  <div class="od-row"><span class="od-label">{{ t('lblTakeBroken') }}</span><span class="od-value">{{ order.BROKE_ORDER|num }}</span></div>
+  {% if edit %}<p class="cap-note">{{ t('detQtyLockedNote') }}</p>{% endif %}
+  {% endif %}
+  {% if edit %}
+  <div class="od-field"><label class="field-label" for="od-remark-{{ order.ORD_ID }}">{{ t('lblRemark') }}</label>
+    <input type="text" id="od-remark-{{ order.ORD_ID }}" name="REMARK" value="{{ order.REMARK or '' }}" maxlength="200"></div>
+  <p class="cap-note">{{ t('detRecalcNote') }}</p>
+  <button type="submit" class="action primary od-save-btn" id="od-save-btn">{{ t('btnSaveChanges') }}</button>
+  </form>
+  {% elif order.REMARK %}
+  <div class="od-row"><span class="od-label">{{ t('lblRemark') }}</span><span class="od-value">{{ order.REMARK }}</span></div>
+  {% endif %}
+  {% if order.linked or order.REF_INV_LOC or order.stock %}
+  <p class="od-section">{{ t('detSecStock') }}</p>
+  {% if order.REF_INV_LOC %}<div class="od-row"><span class="od-label">{{ t('detRiceLocation') }}</span><span class="od-value">{{ order.REF_INV_LOC }}{% if order.MILL_STATUS == 'C' %} &middot; {{ t('detReleased') }}{% endif %}</span></div>{% endif %}
+  {% for item in order.stock %}
+  <div class="od-row od-part"><span class="od-label">{{ mat_name(item.MAT_CODE) }} &middot; {{ item.SUB_1 }}</span><span class="od-value">{{ item.INV_QTY|num }} kg</span></div>
+  {% endfor %}
+  {% for bso in order.linked %}
+  <div class="od-row" data-linked="{{ bso.ORD_ID }}"><span class="od-label">{{ t('detLinkedOrder', mat=mat_name(bso.MAT_CODE)) }}<small>{{ t('svcSellLabel') }} #{{ bso.QR_ID }} &middot; {{ bso.ORD_QTY|num }} kg</small></span><span class="od-value">{{ t(bs_status_keys[bso.ORD_STATUS]) }}</span></div>
+  {% endfor %}
+  {% endif %}
+  <p class="od-section">{{ t('detSecPay') }}</p>
+  <div class="od-row"><span class="od-label">{{ t('payAmountLabel') }}</span><span class="od-value" id="od-pay-total">{{ order.pay_total|num }} THB</span></div>
+  <div class="od-row od-part"><span class="od-label">{{ t('payFeeLabel') }}</span><span class="od-value">{{ order.EST_PAY_MILLFEE|num }} THB</span></div>
+  <div class="od-row od-part"><span class="od-label">{{ t('payBranLabel') }}</span><span class="od-value">{{ order.EST_PAY_BRAN|num }} THB</span></div>
+  <div class="od-row od-part"><span class="od-label">{{ t('payBrokenLabel') }}</span><span class="od-value">{{ order.EST_PAY_BROKE|num }} THB</span></div>
+  {% if order.ORDER_TYPE == 'D' %}
+  <div class="od-row od-part"><span class="od-label">{{ t('payDeliveryLabel') }}</span><span class="od-value">{{ order.EST_PAY_DELIVERY|num }} THB</span></div>
+  {% endif %}
+  <div class="od-row"><span class="od-label">{{ t('receiveTimeLabel') }}</span><span class="od-value">{{ fmt_datetime(order.EXPCT_RECEIVE_TIME) }}</span></div>
+  <div class="od-row"><span class="od-label">{{ t('detNotify') }}</span><span class="od-value">-</span></div>
+  <div class="od-qr" data-qr="{{ label.qr }}"></div>
+  {% if order.can_request_cancel and can_edit %}
+  <form method="post" action="{{ url_for('service_milling.cancel_request', ord_id=order.ORD_ID) }}" class="od-actions">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="back" value="{{ 'list' if popup else 'detail' }}">
+    <p class="cap-note">{{ t('recordCancelNote') }}</p>
+    <button class="action" type="submit" id="record-cancel-btn" data-confirm="{{ t('confirmRecordCancel', id=order.QR_ID) }}">{{ t('btnRecordCancelRequest') }}</button>
+  </form>
+  {% endif %}
+</div>

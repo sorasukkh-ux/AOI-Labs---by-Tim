@@ -1,0 +1,35 @@
+{# One-series bar chart (geometry from controllers/automation._bars). Values sit on the bars; hover shows the title. #}
+{% macro bar_chart(bars, chart_id, label, unit='', fmt='%.1f') %}
+{% if bars %}
+<svg id="{{ chart_id }}" class="auto-chart" viewBox="0 0 360 190" role="img" aria-label="{{ label }}">
+  {% for i in range(4) %}<line x1="14" x2="346" y1="{{ 20 + 136 / 3 * i }}" y2="{{ 20 + 136 / 3 * i }}" class="grid"/>{% endfor %}
+  {% set show_all = bars|length <= 8 %}
+  {% for b in bars %}
+  <g class="mark"><title>{{ b.title }}</title>
+    <rect x="{{ b.x - 4 }}" y="20" width="{{ b.w + 8 }}" height="136" fill="transparent"/>
+    <rect x="{{ b.x }}" y="{{ b.y }}" width="{{ b.w }}" height="{{ b.h }}" rx="4" class="bar"/></g>
+  {% if b.value and (show_all or loop.last) %}<text x="{{ b.cx }}" y="{{ b.y - 6 }}" text-anchor="middle" class="v">{{ fmt|format(b.value) }}</text>{% endif %}
+  {% if show_all or (bars|length - 1 - loop.index0) % 2 == 0 %}<text x="{{ b.cx }}" y="172" text-anchor="middle" class="l">{{ b.label }}</text>{% endif %}
+  {% endfor %}
+  <line x1="14" x2="346" y1="156" y2="156" class="axis"/>
+</svg>
+{% if unit %}<p class="cap-note center">{{ unit }}</p>{% endif %}
+{% if not bars|selectattr('value')|list %}<p class="hint center">{{ t('autoNoData') }}</p>{% endif %}
+{% else %}<p class="hint">{{ t('autoNoData') }}</p>{% endif %}
+{% endmacro %}
+
+{% macro period_chips(endpoint, days, periods) %}
+<div class="chips">
+  {% for d in periods %}<a class="chip{% if d == days %} active{% endif %}" href="{{ url_for(endpoint, days=d) }}">{{ t('autoToday') if d == 1 else t('autoLastDays', n=d) }}</a>{% endfor %}
+</div>
+{% endmacro %}
+
+{% macro key_box(new_key) %}
+{% if new_key %}
+<div class="card key-box mb14" id="device-key-box">
+  <p class="card-title sub">{{ t('autoKeyTitle', id=new_key.id) }}</p>
+  <input type="text" readonly value="{{ new_key.key }}" id="device-key" class="mono" aria-label="{{ t('autoKeyTitle', id=new_key.id) }}">
+  <p class="cap-note">{{ t('autoKeyNote') }}</p>
+</div>
+{% endif %}
+{% endmacro %}

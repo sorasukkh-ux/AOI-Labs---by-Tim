@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% from "_macros.html" import page_head %}
+{% block content %}
+<div id="tab-inventory-history">
+{{ page_head(None, url_for('home.index', g='IV')) }}
+<form method="get" id="inv-history-form">
+<div class="toolbar">
+  <p class="tv-section-title plain mb0">{{ t('tabInventoryHistory') }}</p>
+  <a class="action" id="inv-history-sort-btn" href="{{ url_for('inventory.history', col=col, v=value or none, sort='asc' if sort != 'asc' else 'desc') }}">{{ t('sortNewestFirst') if sort != 'asc' else t('sortOldestFirst') }}</a>
+</div>
+<input type="hidden" name="sort" value="{{ sort }}">
+<div class="two-col inv-history-filter">
+  <select id="inv-history-filter-col" name="col" data-autosubmit>
+    <option value="all">{{ t('filterColAll') }}</option>
+    {% for c, key in [('time', 'colTime'), ('sku', 'colSku'), ('type', 'colType'), ('qty', 'colQty'), ('ref', 'colRef')] %}
+    <option value="{{ c }}"{% if col == c %} selected{% endif %}>{{ t(key) }}</option>
+    {% endfor %}
+  </select>
+  <input type="search" id="inv-history-filter-value" name="v" value="{{ value }}" placeholder="{{ t('searchValuePlaceholder') }}">
+</div>
+</form>
+<div class="inv-table-wrap mt14">
+<table class="tv-table" id="inv-history-table">
+  <thead><tr><th>{{ t('colTime') }}</th><th>{{ t('colSku') }}</th><th>{{ t('colType') }}</th><th class="num">{{ t('colQty') }}</th><th>{{ t('colRef') }}</th></tr></thead>
+  <tbody id="inv-history-body">
+  {% for r in rows %}
+    <tr><td class="nowrap">{{ r.time }}</td><td>{{ r.sku }}</td><td class="inv-kind {{ r.kind }}">{{ r.type }}</td><td class="num nowrap">{{ r.qty }}</td><td>{{ r.ref }}<small class="inv-sub">{{ r.user }}</small></td></tr>
+  {% else %}
+    <tr><td colspan="5" class="hint center">{{ t('noHistoryResults') }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/inventory.js') }}" defer></script>{% endblock %}

@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% from "_macros.html" import page_head, branch_picker %}
+{% block content %}
+<div id="tab-milling-production">
+{{ page_head(t('tabMillingProduction'), url_for('home.index', g='AD')) }}
+<div class="card gap"><p class="desc-text">{{ t('millingProdDesc') }}</p></div>
+<div class="card">
+  {{ branch_picker('admin_milling.production', branch, branches, 'mp-branch-select') }}
+  <div class="chips" id="mp-variety-chips">
+    {% for v in varieties %}<a class="chip{% if v == variety %} active{% endif %}" href="{{ url_for('admin_milling.production', branch=branch, v=v) }}">{{ t(var_keys[v]) }}</a>{% endfor %}
+  </div>
+  <form method="post" id="mp-form" data-text='{{ js_text|tojson }}'>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="branch" value="{{ branch }}">
+    <input type="hidden" name="v" value="{{ variety }}">
+    <p class="card-title sub">{{ t('millingProdYieldTitle') }} &middot; {{ t(var_keys[variety]) }}</p>
+    <p class="cap-note tight">{{ t('millingProdYieldNote') }}</p>
+    {% if avg.ratios %}<p class="cap-note tight" id="mp-from-tests">{{ t('mtFromTests', n=avg.tests) if avg.own else t('mtFromAllTests', n=avg.tests) }}</p>
+    {% elif not own %}<p class="cap-note tight">{{ t('mtUsingWhite') }}</p>{% endif %}
+    <fieldset {% if not editable %}disabled{% endif %} class="plain">
+    <div class="two-col field-row">
+      <div><label class="field-label" for="mp-yield-rice">{{ t('skuRice') }}</label><input type="number" step="0.0001" min="0" max="1" id="mp-yield-rice" name="rice" value="{{ values.rice }}"></div>
+      <div><label class="field-label" for="mp-yield-bran">{{ t('skuBran') }}</label><input type="number" step="0.0001" min="0" max="1" id="mp-yield-bran" name="bran" value="{{ values.bran }}"></div>
+    </div>
+    <div class="two-col field-row">
+      <div><label class="field-label" for="mp-yield-broken">{{ t('skuBroken') }}</label><input type="number" step="0.0001" min="0" max="1" id="mp-yield-broken" name="broken" value="{{ values.broken }}"></div>
+      <div><label class="field-label" for="mp-yield-husk">{{ t('skuHusk') }}</label><input type="number" step="0.0001" min="0" max="1" id="mp-yield-husk" name="husk" value="{{ values.husk }}"></div>
+    </div>
+    </fieldset>
+    <div class="total-row" id="mp-yield-total-row"><span>{{ t('mpTotalLabel') }}</span><span id="mp-yield-total"></span></div>
+    <p class="login-error" id="mp-yield-error" role="alert"></p>
+    {% if editable %}<button class="action primary" type="submit" id="mp-save-btn">{{ t('btnSave') }}</button>{% endif %}
+  </form>
+</div>
+<div class="card mt14">
+  <p class="card-title mb10">{{ t('millingProdPreviewTitle') }}</p>
+  <div class="field-row">
+    <label class="field-label" for="mp-sample-paddy">{{ t('lblPaddyInput') }}</label>
+    <input type="number" id="mp-sample-paddy" value="3000">
+  </div>
+  <div class="result-panel">
+    <div class="result-row"><span>{{ t('skuRice') }}</span><b id="mp-prev-rice-kg">0.00 kg</b></div>
+    <div class="result-row"><span>{{ t('skuBran') }}</span><b id="mp-prev-bran-kg">0.00 kg</b></div>
+    <div class="result-row"><span>{{ t('skuBroken') }}</span><b id="mp-prev-broken-kg">0.00 kg</b></div>
+    <div class="result-row"><span>{{ t('skuHusk') }}</span><b id="mp-prev-husk-kg">0.00 kg</b></div>
+  </div>
+</div>
+
+<div class="card mt14" id="mill-tests">
+  <p class="card-title sub">{{ t('mtTitle') }}</p>
+  <p class="cap-note tight">{{ t('mtNote') }}</p>
+  <div class="auto-kpis mt6">
+    <div class="card"><p class="card-title">{{ t('skuRice') }}</p><p class="kpi-value small">{{ '%.2f'|format(avg.ratios.rice * 100) ~ '%' if avg.ratios.rice is defined else '-' }}</p></div>
+    <div class="card"><p class="card-title">{{ t('skuBroken') }}</p><p class="kpi-value small">{{ '%.2f'|format(avg.ratios.broken * 100) ~ '%' if avg.ratios.broken is defined else '-' }}</p></div>
+    <div class="card"><p class="card-title">{{ t('mtMinPerKg') }}</p><p class="kpi-value small">{{ '%.3f'|format(minutes) if minutes is not none else '-' }}</p></div>
+  </div>
+  <p class="cap-note">{{ t('mtBasis', variety=t(var_keys[variety]), n=avg.tests, timed=timed) }}</p>
+  <div class="inv-table-wrap"><table class="tv-table" id="mill-test-table">
+    <thead><tr><th>{{ t('mtDate') }}</th><th>{{ t('lblVariety') }}</th><th class="num">{{ t('mtPaddy') }}</th><th class="num">{{ t('mtMinutes') }}</th>
+      <th class="num">{{ t('skuRice') }}</th><th class="num">{{ t('skuBroken') }}</th><th class="num">{{ t('skuBran') }}</th><th class="num">{{ t('skuHusk') }}</th><th class="num">{{ t('mtRiceYield') }}</th><th></th></tr></thead>
+    <tbody>{% for tst in tests %}<tr>
+      <td class="nowrap">{{ fmt_date(tst.TEST_DATE) }}{% if tst.TEST_REF %}<small class="inv-sub">{{ tst.TEST_REF }}</small>{% endif %}</td>
+      <td>{{ t(var_keys[tst.RICE_VARIETY]) if tst.RICE_VARIETY else t('mtAllVarieties') }}</td>
+      <td class="num">{{ tst.PADDY_KG|plain }}</td><td class="num">{{ tst.MILL_MIN|plain if tst.MILL_MIN is not none else '-' }}</td>
+      <td class="num">{{ tst.RICE_KG|plain }}</td>
+      <td class="num">{{ tst.BROKE_KG|plain if tst.BROKE_KG is not none else '-' }}</td>
+      <td class="num">{{ tst.BRAN_KG|plain if tst.BRAN_KG is not none else '-' }}</td>
+      <td class="num">{{ tst.HUSK_KG|plain if tst.HUSK_KG is not none else '-' }}</td>
+      <td class="num">{{ '%.1f'|format(tst.RICE_KG / tst.PADDY_KG * 100) }}%</td>
+      <td>{% if editable %}<form method="post" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="branch" value="{{ branch }}"><input type="hidden" name="v" value="{{ variety }}">
+        <input type="hidden" name="action" value="test_delete"><input type="hidden" name="TEST_ID" value="{{ tst.TEST_ID }}">
+        <button type="submit" class="link-btn" data-confirm="{{ t('mtConfirmDelete') }}">{{ t('btnRemove') }}</button></form>{% endif %}</td>
+    </tr>{% else %}<tr><td colspan="10" class="hint center">{{ t('autoNoData') }}</td></tr>{% endfor %}</tbody>
+  </table></div>
+  {% if editable %}
+  <form method="post" class="inv-form mt14" id="mill-test-form" autocomplete="off">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="branch" value="{{ branch }}">
+    <input type="hidden" name="v" value="{{ variety }}"><input type="hidden" name="action" value="test">
+    <p class="card-title sub">{{ t('mtAdd') }}</p>
+    <div class="two-col field-row">
+      <div><label class="field-label" for="mt-variety">{{ t('lblVariety') }}</label><select id="mt-variety" name="RICE_VARIETY">
+        <option value="">{{ t('mtAllVarieties') }}</option>{% for v in varieties %}<option value="{{ v }}">{{ t(var_keys[v]) }}</option>{% endfor %}</select></div>
+      <div><label class="field-label" for="mt-date">{{ t('mtDate') }}</label><input type="date" id="mt-date" name="TEST_DATE" value="{{ today }}" max="{{ today }}"></div>
+    </div>
+    <div class="two-col field-row">
+      <div><label class="field-label" for="mt-paddy">{{ t('mtPaddy') }}</label><input type="number" id="mt-paddy" name="PADDY_KG" min="0.01" step="0.01" required></div>
+      <div><label class="field-label" for="mt-min">{{ t('mtMinutes') }}</label><input type="number" id="mt-min" name="MILL_MIN" min="0" step="0.01"></div>
+    </div>
+    <div class="two-col field-row">
+      <div><label class="field-label" for="mt-rice">{{ t('skuRice') }} (kg)</label><input type="number" id="mt-rice" name="RICE_KG" min="0" step="0.01" required></div>
+      <div><label class="field-label" for="mt-broken">{{ t('skuBroken') }} (kg)</label><input type="number" id="mt-broken" name="BROKE_KG" min="0" step="0.01" placeholder="{{ t('mtNotWeighed') }}"></div>
+    </div>
+    <div class="two-col field-row">
+      <div><label class="field-label" for="mt-bran">{{ t('skuBran') }} (kg)</label><input type="number" id="mt-bran" name="BRAN_KG" min="0" step="0.01" placeholder="{{ t('mtNotWeighed') }}"></div>
+      <div><label class="field-label" for="mt-husk">{{ t('skuHusk') }} (kg)</label><input type="number" id="mt-husk" name="HUSK_KG" min="0" step="0.01" placeholder="{{ t('mtNotWeighed') }}"></div>
+    </div>
+    <div class="field-row"><label class="field-label" for="mt-ref">{{ t('mtRef') }}</label><input type="text" id="mt-ref" name="TEST_REF" maxlength="100" placeholder="{{ t('mtRefPh') }}"></div>
+    <p class="cap-note">{{ t('mtMinNote') }}</p>
+    <button class="action primary full" type="submit" id="mill-test-save">{{ t('mtSave') }}</button>
+  </form>
+  {% endif %}
+</div>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/yield.js') }}" defer></script>{% endblock %}

@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% from "_macros.html" import page_head %}
+{% block content %}
+<div id="tab-tv" data-auto-refresh="30">
+{{ page_head(t('tabTV') ~ ' · ' ~ branch, url_for('home.index', g='SV')) }}
+<div id="tv-sections" class="mt14">
+  {% for s in sections %}
+  <div class="tv-section">
+    <p class="tv-section-title {{ s.css }}">{{ t(s.key) }} ({{ s.rows|length }})</p>
+    <table class="tv-table">
+      <thead><tr><th>{{ t('colOrder') }}</th><th>{{ t('colCustomer') }}</th><th>{{ t('tvReceive') }}</th></tr></thead>
+      <tbody>
+      {% for r in s.rows %}<tr><td><b>#{{ r.no }}</b>{% if r.delivery %} <span class="badge neutral">{{ t('deliveryDelivery') }}</span>{% endif %}</td><td>{{ r.customer }}</td><td class="nowrap">{{ r.time }}</td></tr>
+      {% else %}<tr><td colspan="3" class="hint">&mdash;</td></tr>{% endfor %}
+      </tbody>
+    </table>
+    {% if s.css == 'queue' %}<p class="cap-note">{{ t('capNote') }}</p>{% endif %}
+  </div>
+  {% endfor %}
+</div>
+<p class="cap-note">{{ t('tvRefreshNote') }}{% if can('SV_MILLSTATUS') %} &middot; <a href="{{ url_for('service_milling.order_list') }}">{{ t('tabUpdateStatus') }} &rarr;</a>{% endif %}</p>
+</div>
+{% endblock %}

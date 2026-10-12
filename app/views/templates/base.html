@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="{{ lang }}">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>{% block title %}{{ t('title') }}{% endblock %}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+<link rel="icon" href="{{ url_for('static', filename='img/logo.png') }}">
+</head>
+<body>
+
+<div class="top-row">
+  <div class="brand-row">
+    <img class="brand-logo" src="{{ url_for('static', filename='img/logo.png') }}" alt="AOI logo">
+    <div>
+      <h1>{{ t('title') }}</h1>
+      <p class="sub">{{ t('subtitle') }}</p>
+    </div>
+  </div>
+  <div class="lang-toggle">
+    <a class="lang-btn{% if lang == 'th' %} active{% endif %}" href="{{ url_for('auth.set_language', code='th', next=request.full_path.rstrip('?')) }}" lang="th">ไทย</a>
+    <a class="lang-btn{% if lang == 'en' %} active{% endif %}" href="{{ url_for('auth.set_language', code='en', next=request.full_path.rstrip('?')) }}" lang="en">EN</a>
+  </div>
+</div>
+
+{% if user %}
+<div id="session-bar" class="show">
+  <div class="session-who"><span id="session-user">{{ user.USER_NAME }} ({{ user.USER_ID }}) &middot; {{ role_name }}</span><span class="badge buy-type" id="session-branch">{{ branch_label(op_branch) }}</span></div>
+  <form method="post" action="{{ url_for('auth.logout') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="action" type="submit" id="logout-btn">{{ t('btnLogout') }}</button>
+  </form>
+</div>
+{% endif %}
+{% if db_is_memory %}<p class="notice warn">{{ t('demoBanner') }}</p>{% endif %}
+{% for category, message in get_flashed_messages(with_categories=true) %}
+{% if category == 'return' %}
+<a class="action mb14" href="{{ message }}" data-return-url data-return-text="{{ t('confirmReturnService') }}">&larr; {{ t('tabService') }}</a>
+{% else %}
+<p class="notice {{ 'ok' if category == 'ok' else 'error' }}" role="status" data-flash>{{ message }}</p>
+{% endif %}
+{% endfor %}
+
+{% block content %}{% endblock %}
+
+{# The pop-up of the design prototype: messages, Yes/No questions, a text question and the order details. #}
+<div id="app-modal-overlay" data-yes="{{ t('btnYes') }}" data-no="{{ t('btnNo') }}" data-ok="{{ t('btnOk') }}" data-cancel="{{ t('btnCancel') }}">
+  <div id="app-modal-box" role="dialog" aria-modal="true">
+    <div id="app-modal-message"></div>
+    <input type="text" id="app-modal-input" hidden>
+    <div id="app-modal-actions">
+      <button type="button" class="action" id="app-modal-no" hidden></button>
+      <button type="button" class="action primary" id="app-modal-yes"></button>
+    </div>
+  </div>
+</div>
+<script src="{{ url_for('static', filename='js/qr.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/label.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/app.js') }}" defer></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

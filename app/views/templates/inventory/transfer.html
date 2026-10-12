@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block content %}
+<div id="tab-inventory-transfer">
+<a class="back-btn" href="{{ url_for('inventory.item_list') }}">&larr; <span>{{ t('tabInventoryList') }}</span></a>
+<p class="tv-section-title plain">{{ t('tabInventoryTransfer') }}</p>
+<div class="card mt14">
+  {% if records %}
+  <form method="post" class="inv-form" id="inv-transfer-form" autocomplete="off">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="field-row">
+      <label class="field-label" for="transfer-item">{{ t('lblFromLocation') }}</label>
+      <select id="transfer-item" name="INV_ID" data-transfer-from>
+        {% for r, item in records %}
+        <option value="{{ r.INV_ID }}" data-qty="{{ r.INV_QTY|plain }}"{% if chosen == r.INV_ID %} selected{% endif %}>{{ r.LOC_ID }} &middot; {{ item.name }}{% if item.SUB_1 %} &middot; {{ item.SUB_1 }}{% endif %} ({{ r.INV_QTY|num }} kg){% if item.kept_for %} &middot; {{ item.kept_for }}{% endif %}</option>
+        {% endfor %}
+      </select>
+      <p class="cap-note" id="transfer-available-note" data-text="{{ t('transferAvailableNote') }}"></p>
+    </div>
+    <div class="two-col field-row">
+      <div><label class="field-label" for="transfer-to-loc">{{ t('lblToLocation') }}</label>
+        <input type="text" id="transfer-to-loc" name="TO_LOC" value="{{ values.get('TO_LOC', '') }}" placeholder="01-002-005" pattern="[0-9]{2}-[0-9]{3}-[0-9]{3}" maxlength="10" inputmode="numeric" required></div>
+      <div><label class="field-label" for="transfer-qty">{{ t('lblTransferQty') }}</label>
+        <input type="number" id="transfer-qty" name="INV_QTY" value="{{ values.get('INV_QTY', '') }}" min="0.001" step="0.001" required></div>
+    </div>
+    <div class="btn-pair mt14">
+      <a class="action" id="transfer-cancel" href="{{ url_for('inventory.item_list') }}">{{ t('btnCancel') }}</a>
+      <button class="action primary" type="submit" id="transfer-save">{{ t('btnSave') }}</button>
+    </div>
+  </form>
+  {% else %}
+  <p class="hint">{{ t('invEmpty') }}</p>
+  {% endif %}
+</div>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/inventory.js') }}" defer></script>{% endblock %}

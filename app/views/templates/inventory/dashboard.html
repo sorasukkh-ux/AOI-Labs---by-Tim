@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% from "_macros.html" import page_head %}
+{# Inventory Dashboard in the design's chart theme (always a light panel). Charts are inline SVG drawn here:
+   one colour per material, in a fixed order checked for colour-blind separation; values are written as text too. #}
+{% set mat_color = {'paddy': 'var(--fc-blue)', 'rice': 'var(--fc-orange)', 'bran': 'var(--fc-purple)', 'broken': 'var(--fc-green)', 'husk': 'var(--fc-teal)'} %}
+{% macro kg(v) %}{{ "{:,.2f}".format(v) }}{% endmacro %}
+{% block content %}
+<div id="tab-inventory-dashboard">
+{{ page_head(t('tabInventoryDashboard'), url_for('home.index', g='IV')) }}
+<div id="inv-dashboard-grid" class="inv-kpi-grid">
+  <div class="card"><p class="card-title">{{ t('kpiTotalSkus') }}</p><p class="lux-value gold">{{ total_items }}</p></div>
+  <div class="card"><p class="card-title">{{ t('kpiTotalStock') }}</p><p class="lux-value gold">{{ kg(total_stock) }} kg</p></div>
+  <div class="card"><p class="card-title">{{ t('kpiStockInToday') }}</p><p class="lux-value emerald">{{ "+" if stock_in > 0 }}{{ kg(stock_in) }} kg</p></div>
+  <div class="card"><p class="card-title">{{ t('kpiStockOutToday') }}</p><p class="lux-value ruby">{{ "-" if stock_out > 0 }}{{ kg(stock_out) }} kg</p></div>
+  <div class="card inv-kpi-wide"><p class="card-title">{{ t('kpiLowStock') }}</p>
+    <p class="lux-value {{ 'amber' if low else 'gold' }}">{{ low|length }}</p>
+    <p class="inv-kpi-note">{% if low %}{{ t('invLowStockList', kg=low_kg) }}: {% for m in low %}{{ mat_name(m) }}{% if not loop.last %}, {% endif %}{% endfor %}{% else %}{{ t('invLowStockNone', kg=low_kg) }}{% endif %}</p></div>
+</div>
+
+{# ---- stock in vs out today ---- #}
+<div class="card mt14">
+  <p class="card-title">{{ t('chartInOutTitle') }} &middot; {{ t('invToday') }}</p>
+  {% set w, base, maxh, barw = 320, 128, 94, 70 %}
+  {% set top = [stock_in, stock_out, 1]|max %}
+  {% set h_in, h_out = stock_in / top * maxh, stock_out / top * maxh %}
+  {% set x1, x2 = w / 2 - 30 - barw, w / 2 + 30 %}
+  <svg id="chart-in-out" class="inv-chart" viewBox="0 0 {{ w }} 170" role="img" aria-label="{{ t('chartInOutTitle') }}: {{ t('invIn') }} {{ kg(stock_in) }} kg, {{ t('invOut') }} {{ kg(stock_out) }} kg">
+    {% for i in range(4) %}<line x1="10" x2="{{ w - 10 }}" y1="{{ base - maxh / 3 * i }}" y2="{{ base - maxh / 3 * i }}" stroke="var(--fc-grid)"/>{% endfor %}
+    <g class="mark"><title>{{ t('invIn') }}: +{{ kg(stock_in) }} kg</title>
+      <rect x="{{ x1 }}" y="{{ base - h_in }}" width="{{ barw }}" height="{{ h_in }}" rx="4" fill="var(--fc-green)"/></g>
+    <text x="{{ x1 + barw / 2 }}" y="{{ base - h_in - 8 }}" text-anchor="middle" class="v">{{ "+" if stock_in > 0 }}{{ kg(stock_in) }}</text>
+    <text x="{{ x1 + barw / 2 }}" y="{{ base + 20 }}" text-anchor="middle" class="l">{{ t('invIn') }}</text>
+    <g class="mark"><title>{{ t('invOut') }}: -{{ kg(stock_out) }} kg</title>
+      <rect x="{{ x2 }}" y="{{ base - h_out }}" width="{{ barw }}" height="{{ h_out }}" rx="4" fill="var(--fc-red)"/></g>
+    <text x="{{ x2 + barw / 2 }}" y="{{ base - h_out - 8 }}" text-anchor="middle" class="v">{{ "-" if stock_out > 0 }}{{ kg(stock_out) }}</text>
+    <text x="{{ x2 + barw / 2 }}" y="{{ base + 20 }}" text-anchor="middle" class="l">{{ t('invOut') }}</text>
+    <line x1="10" x2="{{ w - 10 }}" y1="{{ base }}" y2="{{ base }}" stroke="var(--fc-ink)" opacity="0.3"/>
+  </svg>
+</div>
+
+{# ---- last movements ---- #}
+<div class="card mt14">
+  <p class="card-title">{{ t('chartTrendTitle') }}</p>
+  {% if trend %}
+  {% set w, pt, pb, pl = 360, 20, 34, 14 %}
+  {% set plot_h = 190 - pt - pb %}
+  {% set slot = (w - 2 * pl) / trend|length %}
+  {% set bw = [26, slot * 0.55]|min %}
+  {% set top = (trend|map(attribute='qty')|list + [1])|max %}
+  <svg id="chart-trend" class="inv-chart" viewBox="0 0 {{ w }} 190" role="img" aria-label="{{ t('chartTrendTitle') }}">
+    {% for i in range(4) %}<line x1="{{ pl }}" x2="{{ w - pl }}" y1="{{ pt + plot_h / 3 * i }}" y2="{{ pt + plot_h / 3 * i }}" stroke="var(--fc-grid)"/>{% endfor %}
+    {% for m in trend %}
+    {% set bh = [m.qty / top * plot_h, 2]|max %}
+    {% set x = pl + slot * loop.index0 + (slot - bw) / 2 %}
+    <g class="mark"><title>{{ m.label }} · {{ m.name }} · {{ '+' if m.kind == 'in' else ('-' if m.kind == 'out' else '') }}{{ kg(m.qty) }} kg</title>
+      <rect x="{{ x - 4 }}" y="{{ pt }}" width="{{ bw + 8 }}" height="{{ plot_h }}" fill="transparent"/>
+      <rect x="{{ x }}" y="{{ pt + plot_h - bh }}" width="{{ bw }}" height="{{ bh }}" rx="4"
+            fill="{{ 'var(--fc-green)' if m.kind == 'in' else ('var(--fc-red)' if m.kind == 'out' else 'var(--fc-sub)') }}"/></g>
+    <text x="{{ x + bw / 2 }}" y="{{ 190 - pb + 14 }}" text-anchor="middle" class="l small">{{ m.label }}</text>
+    {% endfor %}
+    <line x1="{{ pl }}" x2="{{ w - pl }}" y1="{{ pt + plot_h }}" y2="{{ pt + plot_h }}" stroke="var(--fc-ink)" opacity="0.3"/>
+  </svg>
+  <div class="inv-legend"><span><i class="sw-in"></i>{{ t('invIn') }}</span><span><i class="sw-out"></i>{{ t('invOut') }}</span><span><i class="sw-other"></i>{{ t('invOtherMove') }}</span></div>
+  {% else %}<p class="hint">{{ t('noHistoryResults') }}</p>{% endif %}
+</div>
+
+{# ---- composition by material (donut + legend with values) ---- #}
+<div class="card mt14">
+  <p class="card-title">{{ t('chartPieTitle') }}</p>
+  {% if composition %}
+  <div class="inv-donut-row">
+    <svg id="chart-pie" class="inv-donut" viewBox="0 0 160 160" role="img" aria-label="{{ t('chartPieTitle') }}">
+      {% for c in composition %}
+      <g class="mark"><title>{{ c.name }} · {{ kg(c.qty) }} kg · {{ c.pct }}%</title>
+      {% if c.full %}<circle cx="80" cy="80" r="49" fill="none" stroke="{{ mat_color[c.mat] }}" stroke-width="30"/>
+      {% else %}<path d="{{ c.d }}" fill="{{ mat_color[c.mat] }}" stroke="#FFFFFF" stroke-width="2"/>{% endif %}</g>
+      {% endfor %}
+    </svg>
+    <ul class="inv-pie-legend">
+      {% for c in composition %}
+      <li><i class="sw-{{ c.mat }}"></i><span>{{ c.name }}</span><b>{{ kg(c.qty) }} kg</b><small>{{ c.pct }}%</small></li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% else %}<p class="hint">{{ t('invEmpty') }}</p>{% endif %}
+</div>
+</div>
+{% endblock %}

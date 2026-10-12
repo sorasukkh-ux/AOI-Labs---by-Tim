@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+{% from "_macros.html" import page_head %}
+{% block content %}
+<div id="tab-service">
+{{ page_head(None, url_for('home.index', g='SV')) }}
+
+<div class="card mb14" id="reg-customer-card">
+  <div class="row-inline">
+    <label class="field-label" for="reg-scan">{{ t('scanQR') }}</label>
+    <input type="text" id="reg-scan" placeholder="{{ t('customerIdPh') }}" autocapitalize="characters" spellcheck="false" autocomplete="off">
+  </div>
+  <div class="row-inline last">
+    <label class="field-label" for="top-cust-name">{{ t('custNameLabel') }}</label>
+    <input type="text" id="top-cust-name" value="{{ customer.CUST_NAME if customer else '' }}" placeholder="{{ t('customerNamePh') }}" autocomplete="off">
+    <button type="button" class="icon-btn" id="cust-search-btn" title="{{ t('btnSearch') }}" aria-label="{{ t('btnSearch') }}">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="10.5" cy="10.5" r="6.5" stroke="#F5F5F5" stroke-width="2.6"/><line x1="15.3" y1="15.3" x2="21" y2="21" stroke="#F5F5F5" stroke-width="2.6" stroke-linecap="round"/></svg>
+    </button>
+  </div>
+  <div id="reg-cust-results" class="cust-result-list mt6" hidden></div>
+  {% if can_add_customer %}
+  <p class="cap-note" id="reg-new-customer-row" hidden><a id="reg-new-customer" href="{{ url_for('admin_customers.customer_new', next=url_for('service_milling.new_order')) }}">{{ t('btnRegisterCustomer') }}</a></p>
+  {% endif %}
+  <div class="two-col field-row mt6 mb0">
+    <div><label class="field-label" for="top-cust-mobile">{{ t('lblCustMobile') }}</label><input type="text" id="top-cust-mobile" value="{{ customer.MOBILE_NO if customer else '' }}" placeholder="{{ t('mobilePh') }}" disabled></div>
+    <div><label class="field-label" for="top-cust-lineid">{{ t('fieldLineId') }}</label><input type="text" id="top-cust-lineid" value="{{ (customer.LINE_ID or '') if customer else '' }}" disabled></div>
+  </div>
+</div>
+
+<div class="svc-selector" id="svc-selector">
+  <button class="svc-btn{% if service == 'milling' %} active{% endif %}" type="button" data-svc="svc-milling">{{ t('svcMilling') }}</button>
+  <button class="svc-btn{% if service == 'buy' %} active{% endif %}" type="button" data-svc="svc-buy">{{ t('svcBuyLabel') }}</button>
+  <button class="svc-btn{% if service == 'sell' %} active{% endif %}" type="button" data-svc="svc-sell">{{ t('svcSellLabel') }}</button>
+</div>
+
+<div id="svc-milling" class="svc-panel{% if service == 'milling' %} active{% endif %} card">
+  <form method="post" id="reg-form" autocomplete="off"
+        data-ratios='{{ ratios|tojson }}' data-text='{{ js_text|tojson }}'
+        data-quote-url="{{ url_for('service_milling.quote') }}" data-search-url="{{ url_for('service_milling.customer_search') }}"
+        data-address="{{ customer.ADDRESS if customer else '' }}" data-distance="{{ (customer.DISTANCE_KM if customer else none)|plain }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="CUST_CODE" id="reg-cust-code" value="{{ customer.CUST_CODE if customer else '' }}">
+    <fieldset {% if not editable %}disabled{% endif %} class="plain">
+    <div class="field-row">
+      <label class="field-label" for="reg-delivery-type">{{ t('lblDeliveryType') }}</label>
+      <select id="reg-delivery-type" name="ORDER_TYPE">
+        <option value="T"{% if values.get('ORDER_TYPE', 'T') == 'T' %} selected{% endif %}>{{ t('deliveryTakeaway') }}</option>
+        <option value="D"{% if values.get('ORDER_TYPE') == 'D' %} selected{% endif %}>{{ t('deliveryDelivery') }}</option>
+      </select>
+    </div>
+    <div class="field-row" id="reg-address-row" hidden>
+      <label class="field-label" for="reg-cust-address">{{ t('lblCustAddress') }}</label>
+      <input type="text" id="reg-cust-address" name="DELIVERY_ADDRESS" value="{{ values.get('DELIVERY_ADDRESS', '') }}" placeholder="{{ t('addressPh') }}" maxlength="200">
+    </div>
+    <div class="field-row" id="reg-distance-row" hidden>
+      <label class="field-label" for="reg-distance-km">{{ t('lblDistanceKm') }}</label>
+      <input type="number" min="0" step="0.1" id="reg-distance-km" name="DELIVERY_DISTANCE" value="{{ values.get('DELIVERY_DISTANCE', '') }}" placeholder="0">
+    </div>
+    <div class="field-row">
+      <label class="field-label" for="reg-variety">{{ t('lblVariety') }}</label>
+      <select id="reg-variety" name="RICE_VARIETY">
+        {% for v in varieties %}<option value="{{ v }}"{% if values.get('RICE_VARIETY', 'WH') == v %} selected{% endif %}>{{ t(var_keys[v]) }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="two-col field-row">
+      <div><label class="field-label" for="paddy-in">{{ t('lblPaddyInput') }}</label><input type="number" value="{{ values.get('REGIST_PADDY', '0') }}" min="0" step="0.01" id="paddy-in" name="REGIST_PADDY"></div>
+      <div><label class="field-label" for="reg-rice-out">{{ t('lblRiceOut') }}</label><input type="text" id="reg-rice-out" value="0.00" disabled></div>
+    </div>
+    <div class="field-row">
+      <label class="field-label" for="reg-priority">{{ t('lblPriority') }}</label>
+      <select id="reg-priority" name="MILL_PRIORITY">
+        {% for p in priorities %}<option value="{{ p }}"{% if values.get('MILL_PRIORITY', 'M') == p %} selected{% endif %}>{{ t(priority_keys[p]) }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="two-col field-row">
+      <div><label class="field-label" for="reg-take-bran">{{ t('lblTakeBran') }}</label><input type="number" id="reg-take-bran" name="BRAN_ORDER" value="{{ values.get('BRAN_ORDER', '') }}" min="0" step="0.01" placeholder="0"></div>
+      <div><label class="field-label" for="reg-bran-out">{{ t('lblBranOut') }}</label><input type="text" id="reg-bran-out" value="0.00" disabled></div>
+    </div>
+    <div class="two-col field-row">
+      <div><label class="field-label" for="reg-take-broken">{{ t('lblTakeBroken') }}</label><input type="number" id="reg-take-broken" name="BROKE_ORDER" value="{{ values.get('BROKE_ORDER', '') }}" min="0" step="0.01" placeholder="0"></div>
+      <div><label class="field-label" for="reg-broken-out">{{ t('lblBrokenOut') }}</label><input type="text" id="reg-broken-out" value="0.00" disabled></div>
+    </div>
+    <p class="cap-note" id="reg-take-home-note">{{ t('regTakeHomeNote') }}</p>
+    <div class="field-row">
+      <label class="field-label" for="reg-husk-out">{{ t('lblHuskOut') }}</label><input type="text" id="reg-husk-out" value="0.00" disabled>
+    </div>
+    </fieldset>
+    {% if editable %}<button class="action primary" type="button" id="review-btn">{{ t('btnReview') }}</button>{% endif %}
+    <p class="login-error mt14 mb0" id="reg-review-error" role="alert"></p>
+
+    <div class="result-panel" id="reg-result-panel" hidden>
+      <div class="result-row"><span>{{ t('payAmountLabel') }}</span><b id="reg-pay-amount">0.00 THB</b></div>
+      <div id="reg-pay-lines"></div>
+      <div class="result-row"><span>{{ t('receiveTimeLabel') }}</span><b id="reg-receive-time">-</b></div>
+      <div class="result-row"><span>{{ t('skuRice') }}</span><b id="reg-sku-rice">0.00 kg</b></div>
+      <div class="result-row"><span>{{ t('skuBran') }}</span><b id="reg-sku-bran">0.00 kg</b></div>
+      <div class="result-row"><span>{{ t('skuBroken') }}</span><b id="reg-sku-broken">0.00 kg</b></div>
+      <div class="result-row"><span>{{ t('skuHusk') }}</span><b id="reg-sku-husk">0.00 kg</b></div>
+      <p class="cap-note stale-note" id="reg-stale-note" hidden>{{ t('regStaleNote') }}</p>
+      <div class="result-actions">
+        <button class="action" type="submit" id="reg-confirm-btn">{{ t('btnPrintQR') }}</button>
+        <button class="action" type="button" id="reg-cancel-result-btn">{{ t('btnCancel') }}</button>
+      </div>
+      <div class="qr-preview-wrap" id="reg-qr-preview-wrap">
+        <p>{{ t('qrPreviewLabel') }}</p>
+        <div class="qr-label" id="reg-qr-label"></div>
+      </div>
+    </div>
+  </form>
+</div>
+
+{# Buy and Sell: the design's rate tables. Prices are the branch's current buying/selling prices (AOIMS_PRICE). #}
+{% for code, panel, rate_key, qty_key in [('BY', 'buy', 'colRateBuy', 'colQtyBuy'), ('SL', 'sell', 'colRateSell', 'colQtySell')] %}
+<div id="svc-{{ panel }}" class="svc-panel{% if service == panel %} active{% endif %} card rate-table-wrap">
+  <form class="bs-panel" id="{{ panel }}-form" data-type="{{ code }}" autocomplete="off"
+        data-new-url="{{ url_for('service_buysell.register') }}" data-check-url="{{ url_for('service_buysell.check') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="ORD_TYPE" value="{{ code }}">
+    <input type="hidden" name="CUST_CODE" value="">
+    <table class="rate-table" id="{{ panel }}-rate-table">
+      <thead><tr><th>{{ t('colProduct') }}</th><th class="num">{{ t(rate_key) }}</th><th class="num">{{ t('colSummary') }}</th><th>{{ t(qty_key) }}</th></tr></thead>
+      <tbody>
+        {% for row in trade_rows %}
+        {% set rate = row.buy if code == 'BY' else row.sell %}
+        {% if loop.first or row.variety != trade_rows[loop.index0 - 1].variety %}
+        <tr class="rate-group"><th colspan="4">{{ t(var_keys[row.variety]) if row.variety else t('varOther') }}</th></tr>
+        {% endif %}
+        <tr data-mat="{{ row.mat }}" data-name="{{ row.name }}">
+          <td>{{ row.name }}</td>
+          <td class="rate-cell num" data-rate="{{ rate }}">{{ '%.2f'|format(rate) }}</td>
+          <td class="summary-cell num">0.00</td>
+          <td class="qty-cell"><input type="number" name="QTY_{{ row.mat }}" value="0" min="0" step="0.01" aria-label="{{ row.name }}"
+              {% if not bs_editable or rate <= 0 %}disabled{% endif %}></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <div class="total-row mt14"><span>{{ t('totalLabel') }}</span><span class="bs-total">0.00 THB &middot; 0.00 kg</span></div>
+    <p class="login-error mb0 bs-error" role="alert"></p>
+    {% if bs_editable %}
+    <div class="btn-pair">
+      <button class="action bs-open-btn" type="button">{{ t('btnOpenOrder') }}</button>
+      <button class="action primary bs-close-btn" type="button">{{ t('btnCompleteOrder') }}</button>
+    </div>
+    {% endif %}
+    <p class="cap-note">{{ t('bsBuyNote') if code == 'BY' else t('bsSellNote') }}</p>
+  </form>
+  {% if code == 'BY' %}
+  {# Close on the Buy table: the goods are received into the mill's stock at once #}
+  <template id="buy-close-tpl">
+    <form class="inbound-form order-details bs-close-form">
+      <p class="od-title">{{ t('bsBuyCloseTitle') }}</p>
+      <p class="cap-note">{{ t('bsBuyCloseNote') }}</p>
+      <div class="bs-lines"></div>
+      <div class="field-row">
+        <label class="field-label" for="bs-close-loc">{{ t('lblLocation') }}</label>
+        <input type="text" id="bs-close-loc" name="LOC_ID" placeholder="01-002-005" pattern="[0-9]{2}-[0-9]{3}-[0-9]{3}" maxlength="10" inputmode="numeric" required>
+      </div>
+      <div class="field-row">
+        <label class="field-label" for="bs-close-status">{{ t('colStatus') }}</label>
+        <select id="bs-close-status" name="INV_STATUS">
+          {% for c, key in inv_status_keys.items() %}<option value="{{ c }}">{{ t(key) }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="btn-pair">
+        <button type="button" class="action" data-modal-close>{{ t('btnCancel') }}</button>
+        <button type="submit" class="action primary">{{ t('btnInboundClose') }}</button>
+      </div>
+    </form>
+  </template>
+  {% endif %}
+</div>
+{% endfor %}
+<div hidden id="bs-text" data-text='{{ bs_text|tojson }}'></div>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/register.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/buysell.js') }}" defer></script>{% endblock %}

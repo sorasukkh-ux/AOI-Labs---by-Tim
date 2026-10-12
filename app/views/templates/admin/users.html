@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% from "_macros.html" import page_head %}
+{% block content %}
+<div id="tab-user">
+{{ page_head(t('tabUser'), url_for('home.index', g='AD')) }}
+<div class="card gap"><p class="desc-text">{{ t('usrDesc') }}</p></div>
+
+<form class="search-wrap" method="get" action="{{ url_for('admin_users.user_list') }}">
+  <span class="icon">&#128269;</span>
+  <input type="text" id="usr-search" name="q" value="{{ query }}" placeholder="{{ t('usrSearchPh') }}" aria-label="{{ t('usrSearchPh') }}">
+  {% if status %}<input type="hidden" name="status" value="{{ status }}">{% endif %}
+</form>
+<div class="chips" id="usr-filter-chips">
+  <a class="chip usr-filter-chip{% if not status %} active{% endif %}" href="{{ url_for('admin_users.user_list', q=query or None) }}">{{ t('filterAll') }}</a>
+  {% for code, key in [('A', 'usrStatusActive'), ('I', 'usrStatusInactive'), ('L', 'usrStatusLocked')] %}
+  <a class="chip usr-filter-chip{% if status == code %} active{% endif %}" href="{{ url_for('admin_users.user_list', q=query or None, status=code) }}" data-usr-filter="{{ code }}">{{ t(key) }}</a>
+  {% endfor %}
+</div>
+{% if can_create and not form_mode %}
+<a class="action primary mb14" id="usr-new-btn" href="{{ url_for('admin_users.user_new') }}">{{ t('usrBtnNew') }}</a>
+{% endif %}
+
+{% if form_mode %}
+<div class="card mb14" id="usr-form-card">
+  <p class="card-title mb10" id="usr-form-title">{{ t('usrFormNew') if form_mode == 'new' else t('usrFormEdit') }}</p>
+  <form method="post" autocomplete="off" action="{{ url_for('admin_users.user_new') if form_mode == 'new' else url_for('admin_users.user_edit', user_id=target.USER_ID) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="two-col field-row">
+      <div><label class="field-label" for="usr-id">{{ t('usrLblId') }}</label><input type="text" id="usr-id" name="USER_ID" value="{{ values.get('USER_ID', target.USER_ID if target else '') }}" placeholder="{{ t('usrIdPh') }}" autocapitalize="none" spellcheck="false" maxlength="50" {% if form_mode == 'edit' %}disabled{% endif %}></div>
+      <div><label class="field-label" for="usr-name">{{ t('usrLblName') }}</label><input type="text" id="usr-name" name="USER_NAME" value="{{ values.get('USER_NAME', '') }}" maxlength="200"></div>
+    </div>
+    <div class="field-row">
+      <label class="field-label" for="usr-password">{{ t('usrLblPassword') }}</label>
+      <input type="password" id="usr-password" name="PASSWORD" autocomplete="new-password">
+      <p class="cap-note" id="usr-password-note">{{ t('usrPasswordNoteNew') if form_mode == 'new' else t('usrPasswordNoteEdit') }}</p>
+    </div>
+    <div class="two-col field-row">
+      <div><label class="field-label" for="usr-role">{{ t('usrLblRole') }}</label>
+        <select id="usr-role" name="ROLE_CODE">
+          {% if form_mode == 'new' and not values.get('ROLE_CODE') %}<option value="" selected disabled>-</option>{% endif %}
+          {% for r in roles %}<option value="{{ r.ROLE_CODE }}"{% if r.ROLE_CODE == values.get('ROLE_CODE') %} selected{% endif %}>{{ r.ROLE_NAME }}</option>{% endfor %}
+        </select></div>
+      <div><label class="field-label" for="usr-branch">{{ t('usrLblBranchAuth') }}</label>
+        <select id="usr-branch" name="BRANCH_ID">
+          {% for b in branches %}<option value="{{ b }}"{% if b == values.get('BRANCH_ID') %} selected{% endif %}>{{ branch_label(b) }}</option>{% endfor %}
+          <option value="{{ all_branches }}"{% if values.get('BRANCH_ID') == all_branches %} selected{% endif %}>{{ t('branchAll') }}</option>
+        </select></div>
+    </div>
+    <div class="two-col field-row">
+      <div><label class="field-label" for="usr-mobile">{{ t('fieldPhone') }}</label><input type="text" id="usr-mobile" name="MOBILE_NO" value="{{ values.get('MOBILE_NO') or '' }}" inputmode="tel" maxlength="20"></div>
+      <div><label class="field-label" for="usr-status">{{ t('colStatus') }}</label>
+        <select id="usr-status" name="USER_STATUS">
+          {% for code, key in [('A', 'usrStatusActive'), ('I', 'usrStatusInactive'), ('L', 'usrStatusLocked')] %}
+          <option value="{{ code }}"{% if code == values.get('USER_STATUS', 'A') %} selected{% endif %}>{{ t(key) }}</option>
+          {% endfor %}
+        </select></div>
+    </div>
+    <div class="two-col">
+      <a class="action" id="usr-cancel-btn" href="{{ url_for('admin_users.user_list') }}">{{ t('btnCancel') }}</a>
+      <button class="action primary" type="submit" id="usr-save-btn">{{ t('btnSave') }}</button>
+    </div>
+  </form>
+</div>
+{% endif %}
+
+<div id="usr-list">
+  {% for u in users %}
+  <div class="status-card" data-user="{{ u.USER_ID }}">
+    <div class="who">
+      <span class="ord-id">{{ u.USER_ID }} <span class="badge {{ {'A': 'approved', 'I': 'manual', 'L': 'blocked'}[u.USER_STATUS] }}">{{ t({'A': 'usrStatusActive', 'I': 'usrStatusInactive', 'L': 'usrStatusLocked'}[u.USER_STATUS]) }}</span></span>
+      <span class="ord-cust">{{ u.USER_NAME }} &middot; {{ role_names.get(u.ROLE_CODE, u.ROLE_CODE) }} &middot; {{ branch_label(u.BRANCH_ID) }}</span>
+      <span class="ord-cust">{{ t('usrLastLogin') }}: {{ fmt_datetime(u.LAST_LOGIN) if u.LAST_LOGIN else t('usrNeverLoggedIn') }}</span>
+    </div>
+    {% if can_edit %}<a class="action usr-edit-btn" href="{{ url_for('admin_users.user_edit', user_id=u.USER_ID) }}">{{ t('btnEdit') }}</a>{% endif %}
+  </div>
+  {% else %}
+  <p class="hint home-empty">{{ t('usrNoResults') }}</p>
+  {% endfor %}
+</div>
+<p class="cap-note" id="usr-count-note">{{ t('usrCountNote', shown=users|length, total=total) }}</p>
+</div>
+{% endblock %}

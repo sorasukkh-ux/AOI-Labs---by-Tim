@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% from "_macros.html" import page_head %}
+{% from "automation/_chart.html" import bar_chart %}
+{% block content %}
+<div id="tab-ai" class="auto-page">
+{{ page_head(t('tabAi'), url_for('home.index', g='AT')) }}
+<div class="card gap"><p class="desc-text">{{ t('aiDesc') }}</p></div>
+<div class="chips">
+  <a class="chip" href="#ai-forecast">{{ t('aiForecast') }}</a><a class="chip" href="#ai-price">{{ t('aiPrice') }}</a>
+  <a class="chip" href="#ai-supply">{{ t('spChip') }}</a><a class="chip" href="#ai-alerts">{{ t('aiAlerts') }} ({{ alerts|length }})</a><a class="chip" href="#ai-ask">{{ t('aiAsk') }}</a>
+</div>
+
+<div class="card" id="ai-forecast">
+  <p class="card-title sub">{{ t('aiForecast') }}</p>
+  <div class="auto-kpis">
+    <div><p class="card-title">{{ t('aiQueueNow') }}</p><p class="kpi-value">{{ queue.orders }} &middot; {{ "{:,.0f}".format(queue.kg) }} kg</p></div>
+    <div><p class="card-title">{{ t('aiQueueHours') }}</p><p class="kpi-value">{{ queue.hours }} h</p></div>
+    <div><p class="card-title">{{ t('aiLastReceive') }}</p><p class="kpi-value small">{{ fmt_datetime(queue.last_receive) if queue.last_receive else '-' }}</p></div>
+  </div>
+  <p class="card-title mt14">{{ t('aiNext7') }}</p>
+  {{ bar_chart(bars, 'chart-forecast', t('aiNext7'), t('aiForecastUnit'), '%.0f') }}
+  <p class="cap-note">{{ t('aiForecastNote', weeks=8) }}{% if basis < 2 %} <b>{{ t('aiForecastThin') }}</b>{% endif %}</p>
+</div>
+
+<div class="card mt14" id="ai-price">
+  <p class="card-title sub">{{ t('aiPrice') }}</p>
+  <div class="inv-table-wrap"><table class="tv-table" id="advice-table">
+    <thead><tr><th>{{ t('colProduct') }}</th><th class="num">{{ t('aiStock') }}</th><th class="num">{{ t('aiSoldDay') }}</th><th class="num">{{ t('aiCover') }}</th><th>{{ t('aiAdvice') }}</th></tr></thead>
+    <tbody>{% for a in advice %}<tr><td>{{ a.name }}<small class="inv-sub">{{ t('lblBuy') }} {{ '%.2f'|format(a.price_buy or 0) }} &middot; {{ t('lblSell') }} {{ '%.2f'|format(a.price_sell or 0) }}</small></td>
+      <td class="num">{{ "{:,.0f}".format(a.stock) }}</td><td class="num">{{ a.sold_per_day }}</td><td class="num">{{ a.cover if a.cover is not none else '-' }}</td>
+      <td class="advice {{ a.advice }}">{{ t('aiAdv_' + a.advice) }}{% if a.advice in ('raise_buy', 'lower_buy') and a.advised_buy %}<small class="inv-sub">{{ t('aiAdvisedBuy', price='%.2f'|format(a.advised_buy)) }}</small>{% endif %}</td></tr>
+    {% endfor %}</tbody>
+  </table></div>
+  <p class="cap-note">{{ t('aiPriceNote') }}{% if can('FN_PRICING') %} <a href="{{ url_for('finance.pricing') }}">{{ t('tabPricing') }} &rarr;</a>{% endif %}</p>
+</div>
+
+<div class="card mt14" id="ai-supply">
+  <p class="card-title sub">{{ t('spTitle') }}</p>
+  {% if supply %}
+  <div class="auto-kpis mt6">
+    <div class="card"><p class="card-title">{{ t('spLatest', month='%02d/%d'|format(supply.month, supply.year_th)) }}</p><p class="kpi-value">{{ '%.1f'|format(supply.value) }}</p></div>
+    <div class="card"><p class="card-title">{{ t('spYoy') }}</p><p class="kpi-value">{{ ('%+.1f%%'|format(supply.yoy)) if supply.yoy is not none else '-' }}</p></div>
+    <div class="card"><p class="card-title">{{ t('spMom') }}</p><p class="kpi-value">{{ ('%+.1f%%'|format(supply.mom)) if supply.mom is not none else '-' }}</p></div>
+  </div>
+  <p class="alert-row {{ 'warning' if supply.signal != 'flat' }}" id="sp-signal">{{ t('spSignal_' ~ supply.signal) }}</p>
+  {{ bar_chart(supply_bars, 'chart-supply', t('spChart'), t('spChartUnit'), '%.0f') }}
+  <p class="cap-note">{{ t('spNote', scope=supply.scope) }}{% if supply.fetched %} &middot; {{ t('mkFetchedAt', time=fmt_datetime(supply.fetched)) }}{% endif %}</p>
+  {% else %}<p class="hint">{{ t('spNone') }}</p>{% endif %}
+  {% if can_ask_fetch %}
+  <form method="post" class="mt6"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="supply">
+    <button class="action" type="submit" id="sp-fetch-btn">{{ t('mkFetchNow') }}</button></form>
+  {% endif %}
+</div>
+
+<div class="card mt14" id="ai-alerts">
+  <p class="card-title sub">{{ t('aiAlerts') }}</p>
+  {% for a in alerts %}
+  <p class="alert-row {{ a.severity }}"><span class="badge {{ 'blocked' if a.severity == 'serious' else 'pending' }}">{{ '&#9888;'|safe }} {{ t('aiSev_' + a.severity) }}</span> {{ t(a.key, **a.params) }}</p>
+  {% else %}<p class="hint">&#10003; {{ t('aiNoAlerts') }}</p>{% endfor %}
+  <p class="cap-note">{{ t('aiAlertsNote') }}</p>
+</div>
+
+<div class="card mt14" id="ai-ask">
+  <p class="card-title sub">{{ t('aiAsk') }}</p>
+  {% if last %}
+  <div class="ai-answer"><p class="ai-q">{{ last.q }}</p><p class="ai-a">{{ last.a }}</p></div>
+  {% endif %}
+  {% if not configured %}
+  <p class="notice warn">{{ t('aiNotConfigured') }}</p>
+  {% elif can_ask %}
+  <form method="post" id="ai-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <textarea name="QUESTION" id="ai-question" rows="3" maxlength="500" required placeholder="{{ t('aiAskPh') }}" aria-label="{{ t('aiAsk') }}"></textarea>
+    <button class="action primary full mt6" type="submit" id="ai-send">{{ t('aiSend') }}</button>
+  </form>
+  {% endif %}
+  <p class="cap-note">{{ t('aiAskNote') }}</p>
+  {% if recent %}
+  <details class="mt6"><summary class="cap-note">{{ t('aiRecent') }}</summary>
+    {% for r in recent %}<div class="ai-answer"><p class="ai-q">{{ r.QUESTION }} <small>{{ fmt_datetime(r.LOG_DATE) }}</small></p><p class="ai-a">{{ r.ANSWER }}</p></div>{% endfor %}
+  </details>
+  {% endif %}
+</div>
+</div>
+{% endblock %}
