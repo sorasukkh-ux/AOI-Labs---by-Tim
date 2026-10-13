@@ -42,6 +42,9 @@ class Location:
     @staticmethod
     def clean(loc_id):
         loc_id = (loc_id or "").strip()
+        digits = re.sub(r"\D", "", loc_id)
+        if len(digits) == 8:                      # digits only (or any separators): 00001001 -> 00-001-001
+            loc_id = "%s-%s-%s" % (digits[:2], digits[2:5], digits[5:])
         if not LOC_PATTERN.match(loc_id):
             raise ValidationError("errLocFormat")
         return loc_id

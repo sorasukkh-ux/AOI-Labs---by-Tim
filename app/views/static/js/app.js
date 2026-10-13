@@ -216,3 +216,20 @@
   var inputs = document.querySelectorAll("[data-tv-path]");
   for (var i = 0; i < inputs.length; i++) inputs[i].value = window.location.origin + inputs[i].getAttribute("data-tv-path");
 })();
+
+/* Location ID (BAY-BANK-LEVEL): type the digits only, the dashes are added as you type. 00001001 -> 00-001-001. */
+(function () {
+  function formatLoc(value) {
+    var d = String(value || "").replace(/\D/g, "").slice(0, 8);
+    if (d.length > 5) return d.slice(0, 2) + "-" + d.slice(2, 5) + "-" + d.slice(5);
+    if (d.length > 2) return d.slice(0, 2) + "-" + d.slice(2);
+    return d;
+  }
+  window.AOIFormatLoc = formatLoc;
+  document.addEventListener("input", function (event) {
+    var input = event.target;
+    if (!input || !input.hasAttribute || !input.hasAttribute("data-loc")) return;
+    var formatted = formatLoc(input.value);
+    if (formatted !== input.value) input.value = formatted;
+  });
+})();

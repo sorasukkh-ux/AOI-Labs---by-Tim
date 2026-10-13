@@ -57,6 +57,11 @@ class Base(unittest.TestCase):
             patcher = mock.patch(target, side_effect=ValidationError("npErrDownload"))
             patcher.start()
             self.addCleanup(patcher.stop)
+        # ... and no LINE message leaves: not connected unless a test sets the token and fakes the push
+        for patcher in (mock.patch.dict(os.environ, {"AOI_LINE_CHANNEL_TOKEN": ""}),
+                        mock.patch("app.models.notify._push", return_value="offline in tests")):
+            patcher.start()
+            self.addCleanup(patcher.stop)
         # The older tests were written for the first mill test (33 kg paddy -> 17 kg rice, 2 kg broken rice, 9 minutes).
         # Since update 10 the seeded yields are the average of the mill's three tests; these tests keep the old numbers.
         with self.app.app_context():
@@ -1882,6 +1887,103 @@ class Update16(Base):
         self.assertNotIn(full, page)                                    # full names never reach the public screen
         self.assertIn('src="/static/js/tv.js"', page)
         self.assertTrue(any(p["code"] == "PADDY_HM" for p in board["prices"]))
+
+
+class Update21(Base):
+    """Default priority by variety, location digits only, menu names, LINE messages on the status flow."""
+    USER = "U" + "0123456789abcdef" * 2
+
+    def setUp(self):
+        super().setUp()
+        self.login("admin")
+        self.client.get("/lang/en")
+
+    def test_default_priority_follows_the_variety(self):
+        for variety, priority in (("HM", "H"), ("WH", "M"), ("GL", "L")):
+            self.assertEqual(self.new_order(RICE_VARIETY=variety, MILL_PRIORITY="")["MILL_PRIORITY"], priority)
+        self.assertEqual(self.new_order(RICE_VARIETY="GL", MILL_PRIORITY="U")["MILL_PRIORITY"], "U")   # chosen one stays
+        page = self.text("/service/milling/new")
+        self.assertIn('value="HM" data-priority="H"', page)
+        self.assertIn('value="GL" data-priority="L"', page)
+
+    def test_location_digits_only(self):
+        from app.models.inventory import Location
+        self.assertEqual(Location.clean("00001001"), "00-001-001")
+        self.assertEqual(Location.clean("01-002-005"), "01-002-005")
+        self.assertEqual(Location.clean(" 01 002 005 "), "01-002-005")
+        for bad in ("0100200", "010020051", "ab"):
+            with self.assertRaises(ValidationError):
+                Location.clean(bad)
+        ord_id = self.new_order()["ORD_ID"]
+        self.set_status(ord_id, "I")
+        self.set_status(ord_id, "F", LOC_ID="02003001")
+        self.assertEqual(self.order(ord_id)["REF_INV_LOC"], "02-003-001")
+        self.assertIn("data-loc", self.text("/inventory/new"))
+
+    def test_menu_names(self):
+        home = self.text("/?g=SV")
+        self.assertIn("Milling Order List", home)
+        self.assertIn("Buying/Selling Order List", home)
+        self.assertNotIn("Update Milling Status", home)
+        self.client.get("/lang/th")
+        self.assertIn("รายการคำสั่งสีข้าว", self.text("/?g=SV"))
+
+    def notes(self, ord_id):
+        return [n for n in self.db("AOITS_NOTIFY") if n["ORD_ID"] == ord_id]
+
+    def test_line_message_when_a_take_away_order_is_finished(self):
+        ord_id = self.new_order()["ORD_ID"]
+        self.set_status(ord_id, "I")
+        self.assertEqual(self.notes(ord_id), [])
+        self.set_status(ord_id, "F")
+        (note,) = self.notes(ord_id)
+        self.assertEqual((note["NOTIFY_FLG"], note["ERROR"], note["ORD_TYPE"]), ("0", "lnNotConfigured", "ML"))
+        self.assertIn("ข้าวของคุณสีเสร็จแล้ว", note["NOTIFY_MESSAGE"])
+        page = self.text("/service/milling/")
+        self.assertIn("LINE not sent", page)
+        self.assertIn("/line-resend", page)
+        with mock.patch.dict(os.environ, {"AOI_LINE_CHANNEL_TOKEN": "token"}):
+            self.post("/service/milling/%s/line-resend" % ord_id)
+            self.assertEqual(self.notes(ord_id)[0]["ERROR"], "lnNoUser")        # the customer is not linked yet
+            self.post("/admin/customers/C261001001", {
+                "CUST_NAME": "อรุณ พงษ์ไพร", "MOBILE_NO": "081-234-5678", "ADDRESS": "45 หมู่ 2", "LINE_USER_ID": "abc"},
+                "/admin/customers/C261001001")
+            self.assertNotEqual(next(c for c in self.db("AOIMS_CUSTOMER") if c["CUST_CODE"] == "C261001001").get("LINE_USER_ID"), "abc")
+            with self.app.app_context():
+                col("AOIMS_CUSTOMER").update_one({"CUST_CODE": "C261001001"}, {"$set": {"LINE_USER_ID": self.USER}})
+            with mock.patch("app.models.notify._push", return_value=None) as push:
+                self.post("/service/milling/%s/line-resend" % ord_id)
+            push.assert_called_once()
+            self.assertEqual(push.call_args[0][0], self.USER)
+        note = self.notes(ord_id)[0]
+        self.assertEqual((note["NOTIFY_FLG"], note["ERROR"]), ("1", None))
+        self.assertIsNotNone(note["NOTIFY_DATETIME"])
+        self.assertIn("LINE Sent", self.text("/service/milling/"))
+
+    def test_line_message_for_delivery_waits_for_the_delivery_time(self):
+        ord_id = self.new_order(ORDER_TYPE="D")["ORD_ID"]
+        for status in ("I", "F", "D"):
+            self.set_status(ord_id, status)
+        self.assertEqual(self.notes(ord_id), [])                          # not at Finished: the time is not known yet
+        with self.app.app_context():
+            col("AOIMS_CUSTOMER").update_one({"CUST_CODE": "C261001001"}, {"$set": {"LINE_USER_ID": self.USER}})
+        with mock.patch.dict(os.environ, {"AOI_LINE_CHANNEL_TOKEN": "token"}), \
+                mock.patch("app.models.notify._push", return_value="HTTP 400 Invalid reply token") as push:
+            self.post("/service/milling/%s/delivery" % ord_id, {"DELIVERY_ADDRESS": "9 New Road", "DELIVERY_DISTANCE": "10",
+                                                               "DELIVERY_ARRIVAL_TIME": "2026-10-09T15:30"})
+        (note,) = self.notes(ord_id)
+        self.assertEqual(note["NOTIFY_FLG"], "9")
+        self.assertIn("15:30", push.call_args[0][1])
+        self.assertIn("จัดส่ง", note["NOTIFY_MESSAGE"])
+        self.assertIn("LINE Failed", self.text("/service/milling/"))
+        self.assertTrue(self.order(ord_id)["DELIVERY_CONFIRM_FLG"])         # the confirmation itself is saved
+
+    def test_a_broken_line_never_stops_the_status_change(self):
+        ord_id = self.new_order()["ORD_ID"]
+        self.set_status(ord_id, "I")
+        with mock.patch("app.models.notify.queue", side_effect=RuntimeError("down")):
+            self.set_status(ord_id, "F")
+        self.assertEqual(self.order(ord_id)["MILL_STATUS"], "F")
 
 
 if __name__ == "__main__":

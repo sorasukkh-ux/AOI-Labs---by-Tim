@@ -58,7 +58,7 @@
     <div class="field-row">
       <label class="field-label" for="reg-variety">{{ t('lblVariety') }}</label>
       <select id="reg-variety" name="RICE_VARIETY">
-        {% for v in varieties %}<option value="{{ v }}"{% if values.get('RICE_VARIETY', 'WH') == v %} selected{% endif %}>{{ t(var_keys[v]) }}</option>{% endfor %}
+        {% for v in varieties %}<option value="{{ v }}" data-priority="{{ default_priority[v] }}"{% if values.get('RICE_VARIETY', 'WH') == v %} selected{% endif %}>{{ t(var_keys[v]) }}</option>{% endfor %}
       </select>
     </div>
     <div class="two-col field-row">
@@ -68,7 +68,7 @@
     <div class="field-row">
       <label class="field-label" for="reg-priority">{{ t('lblPriority') }}</label>
       <select id="reg-priority" name="MILL_PRIORITY">
-        {% for p in priorities %}<option value="{{ p }}"{% if values.get('MILL_PRIORITY', 'M') == p %} selected{% endif %}>{{ t(priority_keys[p]) }}</option>{% endfor %}
+        {% for p in priorities %}<option value="{{ p }}"{% if values.get('MILL_PRIORITY', default_priority[values.get('RICE_VARIETY', 'WH')] or 'M') == p %} selected{% endif %}>{{ t(priority_keys[p]) }}</option>{% endfor %}
       </select>
     </div>
     <div class="two-col field-row">
@@ -153,7 +153,7 @@
       <div class="bs-lines"></div>
       <div class="field-row">
         <label class="field-label" for="bs-close-loc">{{ t('lblLocation') }}</label>
-        <input type="text" id="bs-close-loc" name="LOC_ID" placeholder="01-002-005" pattern="[0-9]{2}-[0-9]{3}-[0-9]{3}" maxlength="10" inputmode="numeric" required>
+        <input type="text" id="bs-close-loc" name="LOC_ID" placeholder="01-002-005" pattern="[0-9]{2}-[0-9]{3}-[0-9]{3}" maxlength="10" data-loc inputmode="numeric" required>
       </div>
       <div class="field-row">
         <label class="field-label" for="bs-close-status">{{ t('colStatus') }}</label>

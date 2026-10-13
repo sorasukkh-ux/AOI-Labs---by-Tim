@@ -32,6 +32,10 @@
       <span class="badge neutral">{{ t(type_keys[order.ORDER_TYPE]) }}</span>
       <span class="badge variety-badge">{{ t(var_keys[order.RICE_VARIETY or "WH"]) }}</span>
       {% if order.CANCEL_REQ_FLG == 'A' and order.is_open %}<span class="badge blocked">&#9888; {{ t('cancelApprovedTag') }}</span>{% endif %}
+      {% if order.notify %}{% set nf = order.notify %}
+      <span class="badge {{ {'1': 'approved', '9': 'blocked'}.get(nf.NOTIFY_FLG, 'pending') }}" title="{{ nf.NOTIFY_MESSAGE }}{% if nf.ERROR %} &middot; {{ t(nf.ERROR) if nf.ERROR.startswith('ln') else nf.ERROR }}{% endif %}">&#128172; {{ t({'1': 'notifySentLabel', '9': 'notifyFailLabel'}.get(nf.NOTIFY_FLG, 'notifyWaitLabel')) }}</span>
+      {% if nf.NOTIFY_FLG != '1' and editable %}<form method="post" action="{{ url_for('service_milling.line_resend', ord_id=order.ORD_ID) }}" class="inline-form">{{ hidden() }}<button class="action small-btn" type="submit">{{ t('lnResend') }}</button></form>{% endif %}
+      {% endif %}
       <a class="action order-detail-btn" href="{{ url_for('service_milling.order_detail', ord_id=order.ORD_ID) }}" data-popup>{{ t('colDetails') }}</a>
       <span class="ord-cust">{{ order.customer.get('CUST_NAME', order.CUST_CODE) }} &middot; {{ order.registered_text }}</span>
     </div>
@@ -99,7 +103,7 @@
         <div class="field-row">
           <label class="field-label" for="inb-loc-{{ order.ORD_ID }}">{{ t('lblLocation') }}</label>
           <input type="text" id="inb-loc-{{ order.ORD_ID }}" name="LOC_ID" value="{{ order.suggest_loc or '' }}" placeholder="01-002-005"
-                 pattern="[0-9]{2}-[0-9]{3}-[0-9]{3}" maxlength="10" inputmode="numeric" required>
+                 pattern="[0-9]{2}-[0-9]{3}-[0-9]{3}" maxlength="10" data-loc inputmode="numeric" required>
         </div>
         <div class="field-row">
           <label class="field-label" for="inb-status-{{ order.ORD_ID }}">{{ t('colStatus') }}</label>

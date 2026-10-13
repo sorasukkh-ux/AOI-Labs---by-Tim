@@ -38,6 +38,14 @@
     }
   }
   form.addEventListener("input", function () { showError(""); updateOutputs(); markStale(); });
+
+  // ----- default priority by variety (Jasmine high, white medium, glutinous low) until the operator picks one -----
+  var varietySel = byId("reg-variety"), prioritySel = byId("reg-priority"), priorityTouched = false;
+  if (prioritySel) prioritySel.addEventListener("change", function () { priorityTouched = true; });
+  if (varietySel && prioritySel) varietySel.addEventListener("change", function () {
+    var opt = varietySel.options[varietySel.selectedIndex], p = opt && opt.getAttribute("data-priority");
+    if (p && !priorityTouched) { prioritySel.value = p; markStale(); }
+  });
   typeSelect.addEventListener("change", toggleDelivery);
 
   // ----- customer -----

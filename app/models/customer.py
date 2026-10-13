@@ -1,4 +1,5 @@
 """AOIMS_CUSTOMER: customer master. Code = C + YYMMDD + 3-digit running number, restarting each day."""
+import re
 from .base import col, NO_ID, ValidationError, audit_new, audit_update, clean_text, to_number, round_half_up, DuplicateKey
 from .counter import Counter
 from ..timeutil import now_local
@@ -53,8 +54,14 @@ class Customer:
             raise ValidationError("custErrDistance")
         if distance is not None and distance < 0:
             raise ValidationError("custErrDistance")
-        return {"CUST_NAME": name, "LINE_ID": clean_text(form.get("LINE_ID"), 50), "MOBILE_NO": mobile, "ADDRESS": address,
-                "DISTANCE_KM": None if distance is None else round_half_up(distance, 3)}
+        values = {"CUST_NAME": name, "LINE_ID": clean_text(form.get("LINE_ID"), 50), "MOBILE_NO": mobile, "ADDRESS": address,
+                  "DISTANCE_KM": None if distance is None else round_half_up(distance, 3)}
+        if "LINE_USER_ID" in form:                # Customer Maintenance only: LINE's own ID for sending messages
+            user_id = (form.get("LINE_USER_ID") or "").strip()
+            if user_id and not re.match(r"^U[0-9a-f]{32}$", user_id):
+                raise ValidationError("custErrLineUser")
+            values["LINE_USER_ID"] = user_id or None
+        return values
 
     @classmethod
     def next_code(cls):

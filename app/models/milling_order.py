@@ -141,7 +141,7 @@ class MillingOrder:
         if yield_rule.check(MillYield.ratios(branch_id, variety))["total"] <= 0:
             raise ValidationError("errYieldMissing")
         order_type = flow.DELIVER if form.get("ORDER_TYPE") == flow.DELIVER else flow.TAKEAWAY
-        priority = form.get("MILL_PRIORITY") if form.get("MILL_PRIORITY") in PRIORITIES else "M"
+        priority = form.get("MILL_PRIORITY") if form.get("MILL_PRIORITY") in PRIORITIES else var.DEFAULT_PRIORITY[variety]
         address, distance = None, None
         if order_type == flow.DELIVER:
             address, distance = cls._delivery_inputs(form, customer)
@@ -250,7 +250,19 @@ class MillingOrder:
             Account.post_milling_income(updated, descriptions or {"full": "", "fee": ""}, ope_user)
         elif new_status == flow.CANCELLED:
             BuySellOrder.cancel_for_milling(order["ORD_ID"], ope_user)
+        elif new_status == flow.FINISHED and updated["ORDER_TYPE"] == flow.TAKEAWAY:
+            cls._notify(updated, "finished", now_utc())      # LINE: the rice is ready to pick up
         return updated
+
+    @staticmethod
+    def _notify(order, kind, when):
+        """A LINE message never stops the status change: a problem is kept on the AOITS_NOTIFY record."""
+        from . import notify
+        try:
+            notify.queue(order, kind, when)
+        except Exception:                                    # noqa: BLE001
+            import logging
+            logging.getLogger(__name__).exception("LINE message for %s was not written", order.get("ORD_ID"))
 
     @classmethod
     def change_priority(cls, ord_id, branch_id, priority, ope_user):
@@ -301,7 +313,10 @@ class MillingOrder:
             values = {"ORDER_TYPE": flow.TAKEAWAY, "EST_PAY_DELIVERY": 0.0, "DELIVERY_CONFIRM_FLG": False, "DELIVERY_ARRIVAL_TIME": None}
             if order["MILL_STATUS"] == flow.DELIVERY:
                 values["MILL_STATUS"] = flow.FINISHED          # the customer picks up instead
-        return cls._save(order, values, ope_user)
+        updated = cls._save(order, values, ope_user)
+        if order["MILL_STATUS"] == flow.DELIVERY and updated["MILL_STATUS"] == flow.FINISHED:
+            cls._notify(updated, "finished", now_utc())        # LINE: ready to pick up after all
+        return updated
 
     @classmethod
     def confirm_delivery(cls, ord_id, branch_id, form, ope_user):
@@ -314,9 +329,11 @@ class MillingOrder:
         arrival = parse_local_datetime(form.get("DELIVERY_ARRIVAL_TIME"))
         if arrival is None:
             raise ValidationError("errArrivalTime")
-        return cls._save(order, {"DELIVERY_ADDRESS": address, "DELIVERY_DISTANCE": distance,
-                                 "EST_PAY_DELIVERY": cls._delivery_fee(branch_id, distance),
-                                 "DELIVERY_ARRIVAL_TIME": arrival, "DELIVERY_CONFIRM_FLG": True}, ope_user)
+        updated = cls._save(order, {"DELIVERY_ADDRESS": address, "DELIVERY_DISTANCE": distance,
+                                    "EST_PAY_DELIVERY": cls._delivery_fee(branch_id, distance),
+                                    "DELIVERY_ARRIVAL_TIME": arrival, "DELIVERY_CONFIRM_FLG": True}, ope_user)
+        cls._notify(updated, "delivery", arrival)             # LINE: the expected arrival time
+        return updated
 
     @classmethod
     def reopen_delivery(cls, ord_id, branch_id, ope_user):

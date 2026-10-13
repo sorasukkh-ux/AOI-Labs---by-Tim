@@ -75,7 +75,7 @@
         <div class="field-row">
           <label class="field-label" for="prep-loc-{{ order.ORD_ID }}">{{ t('lblLocation') }}</label>
           <input type="text" id="prep-loc-{{ order.ORD_ID }}" name="LOC_ID" value="{{ order.suggest_loc or '' }}" placeholder="01-002-005"
-                 pattern="[0-9]{2}-[0-9]{3}-[0-9]{3}" maxlength="10" inputmode="numeric" required>
+                 pattern="[0-9]{2}-[0-9]{3}-[0-9]{3}" maxlength="10" data-loc inputmode="numeric" required>
         </div>
         <div class="field-row">
           <label class="field-label" for="prep-status-{{ order.ORD_ID }}">{{ t('colStatus') }}</label>

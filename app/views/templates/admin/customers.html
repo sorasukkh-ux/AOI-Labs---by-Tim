@@ -43,6 +43,10 @@
       <div><label class="field-label" for="cust-code">{{ t('fieldCode') }}</label><input type="text" id="cust-code" value="{{ customer.CUST_CODE if customer and mode != 'new' else (t('custCodeAuto') if mode == 'new' else '') }}" disabled></div>
       <div><label class="field-label" for="cust-lineid">{{ t('fieldLineId') }}</label><input type="text" id="cust-lineid" name="LINE_ID" value="{{ values.get('LINE_ID') or '' }}" maxlength="50" autocapitalize="none"></div>
     </div>
+    <div class="field-row">
+      <div><label class="field-label" for="cust-lineuser">{{ t('fieldLineUserId') }}</label><input type="text" id="cust-lineuser" name="LINE_USER_ID" value="{{ values.get('LINE_USER_ID') or '' }}" maxlength="33" autocapitalize="none" class="mono" placeholder="U1234567890abcdef1234567890abcdef">
+        <p class="cap-note tight">{{ t('fieldLineUserNote') }}</p></div>
+    </div>
     <div class="two-col field-row">
       <div><label class="field-label" for="cust-phone">{{ t('fieldPhone') }}</label><input type="text" id="cust-phone" name="MOBILE_NO" value="{{ values.get('MOBILE_NO') or '' }}" inputmode="tel" maxlength="20"></div>
       <div><label class="field-label" for="cust-name">{{ t('custNameLabel') }}</label><input type="text" id="cust-name" name="CUST_NAME" value="{{ values.get('CUST_NAME') or '' }}" maxlength="200"></div>

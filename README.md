@@ -12,7 +12,7 @@ It follows the design prototype (`AOI Labs - by Tim.html`) and **AOI DB Structur
 | Sign-in | User ID, password, operating branch; account lock after 5 failed attempts | Built |
 | Home | Menu groups and sub-groups, filtered by the role's View permission | Built |
 | Administration | Milling Production, Milling Maintenance, User Maintenance, Role Authorization, Customer Registration | Built |
-| Service | Customer Service (milling order registration with label preview; Buy and Sell tables), Update Milling Status (editable details, delivery time confirmation, status with hold reason and inventory inbound at Finished, priority and pickup method on each card, details pop-up, cancellation requests, delivery details), Update Buy/Sell Status (take-home bran/broken rice orders) | Built |
+| Service | Customer Service (milling order registration with label preview; Buy and Sell tables), Milling Order List (editable details, delivery time confirmation, status with hold reason and inventory inbound at Finished, priority and pickup method on each card, details pop-up, cancellation requests, delivery details), Buying/Selling Order List (take-home bran/broken rice orders) | Built |
 | Service | Service Status, Current Price, Dashboard | Built |
 | Inventory | Inventory List (add, edit, transfer), Historical, Dashboard | Built |
 | Financial | Pricing (market prices from the Thai Rice Millers Association, profit check), Market prices (source and mapping), Margin, Account, Marketing | Built |
@@ -165,7 +165,7 @@ printed QR label. Differences that remain, and why:
 - **Names** (customer, user, role) are stored once, as typed; they are not translated.
 - **Not built yet**: LINE notifications, adding milled output to inventory, and writing
   `AOITS_QR_PRINT` records (the label is drawn from the order). `REMARK` is not on the form.
-- **Manager role**: the sample Manager also has the Delete right on Update Milling Status, so a
+- **Manager role**: the sample Manager also has the Delete right on Milling Order List, so a
   manager can set Cancelled after approving a request.
 
 ## Rice varieties, milling tests and market prices
@@ -225,6 +225,26 @@ for testing; for TVs that run all day the system needs a permanent server.
   milling time per kg) - next in queue (pickup time); long columns turn pages every 10 seconds.
 - Prices of the day at the bottom; the data refreshes every 15 seconds without reloading; the clock follows the
   server's time zone. Customer names show the first name and the surname's initial only (public screen).
+
+## LINE messages to customers
+
+When a take-away order is set to **Finished** the customer gets "your rice is ready"; for a delivery order the
+message goes when the operator confirms the delivery time on Ready for Delivery. Each message is kept in
+`AOITS_NOTIFY` and shown on the Milling Order List card (LINE Sent / LINE not sent / LINE Failed, with
+"Send LINE again"). A LINE problem never stops the status change.
+
+LINE Notify closed in March 2025, so the messages go through the **LINE Messaging API** of the mill's
+LINE Official Account (push message):
+
+1. Create a LINE Official Account for the mill and turn on its Messaging API (LINE Developers console).
+2. Copy the channel access token into `.env` as `AOI_LINE_CHANNEL_TOKEN`, then restart (`bash start.sh`).
+3. Each customer needs a **LINE user ID** (`U` + 32 characters) on Customer Maintenance. It is not the LINE ID
+   people type: LINE gives it only when the customer adds the Official Account as a friend. For a first test,
+   put your own user ID (LINE Developers > the channel > Basic settings > Your user ID) on a test customer.
+
+Push messages count toward the Official Account's monthly message quota (replies do not); check the plans
+for Thailand before real use. Collecting the user IDs automatically (a webhook when a customer adds the
+account or scans the QR on the queue ticket) is the next step.
 
 ## Automation and devices
 

@@ -506,6 +506,7 @@ table.tv-table.wide { margin-bottom: 6px; min-width: 520px; }
 .bs-check-table .short { color: var(--pink-text); }
 .bs-billing-btn { padding: 4px 10px; font-size: 12px; border-radius: 999px; flex: 0 0 auto; }
 .receipt { background: #fff; color: #000; border: 1px solid var(--border); border-radius: 8px; padding: 14px; font-family: Arial, sans-serif; }
+.receipt .rc-logo { display: block; width: 120px; height: auto; margin: 0 auto 6px; }
 .receipt .rc-brand { font-size: 18px; font-weight: 700; margin: 0; }
 .receipt .rc-addr { font-size: 11px; margin: 2px 0 10px; line-height: 1.4; }
 .receipt .rc-title { margin: 0 0 8px; padding: 6px 0; border-top: 1px solid #000; border-bottom: 1px solid #000; font-weight: 700; }

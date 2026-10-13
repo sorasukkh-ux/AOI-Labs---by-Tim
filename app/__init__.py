@@ -47,7 +47,7 @@ def create_app(overrides=None):
     from .controllers.common import branch_label
     from .models import variety
     app.jinja_env.globals.update(
-        mat_name=variety.mat_name, varieties=variety.VARIETIES, var_keys=variety.VAR_KEYS, variety_of=variety.variety_of,
+        mat_name=variety.mat_name, varieties=variety.VARIETIES, var_keys=variety.VAR_KEYS, default_priority=variety.DEFAULT_PRIORITY, variety_of=variety.variety_of,
         t=i18n.t, can=security.can, csrf_token=security.csrf_token, branch_label=branch_label,
         fmt_datetime=timeutil.fmt_datetime, fmt_date=timeutil.fmt_date, fmt_time=timeutil.fmt_time)
 

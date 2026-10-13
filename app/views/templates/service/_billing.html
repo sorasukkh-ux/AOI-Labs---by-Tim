@@ -1,6 +1,7 @@
 {# Receipt of buying/selling orders (the design's Print Billing). Shown in the pop-up; Print prints only the receipt. #}
 <div class="receipt-wrap">
   <div class="receipt" id="receipt">
+    <img class="rc-logo" src="{{ url_for('static', filename='img/logo.png') }}" alt="AOI">
     <p class="rc-brand">AOI Labs</p>
     <p class="rc-addr">{{ address }}<br>{{ address_en }}<br>Tel. {{ tel }}</p>
     <p class="rc-title">{{ t('receiptTitle') }} &middot; {{ t(type_keys[orders[0].ORD_TYPE]) }}</p>

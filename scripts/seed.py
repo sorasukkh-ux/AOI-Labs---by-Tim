@@ -49,8 +49,8 @@ MACHINES = [("HUSK", "Husker", "HUSKER", 15.0, 1500.0), ("WHITE", "Whitener", "W
             ("POLISH", "Polisher", "POLISHER", 22.0, 1200.0), ("GRADE", "Grader", "GRADER", 3.0, 2000.0)]
 MENUS = [  # MENU_CODE, MENU_NAME, MENU_GROUP, MENU_SUBGROUP, MENU_SEQ
     ("SV_SERVICE", "Customer Service", "SV", "", 1), ("SV_STATUS", "Service Status", "SV", "", 2),
-    ("SV_PRICE", "Current Price", "SV", "", 3), ("SV_MILLSTATUS", "Update Milling Status", "SV", "", 4),
-    ("SV_BSSTATUS", "Update Buy/Sell Status", "SV", "", 5), ("SV_DASHBOARD", "Service Dashboard", "SV", "", 6),
+    ("SV_PRICE", "Current Price", "SV", "", 3), ("SV_MILLSTATUS", "Milling Order List", "SV", "", 4),
+    ("SV_BSSTATUS", "Buying/Selling Order List", "SV", "", 5), ("SV_DASHBOARD", "Service Dashboard", "SV", "", 6),
     ("IV_LIST", "Inventory List", "IV", "", 1), ("IV_HISTORY", "Inventory Historical", "IV", "", 2),
     ("IV_DASHBOARD", "Inventory Dashboard", "IV", "", 3),
     ("FN_PRICING", "Pricing Maintenance", "FN", "", 1), ("FN_MARGIN", "Margin Maintenance", "FN", "", 2),
@@ -178,6 +178,10 @@ def seed(log=print, reset=False):
                                                           "MACHINE_ID": None, "DEVICE_KEY_HASH": None, "LAST_SEEN": None})
     from app.models.market import seed_default_map
     seed_default_map(SEED_USER)                   # first guess of which report row is which SKU (Financial > Market prices)
+    # update 21: the two status screens are now called order lists (only the old default names are changed)
+    for code, old_name in (("SV_MILLSTATUS", "Update Milling Status"), ("SV_BSSTATUS", "Update Buy/Sell Status")):
+        new_name = next(m[1] for m in MENUS if m[0] == code)
+        db["AOIMS_MENU"].update_one({"MENU_CODE": code, "MENU_NAME": old_name}, {"$set": {"MENU_NAME": new_name}})
     for code, name, group, sub, seq in MENUS:
         add("AOIMS_MENU", {"MENU_CODE": code}, {"MENU_NAME": name, "MENU_GROUP": group, "MENU_SUBGROUP": sub or None, "MENU_SEQ": seq})
     for code, name, desc in ROLES:

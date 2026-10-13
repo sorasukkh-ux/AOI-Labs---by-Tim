@@ -103,7 +103,9 @@
       node.addEventListener("click", function (e) { if (e.target.closest("[data-modal-close]")) window.AOIModal.close(); });
       node.addEventListener("submit", function (e) {
         e.preventDefault();
-        var loc = node.querySelector('input[name="LOC_ID"]').value.trim();
+        var locInput = node.querySelector('input[name="LOC_ID"]');
+        if (window.AOIFormatLoc) locInput.value = window.AOIFormatLoc(locInput.value);
+        var loc = locInput.value.trim();
         if (!/^\d{2}-\d{3}-\d{3}$/.test(loc)) { node.querySelector('input[name="LOC_ID"]').focus(); return; }
         var status = node.querySelector('select[name="INV_STATUS"]').value;
         window.AOIModal.close();

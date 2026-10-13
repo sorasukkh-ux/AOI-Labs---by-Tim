@@ -10,6 +10,7 @@ from ..models.buysell_order import BuySellOrder
 from ..models.customer import Customer
 from ..models.inventory import Inventory, lot_of
 from ..models.mill_yield import MillYield
+from ..models import notify
 from ..models.milling_order import MillingOrder, PRIORITIES
 from ..models.rules import status_flow as flow
 from ..security import can, current_user, operating_branch, require
@@ -177,7 +178,9 @@ def quote():
 def _decorate(orders, details=False):
     customers = {}
     suggest_loc = None
+    messages = notify.last_for(o["ORD_ID"] for o in orders)
     for order in orders:
+        order["notify"] = messages.get(order["ORD_ID"])
         code = order["CUST_CODE"]
         if code not in customers:
             customers[code] = Customer.find(code) or {}
@@ -268,6 +271,20 @@ def change_status(ord_id):
     descriptions = {"full": t("acctAutoMillingIncomeDesc"), "fee": t("acctAutoMillingFeeDesc")}
     return _run(ord_id, lambda order: MillingOrder.change_status(
         order["ORD_ID"], operating_branch(), new_status, _user_id(), request.form, descriptions))
+
+
+@bp.route("/<ord_id>/line-resend", methods=["POST"])
+@require(STATUS, "edit")
+def line_resend(ord_id):
+    """Sends the order's newest LINE message again (not sent yet, or failed)."""
+    order = _order_or_404(ord_id)
+    doc = notify.resend(order["ORD_ID"])
+    if doc and doc["NOTIFY_FLG"] == notify.SENT:
+        flash_ok("lnResent", id=order["QR_ID"])
+    else:
+        error = (doc or {}).get("ERROR") or ""
+        flash_error(ValidationError(error if error.startswith("ln") else "lnFailed"))
+    return _back(order["ORD_ID"])
 
 
 @bp.route("/<ord_id>/priority", methods=["POST"])

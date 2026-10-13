@@ -8,6 +8,8 @@ JASMINE, WHITE, GLUTINOUS = "HM", "WH", "GL"
 VARIETIES = (JASMINE, WHITE, GLUTINOUS)
 DEFAULT = WHITE
 VAR_KEYS = {JASMINE: "varJasmine", WHITE: "varWhite", GLUTINOUS: "varGlutinous"}
+# Default milling priority of a new order by variety (the operator can still change it): U urgent, H high, M medium, L low
+DEFAULT_PRIORITY = {JASMINE: "H", WHITE: "M", GLUTINOUS: "L"}
 
 PADDY, RICE, BROKEN, BRAN, HUSK = "paddy", "rice", "broken", "bran", "husk"
 KIND_KEYS = {PADDY: "skuPaddy", RICE: "skuRice", BROKEN: "skuBroken", BRAN: "skuBran", HUSK: "skuHusk"}

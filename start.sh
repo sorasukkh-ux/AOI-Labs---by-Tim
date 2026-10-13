@@ -22,9 +22,16 @@ echo "== Installing Python packages ($PY)"
 
 if [ ! -f .env ]; then
   cp .env.example .env
+  echo "== Created .env from .env.example"
+fi
+if grep -q '^AOI_SECRET_KEY=$' .env || ! grep -q '^AOI_SECRET_KEY=' .env; then
   KEY=$("$PY" -c "import secrets; print(secrets.token_hex(32))")
-  sed -i "s|^AOI_SECRET_KEY=.*|AOI_SECRET_KEY=${KEY}|" .env
-  echo "== Created .env with a new secret key"
+  if grep -q '^AOI_SECRET_KEY=' .env; then
+    sed -i "s|^AOI_SECRET_KEY=.*|AOI_SECRET_KEY=${KEY}|" .env
+  else
+    echo "AOI_SECRET_KEY=${KEY}" >> .env
+  fi
+  echo "== Added a new secret key to .env"
 fi
 
 if [ "${1:-}" = "demo" ]; then
