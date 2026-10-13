@@ -1,0 +1,67 @@
+{# Milling Analysis: averages from the status timeline (AOILOG_MILLSTATUS) of the orders registered in the period. #}
+{% macro pc(v) %}{% if v is none %}-{% else %}{{ '%.2f'|format(v * 100) }}%{% endif %}{% endmacro %}
+{% macro gap(a, b) %}{% if a is none or b is none %}-{% else %}{% set d = (a - b) * 100 %}<span class="{{ 'pos' if d >= 0 else 'neg' }}">{{ '%+.2f'|format(d) }}</span>{% endif %}{% endmacro %}
+{% macro summary_cells(s) %}
+  <td class="num">{{ s.orders }}</td><td class="num">{{ s.paddy|num(0) }}</td><td class="num">{{ s.rice|num(0) }}</td>
+  <td class="num">{{ pc(s['yield']) }}</td><td class="num">{{ gap(s['yield'], s.expected) }}</td>
+  <td class="num nowrap">{{ s.wait|duration }}</td><td class="num nowrap">{{ s.milling|duration }}</td>
+  <td class="num">{{ s.held }}</td><td class="num">{{ s.cancelled }}</td>
+{% endmacro %}
+<div id="tab-mill-analysis">
+<div class="card gap"><p class="desc-text">{{ t('maDesc') }}</p></div>
+
+<form method="get" class="card mt14" id="ma-filter">
+  <input type="hidden" name="tab" value="period">
+  <div class="ma-filter-row">
+    <div><label class="field-label" for="ma-start">{{ t('maFrom') }}</label><input type="date" id="ma-start" name="start" value="{{ start.isoformat() }}"></div>
+    <div><label class="field-label" for="ma-end">{{ t('maTo') }}</label><input type="date" id="ma-end" name="end" value="{{ end.isoformat() }}"></div>
+    <div><label class="field-label" for="ma-variety">{{ t('lblVariety') }}</label>
+      <select id="ma-variety" name="variety"><option value="">{{ t('filterAll') }}</option>
+        {% for v in varieties %}<option value="{{ v }}"{% if v == variety %} selected{% endif %}>{{ t(var_keys[v]) }}</option>{% endfor %}</select></div>
+    <div class="ma-filter-btn"><button class="action primary" type="submit">{{ t('maShow') }}</button></div>
+  </div>
+  <p class="cap-note tight">{{ branch_name }} &middot; {{ start.strftime('%d/%m/%Y') }} &ndash; {{ end.strftime('%d/%m/%Y') }}</p>
+</form>
+
+{% set s = result.total %}
+<div class="auto-kpis mt14" id="ma-kpis">
+  <div class="card"><p class="card-title">{{ t('maOrders') }}</p><p class="kpi-value">{{ s.orders }}</p><p class="cap-note tight">{{ t('maDoneCancelled', done=s.done, cancelled=s.cancelled) }}</p></div>
+  <div class="card"><p class="card-title">{{ t('maPaddyRice') }}</p><p class="kpi-value">{{ s.paddy|num(0) }} / {{ s.rice|num(0) }} kg</p></div>
+  <div class="card"><p class="card-title">{{ t('maYield') }}</p><p class="kpi-value">{{ pc(s['yield']) }}</p><p class="cap-note tight">{{ t('maExpected') }} {{ pc(s.expected) }} ({{ gap(s['yield'], s.expected) }})</p></div>
+  <div class="card"><p class="card-title">{{ t('maWait') }}</p><p class="kpi-value">{{ s.wait|duration }}</p></div>
+  <div class="card"><p class="card-title">{{ t('maMilling') }}</p><p class="kpi-value">{{ s.milling|duration }}</p></div>
+  <div class="card"><p class="card-title">{{ t('maReady') }}</p><p class="kpi-value">{{ s.ready|duration }}</p><p class="cap-note tight">{{ t('maPickup') }} {{ s.pickup|duration }}</p></div>
+  <div class="card"><p class="card-title">{{ t('maHeld') }}</p><p class="kpi-value">{{ s.held }}</p><p class="cap-note tight">{{ t('maHoldAvg') }} {{ s.hold_min|duration }}</p></div>
+  <div class="card"><p class="card-title">{{ t('maScanned') }}</p><p class="kpi-value">{{ s.scanned }} / {{ s.orders }}</p></div>
+</div>
+
+<div class="card mt14">
+  <p class="card-title">{{ t('maByVariety') }}</p>
+  <div class="inv-table-wrap"><table class="tv-table" id="ma-variety-table">
+    <thead><tr><th>{{ t('lblVariety') }}</th><th class="num">{{ t('maOrders') }}</th><th class="num">{{ t('maPaddyKg') }}</th><th class="num">{{ t('maRiceKg') }}</th>
+      <th class="num">{{ t('maYield') }}</th><th class="num">{{ t('maVsExpected') }}</th><th class="num">{{ t('maWait') }}</th><th class="num">{{ t('maMilling') }}</th><th class="num">{{ t('maHeld') }}</th><th class="num">{{ t('maCancelled') }}</th></tr></thead>
+    <tbody>{% for key, g in result.by_variety %}<tr><td>{{ t(var_keys[key]) }}</td>{{ summary_cells(g) }}</tr>
+    {% else %}<tr><td colspan="10" class="hint center">{{ t('autoNoData') }}</td></tr>{% endfor %}</tbody>
+  </table></div>
+</div>
+
+<div class="card mt14">
+  <p class="card-title">{{ t('maByCustomer') }}</p>
+  <div class="inv-table-wrap"><table class="tv-table" id="ma-customer-table">
+    <thead><tr><th>{{ t('colCustomer') }}</th><th class="num">{{ t('maOrders') }}</th><th class="num">{{ t('maPaddyKg') }}</th><th class="num">{{ t('maRiceKg') }}</th>
+      <th class="num">{{ t('maYield') }}</th><th class="num">{{ t('maVsExpected') }}</th><th class="num">{{ t('maWait') }}</th><th class="num">{{ t('maMilling') }}</th><th class="num">{{ t('maHeld') }}</th><th class="num">{{ t('maCancelled') }}</th></tr></thead>
+    <tbody>{% for key, g in result.by_customer %}<tr><td>{{ cust_name(key) }}<small class="block-sub">{{ key }}</small></td>{{ summary_cells(g) }}</tr>
+    {% else %}<tr><td colspan="10" class="hint center">{{ t('autoNoData') }}</td></tr>{% endfor %}</tbody>
+  </table></div>
+  <p class="cap-note">{{ t('maNote') }}</p>
+</div>
+
+<div class="card mt14" id="ma-export">
+  <p class="card-title">{{ t('maExport') }}</p>
+  <p class="cap-note tight">{{ t('maExportNote') }}</p>
+  <div class="btn-pair mt6">
+    <a class="action" id="ma-csv-orders" href="{{ url_for('admin_milling.analysis', tab='period', start=start.isoformat(), end=end.isoformat(), variety=variety, csv='orders') }}">{{ t('maCsvOrders') }}</a>
+    <a class="action" id="ma-csv-events" href="{{ url_for('admin_milling.analysis', tab='period', start=start.isoformat(), end=end.isoformat(), csv='events') }}">{{ t('maCsvEvents') }}</a>
+  </div>
+</div>
+</div>

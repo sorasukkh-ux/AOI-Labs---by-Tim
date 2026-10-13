@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% from "_macros.html" import page_head %}
+{# Administration > Milling > Milling Analysis: the period analysis, today's milling and today's buying / selling #}
+{% block content %}
+{{ page_head(t('tabMillAnalysis'), url_for('home.index', g='AD')) }}
+<div class="chips mt14 ma-tabs" id="ma-tabs" role="tablist">
+  {% for key in tabs %}
+  <a class="chip{% if tab == key %} active{% endif %}" role="tab" aria-selected="{{ 'true' if tab == key else 'false' }}"
+     href="{{ url_for('admin_milling.analysis', tab=key) }}" data-ma-tab="{{ key }}">{{ t('maTab_' ~ key) }}</a>
+  {% endfor %}
+</div>
+{% if tab == 'period' %}
+{% include "service/_analysis_body.html" %}
+{% else %}
+{% include "service/_dashboard_body.html" %}
+{% endif %}
+{% endblock %}

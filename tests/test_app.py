@@ -203,8 +203,10 @@ class Permissions(Base):
         self.assertNotIn('data-menu="AD_USER"', page)
         self.assertNotIn('data-menu="AD_MILLPROD"', page)
         self.logout()
-        self.login("wanida.s")
-        self.assertNotIn('data-group="AD"', self.text("/"))
+        self.login("wanida.s")                                      # accountant: only Milling Analysis in Administration
+        page = self.text("/?g=AD")
+        self.assertIn('data-menu="AD_MILLANALYSIS"', page)
+        self.assertNotIn('data-menu="AD_MILLTIME"', page)
 
     def test_manager_views_users_but_cannot_save(self):
         self.login("prasert.m")
@@ -297,7 +299,7 @@ class Administration(Base):
         rows = {r["MENU_CODE"]: r for r in self.db("AOIMS_ROLEAUTH") if r["ROLE_CODE"] == "SUPERVISOR"}
         self.assertTrue(rows["SV_SERVICE"]["CAN_VIEW"] and rows["SV_SERVICE"]["CAN_CREATE"])
         self.assertFalse(rows["AD_USER"]["CAN_EDIT"])                    # dropped: the screen cannot be viewed
-        self.assertEqual(len(rows), 23)                                  # one row per menu (Milling Analysis in update 22)
+        self.assertEqual(len(rows), 23)                                  # one row per menu (update 25: analysis merged, LINE messages added)
         self.assertIn("already exists", self.post("/admin/roles/save", data, "/admin/roles/").get_data(as_text=True))
 
     def test_role_in_use_cannot_be_made_inactive_and_admin_stays_full(self):
@@ -1155,16 +1157,16 @@ class Update8(Base):
         self.assertLess(tv.index("In process"), tv.index("Queue"))
         self.assertIn("#" + b["QR_ID"], tv)
         self.assertIn("20.41", self.text("/service/price"))
-        dash = self.text("/service/dashboard")
+        dash = self.text("/admin/milling/analysis?tab=today")
         self.assertIn('href="/service/milling/?status=I"', dash)
         self.assertIn('id="chart-svc-status"', dash)
-        trade = self.text("/service/dashboard?view=trade")
+        trade = self.text("/admin/milling/analysis?tab=trade")
         self.assertIn("Total Sell Today", trade)
 
     def test_maintenance_branch_rules(self):
         self.logout()
         self.login("somchai.k")                                       # operator: no financial screens
-        for path in ("/finance/pricing", "/finance/margin", "/finance/account", "/finance/marketing", "/service/dashboard"):
+        for path in ("/finance/pricing", "/finance/margin", "/finance/account", "/finance/marketing", "/admin/milling/analysis?tab=today"):
             self.assertEqual(self.client.get(path).status_code, 403, path)
         self.assertEqual(self.client.get("/service/price").status_code, 200)
 
@@ -2069,7 +2071,7 @@ class Update22(Base):
         self.set_status(a, "I", ACT_PADDY="98")
         self.set_status(a, "F", INV_QTY="49")
         self.set_status(b, "CC")
-        page = self.text("/service/analysis")
+        page = self.text("/admin/milling/analysis")
         self.assertIn("Milling Analysis", page)
         self.assertIn('id="ma-variety-table"', page)
         self.assertIn("50.00%", page)                               # 49 kg rice / 98 kg weighed paddy
@@ -2083,17 +2085,17 @@ class Update22(Base):
         row = next(r for r in result["rows"] if r["ord_id"] == a)
         self.assertAlmostEqual(row["yield"], 0.5)
         self.assertIsNotNone(row["wait"])
-        self.assertEqual(self.text("/service/analysis?variety=GL").count("<tr><td>"), 0)
-        csv_orders = self.client.get("/service/analysis?csv=orders")
+        self.assertEqual(self.text("/admin/milling/analysis?tab=period&variety=GL").count("<tr><td>"), 0)
+        csv_orders = self.client.get("/admin/milling/analysis?tab=period&csv=orders")
         self.assertEqual(csv_orders.mimetype, "text/csv")
         body = csv_orders.get_data(as_text=True)
         self.assertTrue(body.startswith("\ufeffORD_ID,QR_ID"))
         self.assertIn(a, body)
-        events = self.client.get("/service/analysis?csv=events").get_data(as_text=True)
+        events = self.client.get("/admin/milling/analysis?tab=period&csv=events").get_data(as_text=True)
         self.assertEqual(events.count("EV-" + a), 3)               # Q, I, F
         self.logout()
         self.login("somchai.k", "factory1")                         # operators do not see the analysis
-        self.assertEqual(self.client.get("/service/analysis").status_code, 403)
+        self.assertEqual(self.client.get("/admin/milling/analysis").status_code, 403)
 
 
 class Update23(Base):
@@ -2258,6 +2260,122 @@ class Update24(Base):
         self.assertEqual(notify.reason_key("HTTP 400 Failed to send messages"), "lnNotFriend")
         self.assertEqual(notify.reason_key("timed out"), "lnApiError")
         self.assertEqual(notify.reason_key("lnNoUser"), "lnNoUser")
+
+
+class Update25(Base):
+    """LINE QR only until linked; Milling Analysis in Administration; LINE messages; pricing tabs; price history."""
+    USER = "U" + "abcdef0123456789" * 2
+
+    def setUp(self):
+        super().setUp()
+        self.login("admin")
+        self.client.get("/lang/en")
+
+    def test_line_qr_only_until_the_customer_is_linked(self):
+        with mock.patch.dict(os.environ, {"AOI_LINE_OA_ID": "@783ycdvd"}):
+            first = self.new_order()["ORD_ID"]
+            self.assertIn("oaMessage", self.text("/service/milling/" + first))
+            with self.app.app_context():
+                col("AOIMS_CUSTOMER").update_one({"CUST_CODE": "C261001001"}, {"$set": {"LINE_USER_ID": self.USER,
+                                                 "LINE_DISPLAY_NAME": "Tim", "LINE_LINK_VIA": "TICKET"}})
+            second = self.new_order()["ORD_ID"]
+            self.assertNotIn("oaMessage", self.text("/service/milling/" + second))
+            self.assertIn("LINE linked: Tim", self.text("/admin/customers/C261001001"))
+
+    def test_link_keeps_the_line_display_name(self):
+        env = {"AOI_LINE_CHANNEL_TOKEN": "t", "AOI_LINE_CHANNEL_SECRET": "s", "AOI_LINE_OA_ID": "@x"}
+        with mock.patch.dict(os.environ, env), mock.patch("app.models.notify.profile", return_value={"displayName": "Tim K"}):
+            with self.app.app_context():
+                from app.models import line_link
+                line_link.answer_text(self.USER, "081-234-5678")
+        c = next(c for c in self.db("AOIMS_CUSTOMER") if c["CUST_CODE"] == "C261001001")
+        self.assertEqual((c["LINE_USER_ID"], c["LINE_DISPLAY_NAME"], c["LINE_LINK_VIA"]), (self.USER, "Tim K", "PHONE"))
+
+    def test_milling_analysis_moved_to_administration(self):
+        self.assertIn('data-menu="AD_MILLANALYSIS"', self.text("/?g=AD"))
+        self.assertNotIn("AD_MILLANALYSIS", self.text("/?g=SV"))
+        self.assertNotIn('data-menu="SV_DASHBOARD"', self.text("/?g=SV"))
+        for tab, marker in (("period", 'id="ma-kpis"'), ("today", 'id="svc-dashboard-grid"'), ("trade", 'id="trade-dashboard-grid"')):
+            page = self.text("/admin/milling/analysis?tab=" + tab)
+            self.assertIn(marker, page)
+            self.assertIn('id="ma-tabs"', page)
+        self.assertIn("/admin/milling/analysis?tab=today", self.client.get("/service/dashboard").headers["Location"])
+        self.assertIn("tab=period", self.client.get("/service/analysis?csv=orders").headers["Location"])
+
+    def test_line_message_maintenance(self):
+        page = self.text("/admin/line-messages/")
+        self.assertIn("ML_FINISHED", page)
+        self.assertIn("LN_WELCOME", page)
+        self.assertIn("{rice_kg}", page)
+        bad = {"MSG_ID": "ML_FINISHED", "MSG_NAME": "Ready", "MSG_TEXT": "Hello {nope}", "ACTIVE_FLG": "1"}
+        self.post("/admin/line-messages/", bad, "/admin/line-messages/")
+        self.assertEqual(self.db("AOIMS_LINEMSG"), [])
+        good = dict(bad, MSG_TEXT="คุณ{name} คิว #{no} ข้าว {rice_kg} กก. พร้อมรับที่{branch} ยอด {pay} บาท")
+        self.post("/admin/line-messages/", good, "/admin/line-messages/")
+        self.assertEqual(self.db("AOIMS_LINEMSG")[0]["MSG_TEXT"], good["MSG_TEXT"])
+        self.assertIn("สมชาย ก.", self.text("/admin/line-messages/"))                # preview with sample values
+        order = self.new_order()
+        self.set_status(order["ORD_ID"], "I")
+        self.set_status(order["ORD_ID"], "F", INV_QTY="16.5")
+        note = next(n for n in self.db("AOITS_NOTIFY") if n["ORD_ID"] == order["ORD_ID"])
+        self.assertIn("คิว #%s ข้าว 16.50 กก. พร้อมรับที่โรงงาน 2" % order["QR_ID"], note["NOTIFY_MESSAGE"])
+        self.post("/admin/line-messages/", dict(good, ACTIVE_FLG=""), "/admin/line-messages/")   # switched off
+        other = self.new_order()
+        self.set_status(other["ORD_ID"], "I")
+        self.set_status(other["ORD_ID"], "F")
+        self.assertFalse(any(n["ORD_ID"] == other["ORD_ID"] for n in self.db("AOITS_NOTIFY")))
+        self.post("/admin/line-messages/", {"MSG_ID": "LN_HELP", "MSG_TEXT": "สวัสดีครับ", "MSG_NAME": "x"}, "/admin/line-messages/")
+        with self.app.app_context():
+            from app.models import line_link
+            self.assertEqual(line_link.answer_text(self.USER, "hello")[0], "สวัสดีครับ")
+        self.post("/admin/line-messages/", {"MSG_ID": "LN_HELP", "action": "reset"}, "/admin/line-messages/")
+        with self.app.app_context():
+            self.assertIn("QR LINE", line_link.answer_text(self.USER, "hello")[0])
+        self.logout()
+        self.login("somchai.k", "factory1")
+        self.assertEqual(self.client.get("/admin/line-messages/").status_code, 403)
+
+    def test_pricing_tabs(self):
+        price = self.text("/finance/pricing?branch=factory2")
+        market_page = self.text("/finance/market?branch=factory2")
+        for page in (price, market_page):
+            self.assertIn('id="pricing-tabs"', page)
+        self.assertIn('id="profit-card"', price)
+        self.assertNotIn('id="market-history"', price)
+        self.assertIn('id="market-history"', market_page)
+        self.assertNotIn('id="profit-card"', market_page)
+
+    def nabc_rows(self, days):
+        rows = []
+        for i, day in enumerate(days):
+            for market_name, price in (("A", 14000 + i * 10), ("B", 14200 + i * 10), ("C", 15000 + i * 10)):
+                rows.append({"data_date": day, "product_name": "ข้าวเปลือกเจ้าหอมมะลิ 105", "market_name": market_name,
+                             "province": "ขอนแก่น", "day_price": price, "unit": "บาท/ตัน"})
+        return rows
+
+    def test_market_price_history(self):
+        from datetime import date
+        today = date.today()
+        days = [(today - timedelta(days=d)).isoformat() for d in (400, 200, 60, 10, 1)]
+        rows = self.nabc_rows(sorted(days, reverse=True))
+        pages = [rows[:6], rows[6:12], rows[12:]]
+        def fake(product, page):
+            return {"data": pages[page - 1] if page <= len(pages) else [], "pagination": {"total": len(rows)}}
+        with mock.patch("app.models.nabc_price._get", side_effect=fake):
+            self.post("/finance/market", {"action": "history"}, "/finance/market")
+            self.post("/finance/market", {"action": "history"}, "/finance/market")    # second time: nothing new
+        self.assertEqual(len(self.db("AOITS_NABC_PRICE")), 15)
+        with self.app.test_request_context():
+            from app.models import market_history
+            s12 = next(x for x in market_history.series("factory2", "12M")["skus"] if x["code"] == "PADDY_HM")
+            s36 = next(x for x in market_history.series("factory2", "36M")["skus"] if x["code"] == "PADDY_HM")
+            s3 = next(x for x in market_history.series("factory2", "3M")["skus"] if x["code"] == "PADDY_HM")
+        self.assertEqual((len(s3["points"]), len(s12["points"]), len(s36["points"])), (3, 4, 5))
+        self.assertEqual(s36["points"][0][1], 14.24)                              # median of the oldest day (14,240 THB/ton)
+        page = self.text("/finance/market")
+        self.assertIn('data-mkh-sku="PADDY_HM" checked', page)
+        self.assertIn("market_chart.js", page)
+        self.assertIn('data-mkh-period="36M"', page)
 
 
 if __name__ == "__main__":

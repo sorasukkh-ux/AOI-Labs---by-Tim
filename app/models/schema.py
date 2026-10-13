@@ -1,4 +1,4 @@
-"""Every collection of AOI DB Structure 1.30 and its indexes.
+"""Every collection of AOI DB Structure 1.31 and its indexes.
 
 MongoDB creates a collection the first time a record is written, so "creating the tables" means
 creating the indexes below. Unique indexes are the primary keys of the DB structure.
@@ -19,6 +19,7 @@ COLLECTIONS = {
     "AOIMS_USER": [(["USER_ID"], True), (["ROLE_CODE"], False)],
     "AOIMS_ROLE": [(["ROLE_CODE"], True)],
     "AOIMS_MENU": [(["MENU_CODE"], True)],
+    "AOIMS_LINEMSG": [(["MSG_ID"], True)],
     "AOIMS_ROLEAUTH": [(["ROLE_CODE", "MENU_CODE"], True)],
     # ---- transactions ----
     "AOITS_ORDMILLING": [(["ORD_ID"], True), (["BRANCH_ID", "MILL_STATUS"], False), (["CUST_CODE"], False)],

@@ -15,6 +15,23 @@ def start(app):
         return
     _started = True
 
+    def _history_once(app):
+        """Once per NABC product: its whole price history for the market price graph (about 2 years)."""
+        from .models import market_history
+        from .models.base import col, ValidationError
+        from .models.counter import Counter
+        from .models.market import MarketMap
+        for m in MarketMap.all():
+            product = m.get("NABC_PRODUCT")
+            if m["SOURCE"] != "NABC" or not product or col(Counter.COL).find_one({"COUNTER_KEY": "NABC-HIST-" + product}):
+                continue
+            try:
+                saved = market_history.download_nabc_history([product])
+                Counter.next("NABC-HIST-" + product)
+                app.logger.info("NABC price history: %s", saved)
+            except ValidationError as error:
+                app.logger.warning("NABC price history of %s: %s", product, error.key)
+
     def loop():
         from .models.base import ValidationError
         from .models.market import daily_due, fetch_all
@@ -27,6 +44,7 @@ def start(app):
                                         (result["nabc"] or {}).get("new"), (result["report"] or {}).get("SOURCE_URL"))
                         for error in result["errors"]:
                             app.logger.warning("Daily market price fetch: %s", error.key)
+                        _history_once(app)
                     from .models import supply
                     if supply.daily_due():
                         try:

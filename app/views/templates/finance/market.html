@@ -1,8 +1,49 @@
 {% extends "base.html" %}
-{% from "_macros.html" import page_head %}
+{% from "_macros.html" import page_head, pricing_tabs %}
 {% block content %}
 <div id="tab-market" class="auto-page">
-{{ page_head(t('mkSourceTitle'), url_for('finance.pricing')) }}
+{{ page_head(t('tabPricing'), url_for('home.index', g='FN')) }}
+{{ pricing_tabs('market', branch) }}
+
+<div class="card mt14" id="market-history">
+  <div class="card-head">
+    <p class="card-title">{{ t('mkhTitle') }}</p>
+    <div class="seg-tabs small" role="group" aria-label="{{ t('mkhPeriod') }}">
+      {% for p in periods %}<button type="button" class="seg-tab{% if p == period %} active{% endif %}" data-mkh-period="{{ p }}" aria-pressed="{{ 'true' if p == period else 'false' }}">{{ p }}</button>{% endfor %}
+    </div>
+  </div>
+  <div class="mkh-skus" id="mkh-skus">
+    {% for s in chart.skus %}
+    <label class="mkh-sku{% if not s.points %} nodata{% endif %}"><input type="checkbox" data-mkh-sku="{{ s.code }}"{% if s.points %} checked{% endif %}>
+      <i class="mkh-sw mkh-k-{{ s.kind }} mkh-v-{{ s.variety or 'bran' }}"></i>{{ s.name }}</label>
+    {% endfor %}
+    <span class="mkh-quick"><button type="button" class="link-btn" id="mkh-all">{{ t('mkhAll') }}</button> &middot; <button type="button" class="link-btn" id="mkh-none">{{ t('mkhNone') }}</button></span>
+  </div>
+  <div class="mkh-wrap">
+    <div id="mkh-chart" data-period="{{ period }}" data-series='{{ chart|tojson }}' data-text='{{ {"title": t("mkhTitle"), "unit": t("mkhUnit")}|tojson }}'></div>
+    <div id="mkh-tip" class="mkh-tip" hidden></div>
+    <p class="hint" id="mkh-empty" hidden>{{ t('mkhEmpty') }}</p>
+  </div>
+  <p class="cap-note tight">{{ t('mkhLegend') }}</p>
+  <div class="inv-table-wrap"><table class="tv-table" id="mkh-table">
+    <thead><tr><th>{{ t('colSku') }}</th><th class="mkh-src">{{ t('mkSource') }}</th><th class="num">{{ t('mkhLast') }}</th><th class="num">{{ t('mkhLow') }}</th><th class="num">{{ t('mkhHigh') }}</th><th class="num">{{ t('mkhAvg') }}</th><th class="num">{{ t('mkhChange') }}</th></tr></thead>
+    <tbody>
+    {% for p in periods %}{% for r in summary[p] if r.n %}
+      <tr data-mkh-row data-mkh-period="{{ p }}"{% if p != period %} hidden{% endif %}><td>{{ r.name }}</td><td class="mkh-src">{{ t('mkSrc_' ~ r.source) }}</td>
+        <td class="num">{{ r.last|num }}</td><td class="num">{{ r.low|num }}</td><td class="num">{{ r.high|num }}</td><td class="num">{{ r.avg|num }}</td>
+        <td class="num {{ 'pos' if r.change >= 0 else 'neg' }}">{{ '%+.1f'|format(r.change) }}%</td></tr>
+    {% endfor %}{% endfor %}
+    </tbody>
+  </table></div>
+  {% for p in periods %}{% set missing = summary[p]|rejectattr('n')|map(attribute='name')|list %}
+  {% if missing %}<p class="cap-note tight" data-mkh-row data-mkh-period="{{ p }}"{% if p != period %} hidden{% endif %}>{{ t('mkhNoData') }}: {{ missing|join(', ') }}</p>{% endif %}
+  {% endfor %}
+  <p class="cap-note">{{ t('mkhSources', nabc_from=info.nabc_from or '-', reports=info.reports, reports_from=info.reports_from or '-') }}</p>
+  {% if can_edit %}
+  <form method="post" class="inline-form mt6"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="history">
+    <button class="action" type="submit" id="mkh-history-btn" data-confirm="{{ t('mkhHistoryConfirm') }}">{{ t('mkhHistoryBtn') }}</button></form>
+  {% endif %}
+</div>
 <div class="card gap"><p class="desc-text">{{ t('mkSourceDesc') }}</p>
   <p class="cap-note tight mono-wrap">{{ t('mkSourceUrl') }}: <a href="{{ source_url }}" rel="noopener noreferrer" target="_blank">{{ source_url }}</a></p>
   <p class="cap-note tight">{{ t('mkAutoOn', hour=hour) if auto else t('mkAutoOff') }}</p>
@@ -112,3 +153,4 @@
 </div>
 </div>
 {% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/market_chart.js') }}" defer></script>{% endblock %}

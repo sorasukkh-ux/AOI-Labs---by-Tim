@@ -12,7 +12,7 @@ from ..models.price import CUSTOM, WAITING, Price, Promotion
 from ..security import can, current_user, maintainable_branches, operating_branch, pick_maintenance_branch, require
 from ..timeutil import fmt_date, today_local, to_local
 from .common import flash_error, flash_ok
-from ..models import market, nabc_price, profit, variety as var
+from ..models import market, market_history, nabc_price, profit, variety as var
 from ..models.variety import mat_name
 
 bp = Blueprint("finance", __name__, url_prefix="/finance")
@@ -132,6 +132,8 @@ def market_source():
         action = request.form.get("action")
         if action == "fetch":
             return _fetch_all("finance.market_source")
+        if action == "history":
+            return _download_history()
         if action == "upload":
             upload = request.files.get("REPORT_PDF")
             data = upload.read() if upload else b""
@@ -157,13 +159,52 @@ def market_source():
         row = market.MarketMap.match(m, rows)
         maps.append(dict(m, name=mat_name(m["MAT_CODE"]), row=row, found=resolved.get(m["MAT_CODE"]), nabc=nabc.get(m["MAT_CODE"]),
                          applied=((report or {}).get("APPLIED") or {}).get(m["MAT_CODE"])))
-    return render_template("finance/market.html", report=report, last=market.MarketReport.latest(), rows=rows, maps=maps,
+    branch = request.args.get("branch") if request.args.get("branch") in maintainable_branches() else operating_branch()
+    chart = market_history.series(branch, "36M")
+    period = request.args.get("p") if request.args.get("p") in market_history.PERIODS else "12M"
+    return render_template("finance/market.html", branch=branch, chart=chart, period=period, periods=list(market_history.PERIODS),
+                           summary=_history_summary(chart), info=market_history.history_info(), report=report, last=market.MarketReport.latest(), rows=rows, maps=maps,
                            history=market.MarketReport.recent(8), source_url=current_app.config["MARKET_URL"],
                            units=list(market.UNITS), picks=market.COLUMNS, sources=market.MarketMap.SOURCES,
                            stats=nabc_price.STATS, nabc_url=current_app.config["NABC_PRICE_URL"],
                            nabc_products=[(m["NABC_PRODUCT"], m["nabc"]) for m in maps if m["SOURCE"] == "NABC" and m.get("NABC_PRODUCT")], can_edit=can(PRICING, "edit"),
                            max_jump=market.MAX_JUMP_PCT, auto=current_app.config.get("MARKET_AUTO"),
                            hour=current_app.config.get("MARKET_HOUR"))
+
+
+def _history_summary(chart):
+    """{period: [{'name', 'source', 'n', 'last', 'low', 'high', 'avg', 'change'}]} for the table under the graph."""
+    out = {}
+    for period in market_history.PERIODS:
+        start = market_history.start_day(period).isoformat()
+        rows = []
+        for s in chart["skus"]:
+            values = [p[1] for p in s["points"] if p[0] >= start]
+            row = {"name": s["name"], "source": s["source"], "n": len(values)}
+            if values:
+                row.update(last=values[-1], low=min(values), high=max(values), avg=sum(values) / len(values),
+                           change=(values[-1] - values[0]) / values[0] * 100 if values[0] else 0.0)
+            rows.append(row)
+        out[period] = rows
+    return out
+
+
+def _download_history():
+    """Market Price > Download price history: all NABC pages of the mapped products, and the older association
+    reports its page still lists (stored for the graph only)."""
+    try:
+        saved = market_history.download_nabc_history()
+    except ValidationError as error:
+        flash_error(error)
+        saved = {}
+    reports = 0
+    if any(m["SOURCE"] == "TRMA" for m in market.MarketMap.all()):
+        try:
+            reports = market_history.download_trma_history(_user_id())
+        except ValidationError as error:
+            flash_error(error)
+    flash_ok("mkhHistoryDone", n=sum(saved.values()), reports=reports)
+    return redirect(url_for("finance.market_source", _anchor="market-history"))
 
 
 # ---------- Margin Maintenance ----------

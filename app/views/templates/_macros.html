@@ -15,3 +15,11 @@
   </select>
 </form>
 {% endmacro %}
+
+{# Pricing Maintenance: switch between Price Maintenance and Market Price (update 25). #}
+{% macro pricing_tabs(active, branch=None) %}
+<div class="seg-tabs mt14" role="tablist" id="pricing-tabs">
+  <a class="seg-tab{% if active == 'price' %} active{% endif %}" role="tab" aria-selected="{{ 'true' if active == 'price' else 'false' }}" href="{{ url_for('finance.pricing', branch=branch) }}" id="tab-btn-price">&#127991;&#65039; {{ t('ptPrice') }}</a>
+  <a class="seg-tab{% if active == 'market' %} active{% endif %}" role="tab" aria-selected="{{ 'true' if active == 'market' else 'false' }}" href="{{ url_for('finance.market_source', branch=branch) }}" id="tab-btn-market">&#128200; {{ t('ptMarket') }}</a>
+</div>
+{% endmacro %}

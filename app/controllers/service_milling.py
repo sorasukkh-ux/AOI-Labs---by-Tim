@@ -32,15 +32,16 @@ STATUS_CLASS = {flow.QUEUE: "queue", flow.IN_PROCESS: "inprocess", flow.HOLD: "h
 LIST_FILTERS = (flow.QUEUE, flow.IN_PROCESS, flow.HOLD, flow.FINISHED, flow.CLOSED)      # the prototype's status chips
 
 
-def label_data(queue_no, qr_text, customer_name, pay_total, receive, registered):
+def label_data(queue_no, qr_text, customer_name, pay_total, receive, registered, customer=None):
     """Everything the printed queue label shows (drawn in the browser by static/js/label.js)."""
     config = current_app.config
     return {"no": queue_no, "qr": qr_text, "customer": customer_name, "pay": "%.2f" % pay_total,
             "receive": fmt_datetime(receive), "date": fmt_date(registered), "time": fmt_time(registered),
             "addrEn": config["LABEL_ADDRESS_EN"], "addrTh": config["LABEL_ADDRESS_TH"], "tel": config["LABEL_TEL"],
             "email": config["LABEL_EMAIL"], "logo": url_for("static", filename="img/logo.png"),
-            # second QR: the customer adds the LINE Official Account and links LINE to this order in one scan
-            "line": line_link.ticket_url(qr_text[4:]) if qr_text.startswith("AOI-ML-") else None}
+            # second QR: the customer adds the LINE Official Account and links LINE to this order in one scan.
+            # Only while the customer has no LINE yet: once linked, every later order reaches the same LINE.
+            "line": line_link.ticket_url(qr_text[4:]) if qr_text.startswith("AOI-ML-") and not (customer or {}).get("LINE_USER_ID") else None}
 
 
 def _trade_rows(branch_id):
@@ -114,7 +115,7 @@ def new_order():
                 return jsonify({
                     "ok": True, "ord_id": order["ORD_ID"], "qr_id": order["QR_ID"], "is_delivery": order["ORDER_TYPE"] == flow.DELIVER,
                     "label": label_data(order["QR_ID"], "AOI-" + order["ORD_ID"], customer.get("CUST_NAME", order["CUST_CODE"]),
-                                        MillingOrder.pay_total(order), order["EXPCT_RECEIVE_TIME"], order["REGIST_DATE"]),
+                                        MillingOrder.pay_total(order), order["EXPCT_RECEIVE_TIME"], order["REGIST_DATE"], customer),
                     "message": t("orderCreatedMsg", id=order["QR_ID"]), "question": t("confirmGoOrderList"),
                     "list_url": url_for("service_milling.order_list") if can(STATUS) else None,
                     "new_url": url_for("service_milling.new_order")})
@@ -172,7 +173,8 @@ def quote():
         "orders_ahead": result["orders_ahead"], "minutes": round(result["minutes"], 1),
         "take": {"bran": data["take_bran"], "broken": data["take_broken"]}, "is_delivery": data["order_type"] == flow.DELIVER,
         # preview only: the real queue number is given when the order is saved
-        "label": label_data(queue_no, "AOI-" + ord_id, data["customer"]["CUST_NAME"], charges["total"], result["receive"], now_utc()),
+        "label": label_data(queue_no, "AOI-" + ord_id, data["customer"]["CUST_NAME"], charges["total"], result["receive"], now_utc(),
+                            data["customer"]),
     })
 
 
@@ -242,7 +244,7 @@ def order_detail(ord_id):
     """The order details: a pop-up on the list (?popup=1 returns just the content) or a page after registration."""
     order = _decorate([_order_or_404(ord_id)], details=True)[0]
     label = label_data(order["QR_ID"], "AOI-" + order["ORD_ID"], order["customer"].get("CUST_NAME", order["CUST_CODE"]),
-                       order["pay_total"], order["EXPCT_RECEIVE_TIME"], order["REGIST_DATE"])
+                       order["pay_total"], order["EXPCT_RECEIVE_TIME"], order["REGIST_DATE"], order["customer"])
     template = "service/_order_details.html" if request.args.get("popup") == "1" else "service/milling_detail.html"
     return render_template(template, order=order, label=label, popup=request.args.get("popup") == "1", **_context())
 

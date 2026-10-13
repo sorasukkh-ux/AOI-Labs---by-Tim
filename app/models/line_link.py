@@ -71,13 +71,19 @@ def _log(kind, user_id, text, result, cust_code=None):
                          "TEXT": (text or "")[:200], "RESULT": result, "CUST_CODE": cust_code, "LOG_DATE": now_utc()})
 
 
-def _t(key, **params):
-    from ..i18n import t_in
-    return t_in("th", key, **params)
+def _m(msg_id, **params):
+    """A reply text from LINE Message Maintenance (the default Thai text when it was not changed)."""
+    from . import line_msg
+    return line_msg.text(msg_id, **params)
 
 
-def _link(customer, user_id):
-    col(Customer.COL).update_one({"CUST_CODE": customer["CUST_CODE"]}, {"$set": {"LINE_USER_ID": user_id, "LINE_LINK_DATE": now_utc()}})
+def _link(customer, user_id, via):
+    """First link: the customer record keeps the LINE user ID, the LINE display name and how it was linked."""
+    values = {"LINE_USER_ID": user_id, "LINE_LINK_DATE": now_utc(), "LINE_LINK_VIA": via}
+    info = notify.profile(user_id) or {}
+    if info.get("displayName"):
+        values["LINE_DISPLAY_NAME"] = str(info["displayName"])[:100]
+    col(Customer.COL).update_one({"CUST_CODE": customer["CUST_CODE"]}, {"$set": values})
     resent = 0
     from datetime import timedelta
     since = now_utc() - timedelta(days=RESEND_DAYS)
@@ -114,30 +120,30 @@ def answer_text(user_id, text):
         ord_id, code = match.group(1).upper(), match.group(2).lower()
         order = MillingOrder.find(ord_id)
         if not order or not hmac.compare_digest(code, check_code(ord_id)):
-            return _t("lnrBadTicket"), "bad_ticket", None
+            return _m("LN_BAD_TICKET"), "bad_ticket", None
         customer = Customer.find(order["CUST_CODE"]) or {}
         if not customer:
-            return _t("lnrBadTicket"), "bad_ticket", None
-        resent = _link(customer, user_id)
-        reply = _t("lnrLinkedTicket", name=_short(customer.get("CUST_NAME", "")), no=order["QR_ID"])
-        return reply + (("\n" + _t("lnrResent", n=resent)) if resent else ""), "linked_ticket", customer["CUST_CODE"]
+            return _m("LN_BAD_TICKET"), "bad_ticket", None
+        resent = _link(customer, user_id, "TICKET")
+        reply = _m("LN_LINKED_TICKET", name=_short(customer.get("CUST_NAME", "")), no=order["QR_ID"])
+        return reply + (("\n" + _m("LN_RESENT", n=resent)) if resent else ""), "linked_ticket", customer["CUST_CODE"]
     digits = re.sub(r"\D", "", text or "")
     if 9 <= len(digits) <= 15 and not re.search(r"[A-Za-z฀-๿]", text or ""):
         found = _by_phone(digits)
         if not found:
-            return _t("lnrPhoneNotFound"), "phone_not_found", None
+            return _m("LN_PHONE_NOT_FOUND"), "phone_not_found", None
         if len(found) > 1:
-            return _t("lnrPhoneMany"), "phone_many", None
+            return _m("LN_PHONE_MANY"), "phone_many", None
         customer = found[0]
         if customer.get("LINE_USER_ID") and customer["LINE_USER_ID"] != user_id:
-            return _t("lnrPhoneTaken"), "phone_taken", customer["CUST_CODE"]
-        resent = _link(customer, user_id)
-        reply = _t("lnrLinkedPhone", name=_short(customer.get("CUST_NAME", "")))
-        return reply + (("\n" + _t("lnrResent", n=resent)) if resent else ""), "linked_phone", customer["CUST_CODE"]
+            return _m("LN_PHONE_TAKEN"), "phone_taken", customer["CUST_CODE"]
+        resent = _link(customer, user_id, "PHONE")
+        reply = _m("LN_LINKED_PHONE", name=_short(customer.get("CUST_NAME", "")))
+        return reply + (("\n" + _m("LN_RESENT", n=resent)) if resent else ""), "linked_phone", customer["CUST_CODE"]
     linked = col(Customer.COL).find_one({"LINE_USER_ID": user_id}, NO_ID)
     if linked:
-        return _t("lnrHelpLinked", name=_short(linked.get("CUST_NAME", ""))), "help_linked", linked["CUST_CODE"]
-    return _t("lnrHelp"), "help", None
+        return _m("LN_HELP_LINKED", name=_short(linked.get("CUST_NAME", ""))), "help_linked", linked["CUST_CODE"]
+    return _m("LN_HELP"), "help", None
 
 
 def handle(events):
@@ -151,7 +157,7 @@ def handle(events):
             continue                                         # groups and rooms are not used
         if kind == "follow":
             linked = col(Customer.COL).find_one({"LINE_USER_ID": user_id}, NO_ID)
-            reply = _t("lnrWelcomeBack", name=_short(linked.get("CUST_NAME", ""))) if linked else _t("lnrWelcome")
+            reply = _m("LN_WELCOME_BACK", name=_short(linked.get("CUST_NAME", ""))) if linked else _m("LN_WELCOME")
             notify.reply(token, reply)
             _log(kind, user_id, "", "welcome", linked["CUST_CODE"] if linked else None)
         elif kind == "unfollow":
@@ -163,7 +169,7 @@ def handle(events):
             _log(kind, user_id, text, result, cust)
         else:
             if token:
-                notify.reply(token, _t("lnrHelp"))
+                notify.reply(token, _m("LN_HELP"))
             _log(kind or "?", user_id, "", "ignored")
         done += 1
     return done

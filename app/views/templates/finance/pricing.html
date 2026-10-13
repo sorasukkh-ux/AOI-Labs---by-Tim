@@ -1,26 +1,14 @@
 {% extends "base.html" %}
-{% from "_macros.html" import page_head, branch_picker %}
+{% from "_macros.html" import page_head, branch_picker, pricing_tabs %}
 {% block content %}
 <div id="tab-price">
 {{ page_head(t('tabPricing'), url_for('home.index', g='FN')) }}
+{{ pricing_tabs('price', branch) }}
 <div class="card branch-pick-card">
   {{ branch_picker('finance.pricing', branch, branches, 'price-branch-select') }}
   <p class="cap-note">{{ t('maintBranchNote') }}</p>
 </div>
-<div class="card mt14" id="market-card">
-  <div class="card-head">
-    <p class="card-title">{{ t('mkTitle') }}</p>
-    {% if report and report.REPORT_STATUS == 'OK' %}<span class="badge approved">{{ t('mkReportOf', date=fmt_date(report.REPORT_DATE) if report.REPORT_DATE else '-') }}</span>
-    {% elif report %}<span class="badge blocked">{{ t('mkLastFailed') }}</span>{% endif %}
-  </div>
-  <p class="cap-note tight">{{ t('mkCardNote') }}{% if report %} &middot; {{ t('mkFetchedAt', time=fmt_datetime(report.FETCH_DATE)) }}{% endif %}</p>
-  <div class="btn-pair mt6">
-    {% if can_edit %}<form method="post" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <input type="hidden" name="branch" value="{{ branch }}"><input type="hidden" name="action" value="fetch">
-      <button class="action primary" type="submit" id="market-fetch-btn">{{ t('mkFetchNow') }}</button></form>{% endif %}
-    <a class="action" href="{{ url_for('finance.market_source') }}">{{ t('mkSourceLink') }}</a>
-  </div>
-</div>
+<p class="cap-note mt6" id="market-note">{{ t('ptMarketNote') }}{% if report and report.REPORT_STATUS == 'OK' %} &middot; {{ t('mkReportOf', date=fmt_date(report.REPORT_DATE) if report.REPORT_DATE else '-') }}{% endif %} &middot; <a href="{{ url_for('finance.market_source', branch=branch) }}">{{ t('ptMarket') }} &rarr;</a></p>
 
 <div class="card mt14" id="profit-card">
   <p class="card-title">{{ t('pfTitle') }}</p>

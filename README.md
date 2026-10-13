@@ -234,7 +234,7 @@ label (a handheld scanner types it; the code can also be typed: `AOI-ML-YYYYMMDD
 A label of another order is refused. The rice received at Finished is kept as the actual rice.
 
 Every status change is written to `AOILOG_MILLSTATUS` (from -> to, time, user, reason, QR scan, weights, minutes
-in the previous status) and shown as a timeline in the order details. **Service > Milling Analysis** shows, for a
+in the previous status) and shown as a timeline in the order details. **Administration > Milling > Milling Analysis** (tabs: analysis by period, milling today, buy/sell today; it replaces the Service Dashboard) shows, for a
 period, waiting and milling times, holds, cancellations and the real yield against the expected one, per rice
 variety and per customer, with CSV downloads (orders, and every status change). Orders made before this update
 get their timeline once from `AOILOG_ORDMILLING` when `start.sh` runs.
@@ -269,6 +269,20 @@ the customer was not linked is sent again right after linking. Every event is li
 
 Push messages count toward the Official Account's monthly quota (replies do not). For daily use the system needs
 a permanent server: a sleeping codespace cannot receive LINE's calls.
+
+**LINE Message Maintenance** (Administration > Customers): every text the customers receive (order messages and chat
+replies) with its message ID, name and {parameters} (queue no, customer, time, date, rice kg, amount, factory,
+address). A preview shows sample values; the order messages can be switched off; "Back to default" restores the text.
+Once a customer is linked, their new queue tickets no longer show the LINE QR, and the customer record keeps the
+LINE display name and how it was linked.
+
+## Market price history
+
+Financial > Pricing Maintenance has two tabs: **Price Maintenance** (the profit check and the SKU prices) and
+**Market Price** (the market sources, the mapping and a graph of every SKU's market price over 3, 6, 12 or 36
+months, with SKU selection, hover/tap values and a summary table). The NABC API keeps daily prices from January
+2025: "Download price history" (and the daily job, once per product) reads all of them. Association report SKUs use
+the reports kept by the system, plus the older reports its page still lists.
 
 ## Automation and devices
 

@@ -270,6 +270,7 @@ class MarketReport:
     @classmethod
     def latest(cls, ok_only=False):
         flt = {"REPORT_STATUS": "OK"} if ok_only else {}
+        flt["HISTORY"] = {"$ne": True}                   # older reports downloaded for the graph are not "the latest"
         return col(cls.COL).find_one(flt, NO_ID, sort=[("FETCH_DATE", -1)])
 
     @classmethod

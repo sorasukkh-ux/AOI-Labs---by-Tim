@@ -14,7 +14,7 @@ from ..models import line_link
 bp = Blueprint("line_api", __name__, url_prefix="/line")
 
 
-@bp.route("/webhook", methods=["GET", "POST"])
+@bp.route("/webhook", methods=["GET", "POST"], strict_slashes=False)
 def webhook():
     if request.method == "GET":
         return "AOI Labs LINE webhook: " + ("ready" if line_link.secret() else "AOI_LINE_CHANNEL_SECRET is not set"), 200, \

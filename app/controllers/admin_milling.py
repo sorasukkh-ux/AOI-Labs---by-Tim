@@ -123,3 +123,23 @@ def _queue_preview(branch):
 def line_poster():
     """A4 poster for the counter: add the mill's LINE account, then send the mobile number."""
     return render_template("admin/line_poster.html", friend_url=line_link.friend_url(), oa=line_link.oa_id())
+
+
+ANALYSIS_TABS = ("period", "today", "trade")
+
+
+@bp.route("/analysis")
+@require("AD_MILLANALYSIS")
+def analysis():
+    """Milling Analysis: the period analysis of the status timeline, today's milling orders and today's buying /
+    selling (the former Service Dashboard), on one screen with tabs."""
+    from flask import Response
+    from . import service_info
+    tab = request.args.get("tab") if request.args.get("tab") in ANALYSIS_TABS else "period"
+    if tab == "period":
+        context = service_info.analysis_view()
+        if isinstance(context, Response):
+            return context
+    else:
+        context = service_info.dashboard_context("trade" if tab == "trade" else "milling")
+    return render_template("admin/milling_analysis.html", tab=tab, tabs=ANALYSIS_TABS, **context)

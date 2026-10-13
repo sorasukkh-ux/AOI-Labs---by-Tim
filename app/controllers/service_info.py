@@ -92,10 +92,15 @@ def _rate_points(orders, w=360, h=150, pad_l=36, pad_r=16, pad_b=28, pad_t=16):
 
 
 @bp.route("/dashboard")
-@require("SV_DASHBOARD")
 def dashboard():
+    """Moved to Administration > Milling > Milling Analysis (update 25)."""
+    from flask import redirect, url_for
+    return redirect(url_for("admin_milling.analysis", tab="trade" if request.args.get("view") == "trade" else "today"))
+
+
+def dashboard_context(view):
+    """Today's milling orders (view 'milling') or today's buying / selling (view 'trade') of the branch."""
     branch = operating_branch()
-    view = "trade" if request.args.get("view") == "trade" else "milling"
     start = _start_of_today_utc()
     context = {"view": view}
     if view == "milling":
@@ -133,11 +138,11 @@ def dashboard():
         context.update(total_sell=total_sell, total_buy=total_buy, avg_sell=avg(sells), avg_buy=avg(buys),
                        h_sell=total_sell / top * 94, h_buy=total_buy / top * 94,
                        sell_trend=_rate_points(recent(SELL)), buy_trend=_rate_points(recent(BUY)))
-    return render_template("service/dashboard.html", **context)
+    return context
 
 
 # ---------- Milling Analysis (update 22): the status timeline of the orders of a period ----------
-ANALYSIS = "SV_ANALYSIS"
+ANALYSIS = "AD_MILLANALYSIS"
 CSV_ORDER_COLS = ("ORD_ID", "QR_ID", "REGIST_DATE", "CUST_CODE", "CUST_NAME", "RICE_VARIETY", "ORDER_TYPE", "MILL_STATUS",
                   "REGIST_PADDY", "ACT_PADDY", "EXPCT_RICE", "ACT_RICE", "YIELD_PCT", "EXPECTED_PCT", "QR_SCANNED",
                   "WAIT_MIN", "MILLING_MIN", "HOLD_COUNT", "HOLD_MIN", "READY_MIN", "PICKUP_MIN")
@@ -159,8 +164,14 @@ def _csv(name, header, rows):
 
 
 @bp.route("/analysis")
-@require(ANALYSIS)
 def analysis():
+    """Moved to Administration > Milling > Milling Analysis (update 25)."""
+    from flask import redirect, url_for
+    return redirect(url_for("admin_milling.analysis", tab="period", **request.args.to_dict()))
+
+
+def analysis_view():
+    """The period analysis: a CSV Response (?csv=orders|events) or the template context."""
     from ..models import mill_analysis as ma
     from ..models import variety as var
     branch = operating_branch()
@@ -190,5 +201,5 @@ def analysis():
         rows = [tuple((to_local(e[c]).strftime("%Y-%m-%d %H:%M:%S") if c == "EVENT_DATE" else
                        ("" if e.get(c) is None else e.get(c))) for c in CSV_EVENT_COLS) for e in events]
         return _csv("milling_status_events_%s.csv" % stamp, CSV_EVENT_COLS, rows)
-    return render_template("service/analysis.html", start=start, end=end, variety=variety, result=result,
-                           cust_name=cust_name, pct=ma.pct, branch_name=branch_label(branch))
+    return dict(start=start, end=end, variety=variety, result=result, cust_name=cust_name, pct=ma.pct,
+                branch_name=branch_label(branch))

@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% from "_macros.html" import page_head %}
+{% block content %}
+<div id="tab-line-messages">
+{{ page_head(t('tabLineMsg'), url_for('home.index', g='AD')) }}
+<div class="card gap"><p class="desc-text">{{ t('lmDesc') }}</p></div>
+{% for m in messages %}
+{% if loop.first %}<p class="card-title sub mt14">{{ t('lmGroupOrder') }}</p>{% elif m.MSG_ID == 'LN_WELCOME' %}<p class="card-title sub mt14">{{ t('lmGroupReply') }}</p>{% endif %}
+<form method="post" class="card mt10 lm-card" id="msg-{{ m.MSG_ID }}" autocomplete="off">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="MSG_ID" value="{{ m.MSG_ID }}">
+  <fieldset class="plain" {% if not editable %}disabled{% endif %}>
+  <div class="card-head">
+    <p class="card-title"><span class="mono lm-id">{{ m.MSG_ID }}</span></p>
+    <span class="badge {{ 'pending' if m.custom else 'neutral' }}">{{ t('lmCustom') if m.custom else t('lmDefaultTag') }}</span>
+  </div>
+  <div class="field-row"><label class="field-label" for="lmn-{{ m.MSG_ID }}">{{ t('lmColName') }}</label>
+    <input type="text" id="lmn-{{ m.MSG_ID }}" name="MSG_NAME" value="{{ m.MSG_NAME }}" maxlength="100"></div>
+  <div class="field-row"><label class="field-label" for="lmt-{{ m.MSG_ID }}">{{ t('lmColText') }}</label>
+    <textarea id="lmt-{{ m.MSG_ID }}" name="MSG_TEXT" rows="3" maxlength="1000" required>{{ m.MSG_TEXT }}</textarea></div>
+  <p class="cap-note tight">{{ t('lmParams') }}:
+    {% for p in m.params %}<code class="lm-param">{{ '{' ~ p ~ '}' }}</code> {{ t('lmP_' ~ p) }}{% if not loop.last %} &middot; {% endif %}{% else %}-{% endfor %}</p>
+  <div class="lm-preview"><span class="field-label">{{ t('lmPreview') }}</span><p>{{ m.preview }}</p></div>
+  {% if m.can_disable %}<label class="check-row mt6"><input type="checkbox" name="ACTIVE_FLG" value="1"{% if m.ACTIVE_FLG %} checked{% endif %}> {{ t('lmActive') }}</label>{% endif %}
+  {% if m.LAST_UPDATE %}<p class="cap-note tight">{{ fmt_datetime(m.LAST_UPDATE) }} &middot; {{ m.OPE_USER }}</p>{% endif %}
+  {% if editable %}
+  <div class="btn-pair mt6">
+    <button class="action primary" type="submit" name="action" value="save">{{ t('btnSave') }}</button>
+    {% if m.custom %}<button class="action" type="submit" name="action" value="reset" formnovalidate data-confirm="{{ t('lmConfirmReset', id=m.MSG_ID) }}">{{ t('lmReset') }}</button>{% endif %}
+  </div>
+  {% endif %}
+  </fieldset>
+</form>
+{% endfor %}
+</div>
+{% endblock %}

@@ -78,6 +78,18 @@ def _post(url, payload):
         return str(exc)[:200] or exc.__class__.__name__
 
 
+def profile(user_id):
+    """The LINE profile of a friend of the account: {'displayName', 'language', ...} or None."""
+    if not configured() or not USER_ID.match(user_id or ""):
+        return None
+    req = urllib.request.Request("https://api.line.me/v2/bot/profile/" + user_id, headers={"Authorization": "Bearer " + _token()})
+    try:
+        with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
+            return json.loads(resp.read(65536).decode("utf-8"))
+    except Exception:                                     # noqa: BLE001 - the link works without the profile
+        return None
+
+
 def reply(reply_token, text):
     """Answers a message the customer sent (reply API: free, not counted in the monthly messages)."""
     if not reply_token or not configured():
@@ -95,11 +107,32 @@ def reason_key(error):
     return "lnApiError"
 
 
-def _message(kind, order, when):
+MSG_IDS = {"finished": "ML_FINISHED", "delivery": "ML_DELIVERY"}
+
+
+def order_params(order, when):
+    """The {parameters} of the order messages (LINE Message Maintenance)."""
+    from .tv import short_name
     from ..i18n import t_in
-    key = "notifyDeliveryMsg" if kind == "delivery" else "notifyFinishedMsg"
-    time = to_local(when).strftime("%H:%M") if when else "-"
-    return "#%s %s" % (order.get("QR_ID", ""), t_in("th", key, time=time))
+    local = to_local(when) if when else None
+    customer = Customer.find(order.get("CUST_CODE")) or {}
+    try:
+        from .milling_order import MillingOrder
+        pay = "%.2f" % MillingOrder.pay_total(order)
+    except Exception:                                     # noqa: BLE001
+        pay = "-"
+    branch_key = "branch" + (order.get("BRANCH_ID") or "").capitalize()
+    branch = t_in("th", branch_key)
+    return {"no": order.get("QR_ID", ""), "name": short_name(customer.get("CUST_NAME", "")) or "",
+            "time": local.strftime("%H:%M") if local else "-", "date": local.strftime("%d/%m/%Y") if local else "-",
+            "rice_kg": "%.2f" % float(order.get("ACT_RICE") or order.get("EXPCT_RICE") or 0), "pay": pay,
+            "branch": branch if branch != branch_key else (order.get("BRANCH_ID") or ""),
+            "address": order.get("DELIVERY_ADDRESS") or ""}
+
+
+def _message(kind, order, when):
+    from . import line_msg
+    return line_msg.text(MSG_IDS.get(kind, "ML_FINISHED"), **order_params(order, when))
 
 
 def send(doc):
@@ -123,7 +156,11 @@ def send(doc):
 
 
 def queue(order, kind, when):
-    """Writes the message of `kind` ('finished' | 'delivery') for a milling order and tries to send it."""
+    """Writes the message of `kind` ('finished' | 'delivery') for a milling order and tries to send it.
+    Nothing is written when the message is switched off on LINE Message Maintenance."""
+    from . import line_msg
+    if not line_msg.active(MSG_IDS.get(kind, "ML_FINISHED")):
+        return None
     now = now_utc()
     seq = Counter.next("NT-" + order["ORD_ID"])
     doc = {"NOTIFY_ID": "NT-%s-%02d" % (order["ORD_ID"], seq), "ORD_ID": order["ORD_ID"], "ORD_TYPE": "ML",

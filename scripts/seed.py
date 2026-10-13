@@ -50,17 +50,18 @@ MACHINES = [("HUSK", "Husker", "HUSKER", 15.0, 1500.0), ("WHITE", "Whitener", "W
 MENUS = [  # MENU_CODE, MENU_NAME, MENU_GROUP, MENU_SUBGROUP, MENU_SEQ
     ("SV_SERVICE", "Customer Service", "SV", "", 1), ("SV_STATUS", "Service Status", "SV", "", 2),
     ("SV_PRICE", "Current Price", "SV", "", 3), ("SV_MILLSTATUS", "Milling Order List", "SV", "", 4),
-    ("SV_BSSTATUS", "Buying/Selling Order List", "SV", "", 5), ("SV_DASHBOARD", "Service Dashboard", "SV", "", 6),
-    ("SV_ANALYSIS", "Milling Analysis", "SV", "", 7),
+    ("SV_BSSTATUS", "Buying/Selling Order List", "SV", "", 5),
     ("IV_LIST", "Inventory List", "IV", "", 1), ("IV_HISTORY", "Inventory Historical", "IV", "", 2),
     ("IV_DASHBOARD", "Inventory Dashboard", "IV", "", 3),
     ("FN_PRICING", "Pricing Maintenance", "FN", "", 1), ("FN_MARGIN", "Margin Maintenance", "FN", "", 2),
     ("FN_ACCOUNT", "Account", "FN", "", 3), ("FN_MARKETING", "Marketing", "FN", "", 4),
     ("AD_MILLPROD", "Milling Production", "AD", "MILL", 1), ("AD_MILLTIME", "Milling Maintenance", "AD", "MILL", 2),
+    ("AD_MILLANALYSIS", "Milling Analysis", "AD", "MILL", 3),
     ("AD_USER", "User Maintenance", "AD", "USER", 3), ("AD_ROLE", "Role Authorization", "AD", "USER", 4),
     ("AT_AI", "AI", "AT", "", 1), ("AT_HARDWARE", "Hardware Control", "AT", "", 2),
     ("AT_ELECTRIC", "Electricity", "AT", "", 3), ("AT_MACHINE", "Machine Usage Statistics", "AT", "", 4),
     ("AD_CUSTOMER", "Customer Registration", "AD", "CUST", 5),
+    ("AD_LINEMSG", "LINE Message Maintenance", "AD", "CUST", 6),
 ]
 ROLES = [("ADMIN", "Administrator", "Full access to every screen"),
          ("MANAGER", "Manager", "Runs service and inventory, approves prices"),
@@ -69,14 +70,14 @@ ROLES = [("ADMIN", "Administrator", "Full access to every screen"),
 # v = view, c = create, e = edit, d = delete/cancel, a = approve. ADMIN needs no rows: it always has full access.
 ROLE_AUTH = {
     "MANAGER": {"SV_SERVICE": "vced", "SV_STATUS": "v", "SV_PRICE": "v", "SV_MILLSTATUS": "veda", "SV_BSSTATUS": "vea",
-                "SV_DASHBOARD": "v", "SV_ANALYSIS": "v", "IV_LIST": "vced", "IV_HISTORY": "v", "IV_DASHBOARD": "v", "FN_PRICING": "vea",
+                "AD_MILLANALYSIS": "v", "AD_LINEMSG": "ve", "IV_LIST": "vced", "IV_HISTORY": "v", "IV_DASHBOARD": "v", "FN_PRICING": "vea",
                 "FN_MARGIN": "ve", "FN_ACCOUNT": "v", "FN_MARKETING": "ve", "AD_CUSTOMER": "vced", "AD_MILLTIME": "ve",
                 "AD_MILLPROD": "ve", "AD_USER": "v", "AT_AI": "vc", "AT_HARDWARE": "vcea", "AT_ELECTRIC": "vcea",
                 "AT_MACHINE": "v"},
     "OPERATOR": {"SV_SERVICE": "vce", "SV_STATUS": "v", "SV_PRICE": "v", "SV_MILLSTATUS": "ve", "SV_BSSTATUS": "ve",
                  "IV_LIST": "vce", "IV_HISTORY": "v", "AD_CUSTOMER": "vce", "AT_HARDWARE": "ve", "AT_ELECTRIC": "vc",
                  "AT_MACHINE": "v"},
-    "ACCOUNT": {"SV_PRICE": "v", "SV_BSSTATUS": "ve", "SV_DASHBOARD": "v", "SV_ANALYSIS": "v", "IV_DASHBOARD": "v", "FN_PRICING": "v",
+    "ACCOUNT": {"SV_PRICE": "v", "SV_BSSTATUS": "ve", "AD_MILLANALYSIS": "v", "IV_DASHBOARD": "v", "FN_PRICING": "v",
                 "FN_MARGIN": "v", "FN_ACCOUNT": "vced", "FN_MARKETING": "v", "AT_AI": "v", "AT_ELECTRIC": "va",
                 "AT_MACHINE": "v"},
 }
@@ -179,6 +180,15 @@ def seed(log=print, reset=False):
                                                           "MACHINE_ID": None, "DEVICE_KEY_HASH": None, "LAST_SEEN": None})
     from app.models.market import seed_default_map
     seed_default_map(SEED_USER)                   # first guess of which report row is which SKU (Financial > Market prices)
+    # update 25: Service Dashboard + Milling Analysis became Administration > Milling > Milling Analysis.
+    # A role that could open either keeps the new screen; the old menus and their rights are removed.
+    for auth in list(db["AOIMS_ROLEAUTH"].find({"MENU_CODE": {"$in": ["SV_DASHBOARD", "SV_ANALYSIS"]}}, {"_id": 0})):
+        if auth.get("CAN_VIEW") and db["AOIMS_ROLEAUTH"].find_one({"ROLE_CODE": auth["ROLE_CODE"], "MENU_CODE": "AD_MILLANALYSIS"}) is None:
+            db["AOIMS_ROLEAUTH"].insert_one(dict({"ROLE_CODE": auth["ROLE_CODE"], "MENU_CODE": "AD_MILLANALYSIS", "CAN_VIEW": True,
+                                                  "CAN_CREATE": False, "CAN_EDIT": False, "CAN_DELETE": False, "CAN_APPROVE": False},
+                                                 **audit_new(SEED_USER)))
+    db["AOIMS_ROLEAUTH"].delete_many({"MENU_CODE": {"$in": ["SV_DASHBOARD", "SV_ANALYSIS"]}})
+    db["AOIMS_MENU"].delete_many({"MENU_CODE": {"$in": ["SV_DASHBOARD", "SV_ANALYSIS"]}})
     # update 21: the two status screens are now called order lists (only the old default names are changed)
     for code, old_name in (("SV_MILLSTATUS", "Update Milling Status"), ("SV_BSSTATUS", "Update Buy/Sell Status")):
         new_name = next(m[1] for m in MENUS if m[0] == code)

@@ -45,7 +45,8 @@
     </div>
     <div class="field-row">
       <div><label class="field-label" for="cust-lineuser">{{ t('fieldLineUserId') }}</label><input type="text" id="cust-lineuser" name="LINE_USER_ID" value="{{ values.get('LINE_USER_ID') or '' }}" maxlength="33" autocapitalize="none" class="mono" placeholder="U…">
-        <p class="cap-note tight">{{ t('fieldLineUserNote') }}</p></div>
+        {% if customer and customer.LINE_USER_ID and mode != 'new' %}<p class="cap-note tight ln-linked" id="cust-line-linked">&#9989; {{ t('custLineLinked', name=customer.LINE_DISPLAY_NAME or '-', date=fmt_datetime(customer.LINE_LINK_DATE) if customer.LINE_LINK_DATE else '-', via=t('custLineVia_' ~ (customer.LINE_LINK_VIA or 'HAND'))) }}</p>
+        {% else %}<p class="cap-note tight">{{ t('fieldLineUserNote') }}</p>{% endif %}</div>
     </div>
     <div class="two-col field-row">
       <div><label class="field-label" for="cust-phone">{{ t('fieldPhone') }}</label>
