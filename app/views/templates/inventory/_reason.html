@@ -1,0 +1,7 @@
+{# Reason select of the design's inventory form; "other" needs a remark. group: increase / decrease #}
+<div class="field-row inv-reason-row" data-reason-group="{{ group }}">
+  <label class="field-label" for="inv-reason-{{ group }}">{{ t('lblReason') }}</label>
+  <select id="inv-reason-{{ group }}" name="REASON" data-reason>
+    {% for code in reasons[group] %}<option value="{{ code }}"{% if values.get('REASON') == code %} selected{% endif %}>{{ t(reason_keys[code]) }}</option>{% endfor %}
+  </select>
+</div>

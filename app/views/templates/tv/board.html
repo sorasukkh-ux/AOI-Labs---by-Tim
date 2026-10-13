@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>{{ data.branch_name }} · AOI</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/tv.css') }}">
+<link rel="icon" href="{{ url_for('static', filename='img/logo.png') }}">
+</head>
+<body class="tvb">
+<div id="tvb" data-url="{{ data_url }}" data-board='{{ data|tojson }}' data-text='{{ text|tojson }}'>
+  <header class="tvb-head">
+    <img src="{{ url_for('static', filename='img/logo.png') }}" alt="AOI">
+    <div class="tvb-brand"><h1><span id="tvb-branch">{{ data.branch_name }}</span> · {{ text.tvbStatus.th }}</h1>
+      <p>{{ data.branch_name_en }} · {{ text.tvbStatus.en }} &nbsp;·&nbsp; {{ text.tvbScan.th }}</p></div>
+    <div class="tvb-clock"><div class="t" id="tvb-time">--:--</div><div class="d" id="tvb-date"></div></div>
+  </header>
+  <main class="tvb-main">
+    {% for key, css in (('ready', 'ready'), ('milling', 'mill'), ('queue', 'queue')) %}
+    <section class="tvb-col {{ css }}" data-col="{{ key }}">
+      <h2>{{ text['tvb' ~ {'ready': 'Ready', 'milling': 'Milling', 'queue': 'Queue'}[key]].th }}
+        <small>{{ text['tvb' ~ {'ready': 'Ready', 'milling': 'Milling', 'queue': 'Queue'}[key]].en }}</small><span class="n">0</span></h2>
+      <div class="rows"></div>
+      <div class="more" hidden></div>
+      <div class="dots"></div>
+    </section>
+    {% endfor %}
+  </main>
+  <footer class="tvb-foot">
+    <div class="prices" id="tvb-prices"></div>
+    <div class="upd"><span>{{ text.tvbUnit.th }}</span><br><span id="tvb-updated"></span></div>
+  </footer>
+  <div class="tvb-offline" id="tvb-offline" hidden>{{ text.tvbOffline.th }}</div>
+</div>
+<script src="{{ url_for('static', filename='js/tv.js') }}" defer></script>
+</body>
+</html>

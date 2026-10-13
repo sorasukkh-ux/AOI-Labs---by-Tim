@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% from "_macros.html" import page_head %}
+{% block content %}
+<div id="tab-current-price">
+{{ page_head(None, url_for('home.index', g='SV')) }}
+<div class="tv-section">
+  <p class="tv-section-title plain">{{ t('priceBoardTitle') }}</p>
+  <table class="price-table">
+    <thead><tr><th>{{ t('colProduct') }}</th><th>{{ t('colBuy') }}</th><th>{{ t('colSell') }}</th></tr></thead>
+    <tbody id="current-price-body">
+    {% for r in rows %}
+    {% if loop.first or r.variety != rows[loop.index0 - 1].variety %}<tr class="price-group"><th colspan="3">{{ t(var_keys[r.variety]) if r.variety else t('varOther') }}</th></tr>{% endif %}
+    <tr><td>{{ r.name }}{% if r.waiting %} <span class="badge pending">{{ t('statusPending') }}</span>{% endif %}</td>
+      <td class="buy">{{ '%.2f'|format(r.buy) if r.buy else '-' }}</td><td class="sell">{{ '%.2f'|format(r.sell) if r.sell else '-' }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p class="cap-note" id="current-price-branch">{{ t('currentPriceBranchNote', branch=branch) }}</p>
+  <p class="cap-note">{% if can('SV_SERVICE') %}<a href="{{ url_for('service_milling.new_order', svc='buy') }}">{{ t('svcBuyLabel') }}</a> &middot; <a href="{{ url_for('service_milling.new_order', svc='sell') }}">{{ t('svcSellLabel') }}</a>{% endif %}
+    {% if can('FN_PRICING') %} &middot; <a href="{{ url_for('finance.pricing') }}">{{ t('currentPriceManage') }} &rarr;</a>{% endif %}</p>
+</div>
+</div>
+{% endblock %}

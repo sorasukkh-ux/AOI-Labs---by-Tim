@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% from "_macros.html" import page_head %}
+{% block content %}
+<div id="tab-role">
+{{ page_head(t('tabRole'), url_for('home.index', g='AD')) }}
+<div class="card gap"><p class="desc-text">{{ t('roleDesc') }}</p></div>
+
+<div class="card">
+  <div class="field-row">
+    <label class="field-label" for="role-select">{{ t('usrLblRole') }}</label>
+    <div class="role-pick-row">
+      <form method="get" action="{{ url_for('admin_roles.role_form') }}" class="inline-form">
+        <select id="role-select" name="role" data-autosubmit>
+          {% if is_new %}<option value="" selected>{{ t('roleNewOption') }}</option>{% endif %}
+          {% for r in roles %}<option value="{{ r.ROLE_CODE }}"{% if role and r.ROLE_CODE == role.ROLE_CODE %} selected{% endif %}>{{ r.ROLE_CODE }} - {{ r.ROLE_NAME }}</option>{% endfor %}
+        </select>
+      </form>
+      {% if can('AD_ROLE', 'create') %}<a class="action" id="role-new-btn" href="{{ url_for('admin_roles.role_form', new=1) }}">{{ t('roleBtnNew') }}</a>{% endif %}
+    </div>
+  </div>
+  <fieldset {% if not editable %}disabled{% endif %} class="plain">
+  <div class="two-col field-row">
+    <div><label class="field-label" for="role-code">{{ t('roleLblCode') }}</label><input type="text" id="role-code" form="role-form" {% if is_new %}name="ROLE_CODE"{% else %}disabled{% endif %} maxlength="20" value="{{ values.get('ROLE_CODE', '') }}" placeholder="{{ t('roleCodePh') }}" autocapitalize="characters" spellcheck="false"></div>
+    <div><label class="field-label" for="role-status">{{ t('colStatus') }}</label>
+      <select id="role-status" name="ROLE_STATUS" form="role-form" {% if locked %}disabled{% endif %}>
+        <option value="A"{% if values.get('ROLE_STATUS', 'A') == 'A' %} selected{% endif %}>{{ t('usrStatusActive') }}</option>
+        <option value="I"{% if values.get('ROLE_STATUS') == 'I' %} selected{% endif %}>{{ t('usrStatusInactive') }}</option>
+      </select></div>
+  </div>
+  <div class="field-row">
+    <label class="field-label" for="role-name">{{ t('roleLblName') }}</label><input type="text" id="role-name" name="ROLE_NAME" form="role-form" value="{{ values.get('ROLE_NAME', '') }}" maxlength="200">
+  </div>
+  <div class="field-row mb0">
+    <label class="field-label" for="role-desc">{{ t('roleLblDesc') }}</label><input type="text" id="role-desc" name="ROLE_DESC" form="role-form" value="{{ values.get('ROLE_DESC') or '' }}" maxlength="200">
+    <p class="cap-note" id="role-user-count">{{ t('roleNewNote') if is_new else t('roleUserCount', n=user_count) }}</p>
+  </div>
+  </fieldset>
+</div>
+
+<div class="card mt14">
+  <form method="post" action="{{ url_for('admin_roles.role_save') }}" id="role-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="is_new" value="{{ '1' if is_new else '0' }}">
+    {% if not is_new %}<input type="hidden" name="ROLE_CODE" value="{{ role.ROLE_CODE }}">{% endif %}
+    <div class="card-head">
+      <p class="card-title">{{ t('rolePermTitle') }}</p>
+      <div class="role-bulk-row">
+        <button class="action" type="button" id="role-allow-all-btn" {% if locked or not editable %}disabled{% endif %}>{{ t('roleBtnAllowAll') }}</button>
+        <button class="action" type="button" id="role-clear-all-btn" {% if locked or not editable %}disabled{% endif %}>{{ t('roleBtnClearAll') }}</button>
+      </div>
+    </div>
+    {% if locked %}<p class="hint" id="role-admin-hint">{{ t('roleAdminHint') }}</p>{% endif %}
+    <div class="table-scroll">
+      <table class="rate-table perm-table">
+        <thead><tr>
+          <th>{{ t('rolePermColScreen') }}</th>
+          {% for key in ['rolePermView', 'rolePermCreate', 'rolePermEdit', 'rolePermDelete', 'rolePermApprove'] %}<th>{{ t(key) }}</th>{% endfor %}
+        </tr></thead>
+        <tbody id="role-perm-body">
+          {% for row in rows %}
+          {% if row.kind == 'group' %}<tr class="perm-group"><td colspan="6">{{ t(row.label_key) }}</td></tr>
+          {% elif row.kind == 'sub' %}<tr class="perm-subgroup"><td colspan="6">{{ t(row.label_key) }}</td></tr>
+          {% else %}
+          <tr>
+            <td class="perm-name">{{ t(row.label_key) if row.label_key else row.name }}</td>
+            {% for p in perm_names %}
+            <td class="perm-cell"><input type="checkbox" class="perm-check" name="perm_{{ row.code }}_{{ p }}" data-menu="{{ row.code }}" data-perm="{{ p }}"
+                aria-label="{{ (t(row.label_key) if row.label_key else row.name) ~ ' - ' ~ p }}"
+                {% if perms[row.code][p] %}checked{% endif %} {% if locked or not editable %}disabled{% endif %}></td>
+            {% endfor %}
+          </tr>
+          {% endif %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="cap-note mb12">{{ t('rolePermNote') }}</p>
+    {% if editable %}<button class="action primary" type="submit" id="role-save-btn">{{ t('btnSave') }}</button>{% endif %}
+  </form>
+</div>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/roles.js') }}" defer></script>{% endblock %}

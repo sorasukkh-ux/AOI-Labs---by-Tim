@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% from "_macros.html" import page_head %}
+{% from "automation/_chart.html" import bar_chart, period_chips %}
+{% block content %}
+<div id="tab-machine-usage" class="auto-page">
+{{ page_head(t('tabMachineUsage'), url_for('home.index', g='AT')) }}
+<div class="card gap"><p class="desc-text">{{ t('muDesc') }}</p></div>
+{{ period_chips('automation.usage', days, periods) }}
+<div class="auto-kpis">
+  <div class="card"><p class="card-title">{{ t('muRunHours') }}</p><p class="kpi-value">{{ '%.1f'|format(run_total) }} h</p></div>
+  <div class="card"><p class="card-title">{{ t('muPaddy') }}</p><p class="kpi-value">{{ "{:,.0f}".format(paddy) }} kg</p></div>
+  <div class="card"><p class="card-title">{{ t('muKgPerHour') }}</p><p class="kpi-value">{{ "{:,.0f}".format(kg_per_hour) if kg_per_hour else '-' }}</p></div>
+</div>
+<div class="card mt14">
+  <p class="card-title sub">{{ t('muTable') }}</p>
+  <div class="inv-table-wrap"><table class="tv-table" id="usage-table">
+    <thead><tr><th>{{ t('mcMachine') }}</th>{% for s in ['R', 'I', 'F', 'M'] %}<th class="num">{{ t(status_keys[s]) }} (h)</th>{% endfor %}<th class="num">{{ t('muUtil') }}</th><th class="num">{{ t('muFaults') }}</th><th class="num">kWh</th></tr></thead>
+    <tbody>{% for r in rows %}<tr><td>{{ r.m.MACHINE_NAME }}<small class="inv-sub">{{ r.m.MACHINE_ID }}</small></td>
+      {% for s in ['R', 'I', 'F', 'M'] %}<td class="num">{{ '%.1f'|format(r.u.hours[s]) }}</td>{% endfor %}
+      <td class="num">{{ r.u.utilization }}%</td><td class="num">{{ r.u.faults }}</td>
+      <td class="num">{% if r.metered is not none %}{{ '%.1f'|format(r.metered) }}{% else %}{{ '%.1f'|format(r.u.energy_est) }}<small class="inv-sub">{{ t('muEstimated') }}</small>{% endif %}</td></tr>
+    {% else %}<tr><td colspan="8" class="hint center">{{ t('mcNone') }}</td></tr>{% endfor %}</tbody>
+  </table></div>
+  <p class="cap-note">{{ t('muNote') }}</p>
+</div>
+<div class="card mt14">
+  <p class="card-title sub">{{ t('muChartMachines') }}</p>
+  {{ bar_chart(bars, 'chart-run-machines', t('muChartMachines'), t('muUnitHours')) }}
+</div>
+<div class="card mt14">
+  <p class="card-title sub">{{ t('muChartDaily') }}</p>
+  {{ bar_chart(trend, 'chart-run-daily', t('muChartDaily'), t('muUnitHours')) }}
+</div>
+<p class="cap-note">{% if can('AT_HARDWARE') %}<a href="{{ url_for('automation.hardware') }}">{{ t('tabHardware') }}</a>{% endif %}
+  {% if can('AT_ELECTRIC') %} &middot; <a href="{{ url_for('automation.electricity') }}">{{ t('tabElectric') }}</a>{% endif %}</p>
+</div>
+{% endblock %}

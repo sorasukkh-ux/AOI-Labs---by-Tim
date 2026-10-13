@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% from "_macros.html" import page_head %}
+{% from "automation/_chart.html" import key_box %}
+{% block content %}
+<div id="tab-hardware" class="auto-page">
+{{ page_head(t('tabHardware'), url_for('home.index', g='AT')) }}
+<div class="card gap"><p class="desc-text">{{ t('hwDesc') }}</p></div>
+{{ key_box(new_key) }}
+
+<div class="mc-list" id="machine-list">
+  {% for m in machines %}
+  <div class="card machine-card" data-machine="{{ m.MACHINE_ID }}">
+    <div class="card-head">
+      <div><p class="card-title">{{ m.MACHINE_NAME }}</p>
+        <p class="cap-note tight">{{ m.MACHINE_ID }} &middot; {{ t(type_keys[m.MACHINE_TYPE]) }}{% if m.RATED_KW %} &middot; {{ m.RATED_KW|plain }} kW{% endif %}</p></div>
+      <span class="badge {{ status_badge[m.MACHINE_STATUS] }} mc-status">{{ t(status_keys[m.MACHINE_STATUS]) }}</span>
+    </div>
+    <p class="cap-note tight">{% if m.since %}{{ t('mcSince', time=m.since) }} &middot; {% endif %}
+      {% if m.DEVICE_KEY_HASH %}{{ t('mcConnected') if m.online else t('mcNotConnected') }}{% else %}{{ t('mcNoDevice') }}{% endif %}
+      {% if m.CONTROL_FLG %} &middot; {{ t('mcRemoteOn') }}{% endif %}</p>
+    {% if can_command and m.CONTROL_FLG %}
+    <form method="post" class="btn-pair mt6">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="command">
+      <input type="hidden" name="MACHINE_ID" value="{{ m.MACHINE_ID }}">
+      <button class="action primary" type="submit" name="CMD" value="START" data-confirm="{{ t('confirmMcStart', name=m.MACHINE_NAME) }}" {% if not m.can_command or m.MACHINE_STATUS == 'R' %}disabled{% endif %}>&#9654; {{ t('cmdStart') }}</button>
+      <button class="action danger" type="submit" name="CMD" value="STOP" data-confirm="{{ t('confirmMcStop', name=m.MACHINE_NAME) }}" {% if not m.can_command or m.MACHINE_STATUS != 'R' %}disabled{% endif %}>&#9632; {{ t('cmdStop') }}</button>
+    </form>
+    {% if not m.can_command %}<p class="cap-note">{{ t('mcCommandOff') }}</p>{% endif %}
+    {% endif %}
+    {% if can_edit %}
+    <form method="post" class="mc-manual mt6">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="status">
+      <input type="hidden" name="MACHINE_ID" value="{{ m.MACHINE_ID }}">
+      <label class="field-label" for="mcs-{{ m.MACHINE_ID }}">{{ t('mcSetStatus') }}</label>
+      <div class="od-inline">
+        <select id="mcs-{{ m.MACHINE_ID }}" name="MACHINE_STATUS">
+          {% for s in statuses %}<option value="{{ s }}"{% if s == m.MACHINE_STATUS %} selected{% endif %}>{{ t(status_keys[s]) }}</option>{% endfor %}
+        </select>
+        <input type="text" name="NOTE" maxlength="200" placeholder="{{ t('mcNotePh') }}" aria-label="{{ t('mcNotePh') }}">
+        <button class="action" type="submit">{{ t('btnSave') }}</button>
+      </div>
+    </form>
+    {% endif %}
+  </div>
+  {% else %}
+  <p class="hint">{{ t('mcNone') }}</p>
+  {% endfor %}
+</div>
+
+<div class="card mt14">
+  <p class="card-title sub">{{ t('mcCommands') }}</p>
+  <div class="inv-table-wrap"><table class="tv-table" id="cmd-table">
+    <thead><tr><th>{{ t('colTime') }}</th><th>{{ t('mcMachine') }}</th><th>{{ t('mcCommand') }}</th><th>{{ t('colStatus') }}</th></tr></thead>
+    <tbody>{% for c in commands %}<tr><td class="nowrap">{{ fmt_datetime(c.REQ_DATE) }}</td><td>{{ names.get(c.MACHINE_ID, c.MACHINE_ID) }}</td>
+      <td>{{ t('cmd' + c.CMD|capitalize) }}<small class="inv-sub">{{ c.REQ_USER }}</small></td><td>{{ t(cmd_status_keys[c.CMD_STATUS]) }}{% if c.RESULT %}<small class="inv-sub">{{ c.RESULT }}</small>{% endif %}</td></tr>
+    {% else %}<tr><td colspan="4" class="hint center">{{ t('autoNoData') }}</td></tr>{% endfor %}</tbody>
+  </table></div>
+</div>
+
+<div class="card mt14">
+  <p class="card-title sub">{{ t('mcEvents') }}</p>
+  <div class="inv-table-wrap"><table class="tv-table" id="event-table">
+    <thead><tr><th>{{ t('colTime') }}</th><th>{{ t('mcMachine') }}</th><th>{{ t('colStatus') }}</th><th>{{ t('colRef') }}</th></tr></thead>
+    <tbody>{% for e in events %}<tr><td class="nowrap">{{ fmt_datetime(e.LOG_DATE) }}</td><td>{{ names.get(e.MACHINE_ID, e.MACHINE_ID) }}</td>
+      <td>{{ t(status_keys.get(e.OLD_STATUS, 'mcOffline')) }} &rarr; <b>{{ t(status_keys[e.NEW_STATUS]) }}</b></td>
+      <td>{{ t('mcSrcDevice') if e.SOURCE == 'DEVICE' else e.OPE_USER }}{% if e.NOTE %}<small class="inv-sub">{{ e.NOTE }}</small>{% endif %}</td></tr>
+    {% else %}<tr><td colspan="4" class="hint center">{{ t('autoNoData') }}</td></tr>{% endfor %}</tbody>
+  </table></div>
+  {% if can('AT_MACHINE') %}<p class="cap-note"><a href="{{ url_for('automation.usage') }}">{{ t('tabMachineUsage') }} &rarr;</a></p>{% endif %}
+</div>
+
+{% if can_setup %}
+<details class="card mt14 setup-box" id="machine-setup"{% if setup %} open{% endif %}>
+  <summary class="card-title sub">{{ t('mcSetup') }}</summary>
+  <form method="post" class="inv-form mt6" id="machine-form" autocomplete="off">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="save">
+    <input type="hidden" name="mode" value="{{ 'edit' if edit else 'new' }}">
+    <p class="cap-note">{{ t('mcEditing', id=edit.MACHINE_ID) if edit else t('mcAdding') }}</p>
+    <div class="two-col field-row">
+      <div><label class="field-label" for="mf-id">{{ t('mcId') }}</label><input type="text" id="mf-id" name="MACHINE_ID" value="{{ edit.MACHINE_ID if edit else '' }}" maxlength="20" {% if edit %}readonly{% endif %} required placeholder="F2-DRYER"></div>
+      <div><label class="field-label" for="mf-name">{{ t('mcName') }}</label><input type="text" id="mf-name" name="MACHINE_NAME" value="{{ edit.MACHINE_NAME if edit else '' }}" maxlength="100" required></div>
+    </div>
+    <div class="two-col field-row">
+      <div><label class="field-label" for="mf-type">{{ t('mcType') }}</label><select id="mf-type" name="MACHINE_TYPE">
+        {% for ty in types %}<option value="{{ ty }}"{% if edit and edit.MACHINE_TYPE == ty %} selected{% endif %}>{{ t(type_keys[ty]) }}</option>{% endfor %}</select></div>
+      <div><label class="field-label" for="mf-seq">{{ t('mcSeq') }}</label><input type="number" id="mf-seq" name="MACHINE_SEQ" value="{{ edit.MACHINE_SEQ if edit else '' }}" min="0" step="1"></div>
+    </div>
+    <div class="two-col field-row">
+      <div><label class="field-label" for="mf-kw">{{ t('mcKw') }}</label><input type="number" id="mf-kw" name="RATED_KW" value="{{ edit.RATED_KW|plain if edit else '' }}" min="0" step="0.1"></div>
+      <div><label class="field-label" for="mf-cap">{{ t('mcCapacity') }}</label><input type="number" id="mf-cap" name="CAPACITY_KGH" value="{{ edit.CAPACITY_KGH|plain if edit else '' }}" min="0" step="1"></div>
+    </div>
+    <div class="field-row"><label class="field-label" for="mf-meter">{{ t('mcMeter') }}</label><select id="mf-meter" name="METER_ID">
+      <option value="">-</option>{% for mt in meters %}<option value="{{ mt.METER_ID }}"{% if edit and edit.METER_ID == mt.METER_ID %} selected{% endif %}>{{ mt.METER_ID }} · {{ mt.METER_NAME }}</option>{% endfor %}</select></div>
+    <div class="field-row"><label class="checkline" for="mf-control"><input type="checkbox" id="mf-control" name="CONTROL_FLG" value="1"{% if edit and edit.CONTROL_FLG %} checked{% endif %}><span>{{ t('mcControlFlag') }}</span></label></div>
+    <div class="btn-pair">
+      {% if edit %}<a class="action" href="{{ url_for('automation.hardware', setup=1) }}">{{ t('btnCancel') }}</a>{% endif %}
+      <button class="action primary" type="submit">{{ t('btnSave') }}</button>
+    </div>
+  </form>
+  <div class="inv-table-wrap mt14"><table class="tv-table">
+    <thead><tr><th>{{ t('mcId') }}</th><th>{{ t('mcName') }}</th><th>{{ t('mcDeviceKey') }}</th><th></th></tr></thead>
+    <tbody>{% for m in machines %}<tr><td>{{ m.MACHINE_ID }}</td><td>{{ m.MACHINE_NAME }}</td><td>{{ t('mcKeySet') if m.DEVICE_KEY_HASH else '-' }}</td>
+      <td class="nowrap"><a href="{{ url_for('automation.hardware', edit=m.MACHINE_ID) }}">{{ t('btnEdit') }}</a> &middot;
+        <form method="post" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="key"><input type="hidden" name="MACHINE_ID" value="{{ m.MACHINE_ID }}">
+        <button type="submit" class="link-btn" data-confirm="{{ t('confirmNewKey', id=m.MACHINE_ID) }}">{{ t('mcNewKey') }}</button></form></td></tr>{% endfor %}</tbody>
+  </table></div>
+  <p class="cap-note">{{ t('hwApiNote') }}</p>
+</details>
+{% endif %}
+</div>
+{% endblock %}

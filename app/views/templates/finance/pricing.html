@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% from "_macros.html" import page_head, branch_picker %}
+{% block content %}
+<div id="tab-price">
+{{ page_head(t('tabPricing'), url_for('home.index', g='FN')) }}
+<div class="card branch-pick-card">
+  {{ branch_picker('finance.pricing', branch, branches, 'price-branch-select') }}
+  <p class="cap-note">{{ t('maintBranchNote') }}</p>
+</div>
+<div class="card mt14" id="market-card">
+  <div class="card-head">
+    <p class="card-title">{{ t('mkTitle') }}</p>
+    {% if report and report.REPORT_STATUS == 'OK' %}<span class="badge approved">{{ t('mkReportOf', date=fmt_date(report.REPORT_DATE) if report.REPORT_DATE else '-') }}</span>
+    {% elif report %}<span class="badge blocked">{{ t('mkLastFailed') }}</span>{% endif %}
+  </div>
+  <p class="cap-note tight">{{ t('mkCardNote') }}{% if report %} &middot; {{ t('mkFetchedAt', time=fmt_datetime(report.FETCH_DATE)) }}{% endif %}</p>
+  <div class="btn-pair mt6">
+    {% if can_edit %}<form method="post" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="branch" value="{{ branch }}"><input type="hidden" name="action" value="fetch">
+      <button class="action primary" type="submit" id="market-fetch-btn">{{ t('mkFetchNow') }}</button></form>{% endif %}
+    <a class="action" href="{{ url_for('finance.market_source') }}">{{ t('mkSourceLink') }}</a>
+  </div>
+</div>
+
+<div class="card mt14" id="profit-card">
+  <p class="card-title">{{ t('pfTitle') }}</p>
+  <p class="cap-note tight">{{ t('pfNote') }}</p>
+  <div class="inv-table-wrap"><table class="tv-table" id="profit-table">
+    <thead><tr><th>{{ t('pfPerKg') }}</th>{% for e in evaluations %}<th class="num">{{ t(var_keys[e.variety]) }}</th>{% endfor %}</tr></thead>
+    <tbody>
+      <tr><td>{{ t('pfValue') }}</td>{% for e in evaluations %}<td class="num">{{ e.value|num }}</td>{% endfor %}</tr>
+      <tr><td>{{ t('pfElectricity') }}</td>{% for e in evaluations %}<td class="num">{{ e.energy_cost|num }}<small class="inv-sub">{{ t('pfEnergy_' ~ (e.energy_source or 'none'), kwh='%.3f'|format(e.kwh_kg)) }}</small></td>{% endfor %}</tr>
+      {% set lab = evaluations[0].labour %}
+      <tr><td>{{ t('pfLabour') }}<small class="inv-sub">{{ t('pfLabourNote', day='{:,.0f}'.format(lab.day), kg='{:,.0f}'.format(lab.kg_day)) if lab.source else t('pfLabourNone') }}</small></td>{% for e in evaluations %}<td class="num">{{ e.labour_kg|num }}<small class="inv-sub">{{ t('pfLabour_' ~ (lab.source or 'none')) }}</small></td>{% endfor %}</tr>
+      <tr><td>{{ t('pfOther') }}</td>{% for e in evaluations %}<td class="num">{{ e.other|num }}</td>{% endfor %}</tr>
+      <tr><td>{{ t('pfCost') }}</td>{% for e in evaluations %}<td class="num">{{ e.cost|num }}</td>{% endfor %}</tr>
+      <tr><td><b>{{ t('pfBreakEven') }}</b></td>{% for e in evaluations %}<td class="num"><b>{{ e.break_even|num }}</b></td>{% endfor %}</tr>
+      <tr><td>{{ t('pfMarketSug') }}</td>{% for e in evaluations %}<td class="num">{{ e.market_sug|num if e.market_sug is not none else '-' }}</td>{% endfor %}</tr>
+      <tr><td>{{ t('pfHighest') }}<small class="inv-sub">{{ t('pfHighestNote') }}</small></td>{% for e in evaluations %}<td class="num">{{ e.highest|num }}<small class="inv-sub">{{ t('pfTarget', pct=e.target|plain) }}</small></td>{% endfor %}</tr>
+      <tr class="pf-rec"><td><b>{{ t('pfRecommended') }}</b></td>{% for e in evaluations %}<td class="num"><b>{{ e.recommended|num if e.recommended is not none else '-' }}</b>{% if e.limited %}<small class="inv-sub warn">{{ t('pfLimited') }}</small>{% endif %}</td>{% endfor %}</tr>
+      <tr><td>{{ t('pfProfit') }}</td>{% for e in evaluations %}<td class="num {{ 'neg' if e.profit is not none and e.profit < 0 }}">{{ e.profit|num if e.profit is not none else '-' }}<small class="inv-sub">{{ t('pfPerTon', thb='{:,.0f}'.format(e.profit_ton)) if e.profit_ton is not none else '' }}</small></td>{% endfor %}</tr>
+      <tr><td>{{ t('pfCurrent') }}</td>{% for e in evaluations %}<td class="num {{ 'neg' if e.current_profit is not none and e.current_profit < 0 }}">{{ e.current_buy|num }}<small class="inv-sub">{{ t('pfProfitAt', thb=e.current_profit|num) if e.current_profit is not none else '' }}</small></td>{% endfor %}</tr>
+      <tr><td>{{ t('pfRiceBreakEven') }}</td>{% for e in evaluations %}<td class="num {{ '' if e.rice_ok else 'neg' }}">{{ e.rice_break_even|num if e.rice_break_even is not none else '-' }}<small class="inv-sub">{{ t('pfRiceSell', thb=e.rice_sell|num) }}</small></td>{% endfor %}</tr>
+      <tr><td>{{ t('pfRatios') }}</td>{% for e in evaluations %}<td class="num"><small>{{ t('pfRatioText', rice='%.1f'|format(e.ratios.rice * 100), broken='%.1f'|format(e.ratios.broken * 100)) }}</small></td>{% endfor %}</tr>
+    </tbody>
+  </table></div>
+  {% if lab.source == 'planned' %}<p class="cap-note" id="pf-labour-note">{{ t('pfLabourActual', kg='{:,.0f}'.format(lab.actual), days=lab.days, thb=lab.per_kg_actual|num) if lab.actual else t('pfLabourNoOrders') }}</p>
+  {% elif lab.source == 'orders' and lab.per_kg_capacity is not none %}<p class="cap-note" id="pf-labour-note">{{ t('pfLabourCapacity', cap='{:,.0f}'.format(lab.capacity), thb=lab.per_kg_capacity|num) }}</p>{% endif %}
+  <p class="cap-note">{{ t('pfFootnote') }}{% if can('AD_MILLPROD') %} <a href="{{ url_for('admin_milling.production', branch=branch) }}">{{ t('tabMillingProduction') }} &rarr;</a>{% endif %}</p>
+  {% if can_ask %}
+  <form method="post" action="{{ url_for('automation.ai_screen') }}" class="mt6">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="QUESTION" value="{{ t('pfAskQuestion') }}">
+    <button class="action" type="submit" id="profit-ask-btn">&#129302; {{ t('pfAsk') }}</button>
+  </form>
+  {% endif %}
+</div>
+
+<div class="toolbar">
+  <span class="meta">{{ t('pricesUpdated', time=fmt_datetime(updated)) if updated else '' }}</span>
+  <div class="inv-toolbar-actions">
+    {% if can('FN_MARGIN') %}<a class="action" href="{{ url_for('finance.margin', branch=branch) }}">{{ t('tabMargin') }}</a>{% endif %}
+    <a class="action" id="refresh-btn" href="{{ url_for('finance.pricing', branch=branch, f=f) }}">{{ t('refresh') }}</a>
+  </div>
+</div>
+<div class="chips">
+  <a class="chip{% if not f %} active{% endif %}" href="{{ url_for('finance.pricing', branch=branch) }}">{{ t('filterAll') }}</a>
+  {% for key, label in [('pending', 'statusPending'), ('approved', 'statusApproved'), ('manual', 'statusManual')] %}
+  <a class="chip{% if f == key %} active{% endif %}" href="{{ url_for('finance.pricing', branch=branch, f=key) }}" data-filter="{{ key }}">{{ t(label) }}</a>
+  {% endfor %}
+</div>
+<div class="chips" id="price-variety-chips">
+  <a class="chip{% if not v %} active{% endif %}" href="{{ url_for('finance.pricing', branch=branch, f=f) }}">{{ t('mtAllVarieties') }}</a>
+  {% for vv in varieties %}<a class="chip{% if v == vv %} active{% endif %}" href="{{ url_for('finance.pricing', branch=branch, f=f, v=vv) }}">{{ t(var_keys[vv]) }}</a>{% endfor %}
+</div>
+<div class="list" id="price-list">
+  {% for c in cards if c.shown %}
+  <div class="card sku-card" data-mat="{{ c.MAT_CODE }}" data-status="{{ c.PRICE_STATUS }}">
+    <div class="card-head">
+      <p class="card-title">{{ c.name }}</p>
+      <span class="badge {{ c.badge }} price-status-badge">{{ t(c.status_key) }}</span>
+    </div>
+    {% if c.custom %}
+    <p class="hint">{{ t('huskHint') }}</p>
+    {% else %}
+    <div class="two-col market-row">
+      <span>{{ t('marketBuy') }} <b>{{ (c.MKPRICE_BUY or 0)|num }}</b></span>
+      <span>{{ t('marketSell') }} <b>{{ (c.MKPRICE_SELL or 0)|num }}</b></span>
+    </div>
+    <div class="suggest-box">
+      <p class="suggest-label">{{ t('suggestedLabel') }}</p>
+      <div class="suggest-values">
+        <span>{{ t('lblBuy') }} {{ (c.sug_buy or 0)|num }}</span>
+        <span>{{ t('lblSell') }} {{ (c.sug_sell or 0)|num }}</span>
+      </div>
+      {% if c.check and c.check.ok %}
+      <p class="suggest-reason pf-line">{{ t('pfCardLine', value=c.check.value|num, be=c.check.break_even|num, best=c.check.recommended|num if c.check.recommended is not none else '-') }}
+        {% if c.pending and c.check.limited %}<b>{{ t('pfCardLimited', market=c.market_sug_buy|num) }}</b>{% endif %}
+        {% if not c.pending and c.PRICE_BUY and c.check.highest and c.PRICE_BUY > c.check.highest %}<span class="badge blocked">{{ t('pfAboveHighest') }}</span>{% endif %}</p>
+      {% endif %}
+      {% if c.MKPRICE_DATE %}<p class="suggest-reason">{{ t('npFrom' if (c.MKPRICE_SRC or '').startswith('NABC') else 'mkFrom', date=fmt_date(c.MKPRICE_DATE)) }}</p>{% endif %}
+      <p class="suggest-reason">
+        {% if c.MG_BUY_TARGET is not none or c.MG_SELL_TARGET is not none %}{{ t('sugReason', buy=(c.MG_BUY_TARGET or 0)|plain, sell=(c.MG_SELL_TARGET or 0)|plain) }}{% else %}{{ t('sugReasonNone') }}{% endif %}
+        {% if c.margins.buy is defined %} &middot; {{ t('marginNow', buy=c.margins.buy, sell=c.margins.get('sell', '-')) }}{% endif %}
+        {% if c.margins.get('buy_ok') == false or c.margins.get('sell_ok') == false %}<span class="badge blocked">{{ t('marginOutOfRange') }}</span>{% endif %}
+      </p>
+    </div>
+    {% endif %}
+    <form method="post" class="price-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="branch" value="{{ branch }}">
+      <input type="hidden" name="f" value="{{ f or '' }}">
+      <input type="hidden" name="MAT_CODE" value="{{ c.MAT_CODE }}">
+      <fieldset class="plain" {% if not can_edit %}disabled{% endif %}>
+      <div class="two-col field-row">
+        <div><label class="field-label" for="buy-{{ c.MAT_CODE }}">{{ t('currentBuy') }}</label>
+          {% if c.custom %}<input type="text" id="buy-{{ c.MAT_CODE }}" value="-" disabled>
+          {% else %}<input type="number" class="price-buy-input" id="buy-{{ c.MAT_CODE }}" name="PRICE_BUY" value="{{ '%.2f'|format(c.input_buy or 0) }}" min="0" step="0.01" required>{% endif %}</div>
+        <div><label class="field-label" for="sell-{{ c.MAT_CODE }}">{{ t('currentSell') }}</label>
+          <input type="number" class="price-sell-input" id="sell-{{ c.MAT_CODE }}" name="PRICE_SELL" value="{{ '%.2f'|format(c.input_sell or 0) }}" min="0" step="0.01" required></div>
+      </div>
+      {% if c.pending and not can_approve %}<p class="cap-note">{{ t('priceNeedsApprover') }}</p>
+      {% else %}<button class="action primary price-save-btn" type="submit">{{ t(c.button_key) }}</button>{% endif %}
+      </fieldset>
+    </form>
+    {% if not c.custom and can_edit %}
+    <details class="market-edit">
+      <summary>{{ t('marketUpdateTitle') }}</summary>
+      <form method="post" class="two-col field-row">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="branch" value="{{ branch }}">
+        <input type="hidden" name="action" value="market">
+        <input type="hidden" name="MAT_CODE" value="{{ c.MAT_CODE }}">
+        <div><label class="field-label" for="mkb-{{ c.MAT_CODE }}">{{ t('marketBuy') }}</label><input type="number" id="mkb-{{ c.MAT_CODE }}" name="MKPRICE_BUY" value="{{ (c.MKPRICE_BUY or 0)|plain }}" min="0" step="0.01" required></div>
+        <div><label class="field-label" for="mks-{{ c.MAT_CODE }}">{{ t('marketSell') }}</label><input type="number" id="mks-{{ c.MAT_CODE }}" name="MKPRICE_SELL" value="{{ (c.MKPRICE_SELL or 0)|plain }}" min="0" step="0.01" required></div>
+        <p class="cap-note span2">{{ t('marketUpdateNote') }}</p>
+        <button class="action span2" type="submit">{{ t('btnSave') }}</button>
+      </form>
+    </details>
+    {% endif %}
+  </div>
+  {% else %}
+  <p class="hint">{{ t('noResults') }}</p>
+  {% endfor %}
+</div>
+</div>
+{% endblock %}

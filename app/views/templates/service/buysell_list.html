@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% from "_macros.html" import page_head %}
+{% macro hidden() %}
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<input type="hidden" name="status_filter" value="{{ status or '' }}">
+<input type="hidden" name="type_filter" value="{{ ord_type or '' }}">
+{% endmacro %}
+{% block content %}
+<div id="tab-update-buysell-status">
+{{ page_head(t('updateBuySellStatusTitle'), url_for('home.index', g='SV')) }}
+<div class="chips mt14" id="bs-type-filter-chips">
+  <a class="chip bs-type-chip{% if not ord_type %} active{% endif %}" href="{{ url_for('service_buysell.order_list', status=status) }}">{{ t('filterAll') }}</a>
+  {% for code in ['BY', 'SL'] %}
+  <a class="chip bs-type-chip{% if ord_type == code %} active{% endif %}" href="{{ url_for('service_buysell.order_list', status=status, type=code) }}" data-bs-type-filter="{{ code }}">{{ t(type_keys[code]) }}</a>
+  {% endfor %}
+</div>
+<div class="chips" id="bs-status-filter-chips">
+  <a class="chip bs-status-chip{% if not status %} active{% endif %}" href="{{ url_for('service_buysell.order_list', type=ord_type) }}">{{ t('filterAll') }}</a>
+  {% for s in filters %}
+  <a class="chip bs-status-chip{% if status == s %} active{% endif %}" href="{{ url_for('service_buysell.order_list', status=s, type=ord_type) }}" data-bs-status-filter="{{ s }}">{{ t(status_keys[s]) }}</a>
+  {% endfor %}
+</div>
+
+<div id="bs-status-update-list">
+  {% for order in orders %}
+  {% set editable = can_edit and order.is_open %}
+  {% set material = mat_name(order.MAT_CODE) %}
+  <div class="status-card" data-order="{{ order.ORD_ID }}">
+    <div class="who">
+      <span class="ord-id">#{{ order.QR_ID }}</span>
+      <span class="badge {{ 'buy-type' if order.ORD_TYPE == 'BY' else 'sell-type' }}">{{ t(type_keys[order.ORD_TYPE]) }}</span>
+      {% if order.milling %}<span class="badge from-milling">{{ t('fromMillingBadge', id=order.milling.get('QR_ID', order.REF_ORD_ID)) }}</span>
+      {% else %}<span class="badge manual">{{ t('newServiceOrderBadge') }}</span>{% endif %}
+      <span class="ord-cust">{{ order.customer.get('CUST_NAME', order.CUST_CODE) }} &middot; {{ material }} {{ order.ORD_QTY|num }} kg &middot; <span class="bs-amount">{{ order.amount|num }} THB</span> &middot; {{ order.registered_text }}</span>
+    </div>
+    <form method="post" action="{{ url_for('service_buysell.change_status', ord_id=order.ORD_ID) }}">
+      {{ hidden() }}
+      <select class="status-select {{ status_class[order.ORD_STATUS] }}" name="new_status" data-autosubmit aria-label="{{ t('colStatus') }}"
+              {% if not editable or not order.next_statuses %}disabled{% endif %}>
+        <option value="{{ order.ORD_STATUS }}" selected>{{ t(status_keys[order.ORD_STATUS]) }}</option>
+        {% for nxt in order.next_statuses %}
+        {% if nxt != 'CC' or can_cancel %}
+        <option value="{{ nxt }}"
+          {% if nxt == 'P' and not order.milling_ready %}disabled
+          {% elif nxt == 'P' and order.needs_inbound %}data-form="prepare-{{ order.ORD_ID }}"
+          {% elif nxt == 'P' %}data-confirm="{{ t('confirmPrepareSellDirect', id=order.QR_ID) }}"
+          {% elif nxt == 'C' %}data-confirm="{{ order.close_text }}"
+          {% elif nxt == 'CC' %}data-confirm="{{ t('confirmCancelBsOrder', id=order.QR_ID) }}"{% endif %}>{{ t(status_keys[nxt]) }}</option>
+        {% endif %}
+        {% endfor %}
+      </select>
+    </form>
+    {% if order.REF_INV_LOC %}<p class="bs-note">{{ t('lblLocation') }}: {{ order.REF_INV_LOC }}</p>{% endif %}
+    {% if 'P' in order.next_statuses and not order.milling_ready %}
+    <p class="bs-note">{{ t('bsWaitMillingNote', id=order.milling.get('QR_ID', order.REF_ORD_ID)) }}</p>
+    {% endif %}
+
+    <a class="action bs-billing-btn" href="{{ url_for('service_buysell.billing', ids=order.ORD_ID) }}" data-popup>{{ t('btnPrintBilling') }}</a>
+
+    {% if editable and 'P' in order.next_statuses and order.milling_ready and order.needs_inbound %}
+    {# Prepared: the goods go into an inventory location for the customer (inbound pop-up) #}
+    <template id="prepare-{{ order.ORD_ID }}">
+      <form method="post" action="{{ url_for('service_buysell.change_status', ord_id=order.ORD_ID) }}" class="inbound-form order-details">
+        {{ hidden() }}
+        <input type="hidden" name="new_status" value="P">
+        <p class="od-title">{{ t('prepareTitle', id=order.QR_ID) }}</p>
+        <p class="cap-note">{{ t('prepareNoteBuy') if order.ORD_TYPE == 'BY' else t('prepareNote') }}</p>
+        <div class="od-row"><span class="od-label">{{ t('lblSkuName') }}</span><span class="od-value">{{ material }}</span></div>
+        <div class="od-row"><span class="od-label">{{ t('colLot') }}</span><span class="od-value">LOT-{{ order.REF_ORD_ID if order.milling else order.ORD_ID }}</span></div>
+        <div class="od-row"><span class="od-label">{{ t('colCustomer') }}</span><span class="od-value">{{ order.customer.get('CUST_NAME', order.CUST_CODE) }}</span></div>
+        <div class="field-row">
+          <label class="field-label" for="prep-qty-{{ order.ORD_ID }}">{{ t('lblInboundQty', kg=order.ORD_QTY|num) }}</label>
+          <input type="number" id="prep-qty-{{ order.ORD_ID }}" name="INV_QTY" value="{{ order.ORD_QTY|plain }}" min="0.001" step="0.001" required>
+        </div>
+        <div class="field-row">
+          <label class="field-label" for="prep-loc-{{ order.ORD_ID }}">{{ t('lblLocation') }}</label>
+          <input type="text" id="prep-loc-{{ order.ORD_ID }}" name="LOC_ID" value="{{ order.suggest_loc or '' }}" placeholder="01-002-005"
+                 pattern="[0-9]{2}-[0-9]{3}-[0-9]{3}" maxlength="10" inputmode="numeric" required>
+        </div>
+        <div class="field-row">
+          <label class="field-label" for="prep-status-{{ order.ORD_ID }}">{{ t('colStatus') }}</label>
+          <select id="prep-status-{{ order.ORD_ID }}" name="INV_STATUS">
+            {% for code, key in inv_status_keys.items() %}<option value="{{ code }}">{{ t(key) }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="btn-pair">
+          <button type="button" class="action" data-modal-close>{{ t('btnCancel') }}</button>
+          <button type="submit" class="action primary inbound-save-btn">{{ t('btnInboundPrepare') }}</button>
+        </div>
+      </form>
+    </template>
+    {% endif %}
+  </div>
+  {% else %}
+  <p class="hint home-empty">{{ t('noOrders') }}</p>
+  {% endfor %}
+</div>
+</div>
+{% endblock %}

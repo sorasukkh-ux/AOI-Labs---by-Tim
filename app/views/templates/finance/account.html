@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% from "_macros.html" import page_head %}
+{% macro money(v) %}{{ "{:,.2f}".format(v) }}{% endmacro %}
+{% block content %}
+<div id="tab-account">
+{{ page_head(t('tabAccount'), url_for('home.index', g='FN')) }}
+<div class="card gap"><p class="desc-text">{{ t('acctDesc') }}</p></div>
+<div class="acct-totals">
+  <div class="result-panel acct-income"><div class="result-row acct-block"><span>{{ t('acctTotalIncome') }}</span><b id="acct-total-income">{{ money(income) }}</b></div></div>
+  <div class="result-panel acct-expense"><div class="result-row acct-block"><span>{{ t('acctTotalExpense') }}</span><b id="acct-total-expense">{{ money(expense) }}</b></div></div>
+</div>
+<div class="result-panel mt10"><div class="result-row"><span>{{ t('acctNetBalance') }}</span><b id="acct-net-balance" class="{{ 'neg' if net < 0 else 'pos' }}">{{ money(net) }}</b></div></div>
+
+{% if can_create %}
+<div class="card mt14">
+  <p class="card-title sub">{{ t('acctAddEntryTitle') }}</p>
+  <form method="post" id="acct-form" autocomplete="off">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="f" value="{{ f or '' }}">
+    <div class="two-col field-row">
+      <div><label class="field-label" for="acct-date">{{ t('acctLblDate') }}</label><input type="date" id="acct-date" name="ACC_DATE" value="{{ today }}"></div>
+      <div><label class="field-label" for="acct-type">{{ t('acctLblType') }}</label>
+        <select id="acct-type" name="ACC_TYPE"><option value="IN">{{ t('acctIncome') }}</option><option value="EX">{{ t('acctExpense') }}</option></select></div>
+    </div>
+    <div class="field-row"><label class="field-label" for="acct-desc">{{ t('acctLblDesc') }}</label><input type="text" id="acct-desc" name="ACC_DESC" maxlength="200" placeholder="{{ t('acctDescPh') }}" required></div>
+    <div class="two-col field-row">
+      <div><label class="field-label" for="acct-ref">{{ t('acctLblRef') }}</label><input type="text" id="acct-ref" name="REF_ORD_ID" maxlength="20" placeholder="{{ t('acctRefPh') }}"></div>
+      <div><label class="field-label" for="acct-amount">{{ t('acctLblAmount') }}</label><input type="number" step="0.01" min="0.01" id="acct-amount" name="ACC_AMOUNT" placeholder="0.00" required></div>
+    </div>
+    <button class="action primary full" type="submit" id="acct-add-btn">{{ t('acctBtnAdd') }}</button>
+  </form>
+</div>
+{% endif %}
+
+<div class="chips mt14" id="acct-filter-chips">
+  <a class="chip acct-filter-chip{% if not f %} active{% endif %}" href="{{ url_for('finance.account') }}">{{ t('filterAll') }}</a>
+  <a class="chip acct-filter-chip{% if f == 'income' %} active{% endif %}" href="{{ url_for('finance.account', f='income') }}">{{ t('acctIncome') }}</a>
+  <a class="chip acct-filter-chip{% if f == 'expense' %} active{% endif %}" href="{{ url_for('finance.account', f='expense') }}">{{ t('acctExpense') }}</a>
+</div>
+<div class="inv-table-wrap">
+<table class="tv-table" id="acct-ledger">
+  <thead><tr><th>{{ t('acctColDate') }}</th><th>{{ t('acctColDesc') }}</th><th>{{ t('colOrder') }}</th><th class="num">{{ t('acctColAmount') }}</th><th></th></tr></thead>
+  <tbody id="acct-ledger-body">
+  {% for e in rows %}
+    <tr data-acc="{{ e.ACC_ID }}">
+      <td class="nowrap">{{ e.date }}</td>
+      <td>{{ e.ACC_DESC }}{% if e.AUTO_FLG %} <span class="badge manual">{{ t('acctAutoLabel') }}</span>{% endif %}</td>
+      <td>{% if e.ref_url %}<a href="{{ e.ref_url }}"{% if e.REF_ORD_TYPE != 'ML' %} data-popup{% endif %}>{{ e.REF_ORD_ID }}</a>{% else %}{{ e.REF_ORD_ID or '—' }}{% endif %}</td>
+      <td class="num nowrap acct-amt {{ 'in' if e.ACC_TYPE == 'IN' else 'ex' }}">{{ '+' if e.ACC_TYPE == 'IN' else '-' }}{{ money(e.ACC_AMOUNT) }}</td>
+      <td>{% if not e.AUTO_FLG and can_delete %}
+        <form method="post" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="delete">
+          <input type="hidden" name="ACC_ID" value="{{ e.ACC_ID }}"><input type="hidden" name="f" value="{{ f or '' }}">
+          <button type="submit" class="acct-delete-btn" aria-label="{{ t('confirmDeleteEntry') }}" data-confirm="{{ t('confirmDeleteEntry') }}">&#10005;</button></form>{% endif %}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="5" class="hint center">{{ t('acctNoEntries') }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+</div>
+{% endblock %}

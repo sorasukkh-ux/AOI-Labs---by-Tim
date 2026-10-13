@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% from "_macros.html" import page_head %}
+{# Service Dashboard in the design's chart theme. Milling: today's orders. Buy / Sell: orders closed today and price trends. #}
+{% macro tile(menu, href) %}{% if can(menu) %}<a class="card kpi-link" href="{{ href }}">{% else %}<div class="card">{% endif %}{{ caller() }}{% if can(menu) %}</a>{% else %}</div>{% endif %}{% endmacro %}
+{% macro money(v) %}{{ "{:,.2f}".format(v) }}{% endmacro %}
+{% block content %}
+<div id="tab-service-dashboard">
+{{ page_head(t('tabServiceDashboard'), url_for('home.index', g='SV')) }}
+<div class="chips mt14">
+  <a class="chip dash-view-btn{% if view == 'milling' %} active{% endif %}" href="{{ url_for('service_info.dashboard') }}">{{ t('sectionMilling') }}</a>
+  <a class="chip dash-view-btn{% if view == 'trade' %} active{% endif %}" href="{{ url_for('service_info.dashboard', view='trade') }}">{{ t('sectionTrade') }}</a>
+</div>
+
+{% if view == 'milling' %}
+<div id="svc-dashboard-grid" class="inv-kpi-grid">
+  {% call tile('SV_MILLSTATUS', url_for('service_milling.order_list')) %}<p class="card-title">{{ t('kpiTotalOrders') }}</p><p class="lux-value gold">{{ total }}</p>{% endcall %}
+  {% call tile('SV_MILLSTATUS', url_for('service_milling.order_list', status='Q')) %}<p class="card-title">{{ t('kpiInQueue') }}</p><p class="lux-value amber">{{ in_queue }}</p>{% endcall %}
+  {% call tile('SV_MILLSTATUS', url_for('service_milling.order_list', status='I')) %}<p class="card-title">{{ t('kpiInProcess') }}</p><p class="lux-value teal">{{ in_process }}</p>{% endcall %}
+  {% call tile('SV_MILLSTATUS', url_for('service_milling.order_list', status='F')) %}<p class="card-title">{{ t('kpiCompletedToday') }}</p><p class="lux-value emerald">{{ completed }}</p>{% endcall %}
+</div>
+<div class="card mt14">
+  <p class="card-title">{{ t('chartStatusTitle') }}</p>
+  {% if segments %}
+  <div class="inv-donut-row">
+    <svg id="chart-svc-status" class="inv-donut" viewBox="0 0 160 160" role="img" aria-label="{{ t('chartStatusTitle') }}">
+      {% for s in segments %}<g class="mark"><title>{{ s.label }}: {{ s.value }}</title>
+        {% if s.full %}<circle cx="80" cy="80" r="49" fill="none" stroke="{{ s.color }}" stroke-width="30"/>{% else %}<path d="{{ s.d }}" fill="{{ s.color }}" stroke="#FFFFFF" stroke-width="2"/>{% endif %}</g>{% endfor %}
+      <text x="80" y="78" text-anchor="middle" class="donut-total">{{ total }}</text>
+      <text x="80" y="94" text-anchor="middle" class="donut-sub">{{ t('colOrder') }}</text>
+    </svg>
+    <ul class="inv-pie-legend">
+      {% for s in segments %}<li><i class="sw-st-{{ s.status }}"></i><span>{{ s.label }}</span><b>{{ s.value }}</b></li>{% endfor %}
+    </ul>
+  </div>
+  {% else %}<p class="hint">{{ t('dashNoOrders') }}</p>{% endif %}
+</div>
+<div class="card mt14">
+  <p class="card-title">{{ t('chartQueueTimeTitle') }}</p>
+  {% if bars %}
+  {% set w, pt, pb, pl = 360, 20, 34, 14 %}
+  {% set plot_h = 190 - pt - pb %}
+  {% set slot = (w - 2 * pl) / bars|length %}
+  {% set bw = [26, slot * 0.55]|min %}
+  {% set top = (bars|map(attribute='kg')|list + [1])|max %}
+  <svg id="chart-svc-time" class="inv-chart" viewBox="0 0 {{ w }} 190" role="img" aria-label="{{ t('chartQueueTimeTitle') }}">
+    {% for i in range(4) %}<line x1="{{ pl }}" x2="{{ w - pl }}" y1="{{ pt + plot_h / 3 * i }}" y2="{{ pt + plot_h / 3 * i }}" stroke="var(--fc-grid)"/>{% endfor %}
+    {% for b in bars %}
+    {% set bh = [b.kg / top * plot_h, 3]|max %}
+    {% set x = pl + slot * loop.index0 + (slot - bw) / 2 %}
+    <g class="mark"><title>#{{ b.qr }} · {{ b.time }} · {{ b.status }} · {{ money(b.kg) }} kg</title>
+      <rect x="{{ x - 4 }}" y="{{ pt }}" width="{{ bw + 8 }}" height="{{ plot_h }}" fill="transparent"/>
+      <rect x="{{ x }}" y="{{ pt + plot_h - bh }}" width="{{ bw }}" height="{{ bh }}" rx="4" fill="{{ b.color }}"/></g>
+    <text x="{{ x + bw / 2 }}" y="{{ 190 - pb + 14 }}" text-anchor="middle" class="l small">{{ b.time }}</text>
+    {% endfor %}
+    <line x1="{{ pl }}" x2="{{ w - pl }}" y1="{{ pt + plot_h }}" y2="{{ pt + plot_h }}" stroke="var(--fc-ink)" opacity="0.3"/>
+  </svg>
+  <div class="inv-legend">{% for label, color in status_legend %}<span><i class="sw-st-{{ loop.index0 }}"></i>{{ label }}</span>{% endfor %}</div>
+  <p class="cap-note center">{{ t('dashBarNote') }}</p>
+  {% else %}<p class="hint">{{ t('dashNoOrders') }}</p>{% endif %}
+</div>
+
+{% else %}
+<div id="trade-dashboard-grid" class="inv-kpi-grid">
+  {% call tile('SV_BSSTATUS', url_for('service_buysell.order_list', type='SL', status='C')) %}<p class="card-title">{{ t('kpiTotalSellToday') }}</p><p class="lux-value gold">{{ money(total_sell) }} THB</p>{% endcall %}
+  {% call tile('SV_BSSTATUS', url_for('service_buysell.order_list', type='BY', status='C')) %}<p class="card-title">{{ t('kpiTotalBuyToday') }}</p><p class="lux-value purple">{{ money(total_buy) }} THB</p>{% endcall %}
+  <div class="card"><p class="card-title">{{ t('kpiAvgSellRate') }}</p><p class="lux-value emerald">{{ '%.2f'|format(avg_sell) }}</p></div>
+  <div class="card"><p class="card-title">{{ t('kpiAvgBuyRate') }}</p><p class="lux-value teal">{{ '%.2f'|format(avg_buy) }}</p></div>
+</div>
+<div class="card mt14">
+  <p class="card-title">{{ t('chartTradeHistoryTitle') }}</p>
+  {% set base, barw = 128, 70 %}
+  <svg id="chart-trade-history" class="inv-chart" viewBox="0 0 320 170" role="img" aria-label="{{ t('chartTradeHistoryTitle') }}">
+    {% for i in range(4) %}<line x1="10" x2="310" y1="{{ base - 94 / 3 * i }}" y2="{{ base - 94 / 3 * i }}" stroke="var(--fc-grid)"/>{% endfor %}
+    <g class="mark"><title>{{ t('svcSellLabel') }}: {{ money(total_sell) }} THB</title><rect x="60" y="{{ base - h_sell }}" width="{{ barw }}" height="{{ h_sell }}" rx="4" fill="var(--fc-blue)"/></g>
+    <text x="95" y="{{ base - h_sell - 8 }}" text-anchor="middle" class="v">{{ money(total_sell) }}</text>
+    <text x="95" y="{{ base + 20 }}" text-anchor="middle" class="l">{{ t('svcSellLabel') }}</text>
+    <g class="mark"><title>{{ t('svcBuyLabel') }}: {{ money(total_buy) }} THB</title><rect x="190" y="{{ base - h_buy }}" width="{{ barw }}" height="{{ h_buy }}" rx="4" fill="var(--fc-purple)"/></g>
+    <text x="225" y="{{ base - h_buy - 8 }}" text-anchor="middle" class="v">{{ money(total_buy) }}</text>
+    <text x="225" y="{{ base + 20 }}" text-anchor="middle" class="l">{{ t('svcBuyLabel') }}</text>
+    <line x1="10" x2="310" y1="{{ base }}" y2="{{ base }}" stroke="var(--fc-ink)" opacity="0.3"/>
+  </svg>
+</div>
+{% for title, trend, color in [(t('chartSellRateTitle'), sell_trend, 'var(--fc-blue)'), (t('chartBuyRateTitle'), buy_trend, 'var(--fc-purple)')] %}
+<div class="card mt14">
+  <p class="card-title">{{ title }}</p>
+  {% if trend %}
+  <svg class="inv-chart rate-chart" viewBox="0 0 360 150" role="img" aria-label="{{ title }}">
+    {% for i in range(4) %}<line x1="36" x2="344" y1="{{ 16 + 106 / 3 * i }}" y2="{{ 16 + 106 / 3 * i }}" stroke="var(--fc-grid)"/>{% endfor %}
+    {% if trend.same and trend.points|length > 1 %}<path d="{{ trend.path }}" fill="none" stroke="{{ color }}" stroke-width="2"/>{% endif %}
+    {% for p in trend.points %}
+    <g class="mark"><title>#{{ p.qr }} · {{ p.name }} · {{ '%.2f'|format(p.rate) }} THB/kg · {{ p.time }}</title>
+      <circle cx="{{ p.x }}" cy="{{ p.y }}" r="12" fill="transparent"/>
+      <circle cx="{{ p.x }}" cy="{{ p.y }}" r="4.5" fill="{{ color }}" stroke="#FFFFFF" stroke-width="1.5"/></g>
+    <text x="{{ p.x }}" y="{{ p.y - 10 }}" text-anchor="middle" class="v small">{{ '%.2f'|format(p.rate) }}</text>
+    <text x="{{ p.x }}" y="137" text-anchor="middle" class="l small">{{ p.time }}</text>
+    {% endfor %}
+  </svg>
+  <p class="cap-note center">{{ t('dashRateNote') }}</p>
+  {% else %}<p class="hint">{{ t('dashNoTrade') }}</p>{% endif %}
+</div>
+{% endfor %}
+{% endif %}
+</div>
+{% endblock %}

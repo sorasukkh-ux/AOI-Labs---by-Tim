@@ -1,0 +1,8 @@
+# Web framework (controllers and views)
+Flask>=3.0,<4
+# MongoDB driver (models). mongodb+srv:// addresses (MongoDB Atlas) work out of the box.
+pymongo>=4.6,<5
+# Reads settings from the .env file
+python-dotenv>=1.0,<2
+# Reads the market price report (PDF) of the Thai Rice Millers Association
+pypdf>=4.0,<7

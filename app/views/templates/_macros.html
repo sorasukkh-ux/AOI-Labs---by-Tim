@@ -1,0 +1,17 @@
+{# Shared pieces of the VIEW layer, written with the class names of the design prototype. #}
+
+{# "<- Home" link and, when given, the grey title bar under it. #}
+{% macro page_head(title=None, back_url=None) %}
+<a class="back-btn" href="{{ back_url or url_for('home.index') }}">&larr; <span>{{ t('backHomeLabel') }}</span></a>
+{% if title %}<p class="tv-section-title plain">{{ title }}</p>{% endif %}
+{% endmacro %}
+
+{# Branch selector for maintenance screens: reloads the page for the chosen branch. #}
+{% macro branch_picker(endpoint, branch, branches, element_id) %}
+<form method="get" action="{{ url_for(endpoint) }}" class="field-row">
+  <label class="field-label" for="{{ element_id }}">{{ t('lblBranch') }}</label>
+  <select id="{{ element_id }}" name="branch" class="maint-branch-select" data-autosubmit {% if branches|length < 2 %}disabled{% endif %}>
+    {% for b in branches %}<option value="{{ b }}"{% if b == branch %} selected{% endif %}>{{ branch_label(b) }}</option>{% endfor %}
+  </select>
+</form>
+{% endmacro %}

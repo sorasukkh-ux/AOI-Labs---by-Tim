@@ -1,0 +1,10 @@
+.env
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+.mongo-data/
+*.log
+.DS_Store
+.mongo-no-ulimit

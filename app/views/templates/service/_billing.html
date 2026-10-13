@@ -1,0 +1,22 @@
+{# Receipt of buying/selling orders (the design's Print Billing). Shown in the pop-up; Print prints only the receipt. #}
+<div class="receipt-wrap">
+  <div class="receipt" id="receipt">
+    <p class="rc-brand">AOI Labs</p>
+    <p class="rc-addr">{{ address }}<br>{{ address_en }}<br>Tel. {{ tel }}</p>
+    <p class="rc-title">{{ t('receiptTitle') }} &middot; {{ t(type_keys[orders[0].ORD_TYPE]) }}</p>
+    <div class="rc-row"><span>{{ t('receiptOrderNo') }}</span><span>{% for o in orders %}#{{ o.QR_ID }}{% if not loop.last %}, {% endif %}{% endfor %}</span></div>
+    <div class="rc-row"><span>{{ t('receiptCustomer') }}</span><span>{{ customer.get('CUST_NAME', orders[0].CUST_CODE) }}</span></div>
+    <div class="rc-row"><span>{{ t('receiptDate') }}</span><span>{{ printed }}</span></div>
+    <p class="rc-items">{{ t('receiptItemsTitle') }}</p>
+    <table class="rc-table">
+      <thead><tr><th>{{ t('colProduct') }}</th><th class="num">kg</th><th class="num">THB/kg</th><th class="num">THB</th></tr></thead>
+      <tbody>
+      {% for o in orders %}
+        <tr><td>{{ mat_name(o.MAT_CODE) }}</td><td class="num">{{ o.ORD_QTY|num }}</td><td class="num">{{ o.PRICING_UINT|num }}</td><td class="num">{{ (o.ORD_AMOUNT if o.ORD_AMOUNT is not none else o.ORD_QTY * o.PRICING_UINT)|num }}</td></tr>
+      {% endfor %}
+      </tbody>
+      <tfoot><tr><td colspan="3">{{ t('totalLabel') }}</td><td class="num">{{ total|num }}</td></tr></tfoot>
+    </table>
+  </div>
+  <button type="button" class="action primary rc-print-btn" data-print-receipt>&#128424; {{ t('btnPrintBilling') }}</button>
+</div>

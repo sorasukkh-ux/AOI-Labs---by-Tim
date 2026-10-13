@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+{% from "_macros.html" import page_head %}
+{% macro hidden() %}
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<input type="hidden" name="back" value="list">
+<input type="hidden" name="status_filter" value="{{ status or '' }}">
+<input type="hidden" name="type_filter" value="{{ order_type or '' }}">
+{% endmacro %}
+{% block content %}
+<div id="tab-update-status">
+{{ page_head(t('updateStatusTitle'), url_for('home.index', g='SV')) }}
+<div class="chips mt14" id="status-filter-chips">
+  <a class="chip status-chip{% if not status %} active{% endif %}" href="{{ url_for('service_milling.order_list', type=order_type) }}">{{ t('filterAll') }}</a>
+  {% for s in filters %}
+  <a class="chip status-chip{% if status == s %} active{% endif %}" href="{{ url_for('service_milling.order_list', status=s, type=order_type) }}" data-status-filter="{{ s }}">{{ t(status_keys[s]) }}</a>
+  {% endfor %}
+</div>
+<div class="chips" id="order-type-filter-chips">
+  <a class="chip order-type-chip{% if not order_type %} active{% endif %}" href="{{ url_for('service_milling.order_list', status=status) }}">{{ t('filterAll') }}</a>
+  {% for code in ['T', 'D'] %}
+  <a class="chip order-type-chip{% if order_type == code %} active{% endif %}" href="{{ url_for('service_milling.order_list', status=status, type=code) }}" data-order-type-filter="{{ code }}">{{ t(type_keys[code]) }}</a>
+  {% endfor %}
+</div>
+
+<div id="status-update-list">
+  {% for order in orders %}
+  {% set editable = can_edit and order.is_open %}
+  <div class="status-card{% if order.needs_attention %} needs-attention{% endif %}" data-order="{{ order.ORD_ID }}">
+    <div class="who">
+      <span class="ord-id">#{{ order.QR_ID }}</span>
+      <span class="badge priority-{{ {'U': 'urgent', 'H': 'high', 'M': 'medium', 'L': 'low'}[order.MILL_PRIORITY] }}">{{ t(priority_keys[order.MILL_PRIORITY]) }}</span>
+      <span class="badge neutral">{{ t(type_keys[order.ORDER_TYPE]) }}</span>
+      <span class="badge variety-badge">{{ t(var_keys[order.RICE_VARIETY or "WH"]) }}</span>
+      {% if order.CANCEL_REQ_FLG == 'A' and order.is_open %}<span class="badge blocked">&#9888; {{ t('cancelApprovedTag') }}</span>{% endif %}
+      <a class="action order-detail-btn" href="{{ url_for('service_milling.order_detail', ord_id=order.ORD_ID) }}" data-popup>{{ t('colDetails') }}</a>
+      <span class="ord-cust">{{ order.customer.get('CUST_NAME', order.CUST_CODE) }} &middot; {{ order.registered_text }}</span>
+    </div>
+
+    <div class="two-col field-row">
+      <form method="post" action="{{ url_for('service_milling.change_status', ord_id=order.ORD_ID) }}">
+        {{ hidden() }}
+        <select class="status-select {{ status_class[order.MILL_STATUS] }}" name="new_status" data-autosubmit aria-label="{{ t('colStatus') }}"
+                {% if not editable or not order.next_statuses %}disabled{% endif %}>
+          <option value="{{ order.MILL_STATUS }}" selected>{{ t(status_keys[order.MILL_STATUS]) }}</option>
+          {% for nxt in order.next_statuses %}
+          {% if nxt != 'CC' or can_cancel %}
+          <option value="{{ nxt }}"
+            {% if nxt == 'F' and order.CANCEL_REQ_FLG == 'P' %}disabled{% endif %}
+            {% if nxt == 'F' %}data-form="inbound-{{ order.ORD_ID }}"
+            {% elif nxt == 'H' %}data-prompts='{{ [{"name": "HOLD_REASON", "label": t("holdReasonPrompt", id=order.QR_ID), "value": "", "required": true, "required_text": t("errHoldReason")}]|tojson }}'
+            {% elif nxt == 'CC' %}data-confirm="{{ t('confirmCancelOrder', id=order.QR_ID) }}"
+            {% elif nxt == 'C' %}data-confirm="{{ t('confirmCloseOrder', id=order.QR_ID) }}"
+            {% elif nxt == 'Q' and order.CANCEL_REQ_FLG == 'A' %}data-confirm="{{ t('confirmRequeueApproved', id=order.QR_ID) }}"{% endif %}>{{ t(status_keys[nxt]) }}</option>
+          {% endif %}
+          {% endfor %}
+        </select>
+      </form>
+      <form method="post" action="{{ url_for('service_milling.change_priority', ord_id=order.ORD_ID) }}">
+        {{ hidden() }}
+        <select class="priority-select" name="priority" data-autosubmit aria-label="{{ t('lblPriority') }}" {% if not editable %}disabled{% endif %}>
+          {% for p in priorities %}<option value="{{ p }}"{% if p == order.MILL_PRIORITY %} selected{% endif %}>{{ t(priority_keys[p]) }}</option>{% endfor %}
+        </select>
+      </form>
+    </div>
+
+    <div class="order-type-row">
+      <label class="field-label" for="order-type-{{ order.ORD_ID }}">{{ t('lblDeliveryType') }}</label>
+      <form method="post" action="{{ url_for('service_milling.change_type', ord_id=order.ORD_ID) }}" class="inline-form">
+        {{ hidden() }}
+        <select class="order-type-select" id="order-type-{{ order.ORD_ID }}" name="new_type" data-autosubmit {% if not editable %}disabled{% endif %}>
+          <option value="T"{% if order.ORDER_TYPE == 'T' %} selected{% else %}
+            data-confirm="{{ t('confirmTypeToTakeawayFromDelivery', id=order.QR_ID, status=t(status_keys['F'])) if order.MILL_STATUS == 'D' else t('confirmTypeToTakeaway', id=order.QR_ID) }}"{% endif %}>{{ t('deliveryTakeaway') }}</option>
+          <option value="D"{% if order.ORDER_TYPE == 'D' %} selected{% else %}
+            data-prompts='{{ [{"name": "DELIVERY_ADDRESS", "label": t("typeToDeliveryPrompt", id=order.QR_ID), "value": order.DELIVERY_ADDRESS or order.customer.get("ADDRESS", "")},
+                              {"name": "DELIVERY_DISTANCE", "label": t("lblDistanceKm"), "value": (order.DELIVERY_DISTANCE if order.DELIVERY_DISTANCE is not none else order.customer.get("DISTANCE_KM"))|plain|string}]|tojson }}'{% endif %}>{{ t('deliveryDelivery') }}</option>
+        </select>
+      </form>
+    </div>
+
+    {% if order.MILL_STATUS == 'H' and order.HOLD_REASON %}
+    <p class="hold-reason-note"><b>{{ t('lblHoldReason') }}:</b> {{ order.HOLD_REASON }}</p>
+    {% endif %}
+
+    {% if editable and 'F' in order.next_statuses %}
+    {# the inventory inbound pop-up opened by choosing Finished #}
+    <template id="inbound-{{ order.ORD_ID }}">
+      <form method="post" action="{{ url_for('service_milling.change_status', ord_id=order.ORD_ID) }}" class="inbound-form order-details">
+        {{ hidden() }}
+        <input type="hidden" name="new_status" value="F">
+        <p class="od-title">{{ t('inboundTitle', id=order.QR_ID) }}</p>
+        <p class="cap-note">{{ t('inboundMillingNote') }}</p>
+        <div class="od-row"><span class="od-label">{{ t('lblSkuName') }}</span><span class="od-value">{{ mat_name('RICE_HM' if order.RICE_VARIETY == 'HM' else ('RICE_GL' if order.RICE_VARIETY == 'GL' else 'RICE_W5')) }}</span></div>
+        <div class="od-row"><span class="od-label">{{ t('colLot') }}</span><span class="od-value">{{ order.lot }}</span></div>
+        <div class="od-row"><span class="od-label">{{ t('colCustomer') }}</span><span class="od-value">{{ order.customer.get('CUST_NAME', order.CUST_CODE) }}</span></div>
+        <div class="field-row">
+          <label class="field-label" for="inb-qty-{{ order.ORD_ID }}">{{ t('lblInboundQty', kg=order.EXPCT_RICE|num) }}</label>
+          <input type="number" id="inb-qty-{{ order.ORD_ID }}" name="INV_QTY" value="{{ order.EXPCT_RICE|plain }}" min="0.001" step="0.001" required>
+        </div>
+        <div class="field-row">
+          <label class="field-label" for="inb-loc-{{ order.ORD_ID }}">{{ t('lblLocation') }}</label>
+          <input type="text" id="inb-loc-{{ order.ORD_ID }}" name="LOC_ID" value="{{ order.suggest_loc or '' }}" placeholder="01-002-005"
+                 pattern="[0-9]{2}-[0-9]{3}-[0-9]{3}" maxlength="10" inputmode="numeric" required>
+        </div>
+        <div class="field-row">
+          <label class="field-label" for="inb-status-{{ order.ORD_ID }}">{{ t('colStatus') }}</label>
+          <select id="inb-status-{{ order.ORD_ID }}" name="INV_STATUS">
+            {% for code, key in inv_status_keys.items() %}<option value="{{ code }}">{{ t(key) }}</option>{% endfor %}
+          </select>
+        </div>
+        {% if order.BRAN_ORDER or order.BROKE_ORDER %}<p class="cap-note">{{ t('inboundTakeHomeNote') }}</p>{% endif %}
+        <div class="btn-pair">
+          <button type="button" class="action" data-modal-close>{{ t('btnCancel') }}</button>
+          <button type="submit" class="action primary inbound-save-btn">{{ t('btnInboundFinish') }}</button>
+        </div>
+      </form>
+    </template>
+    {% endif %}
+
+    {% if order.CANCEL_REQ_FLG == 'P' %}
+    <div class="cancel-request-card">
+      <p>&#9888; {{ t('cancelRequestNotice') }}</p>
+      {% if can_approve %}
+      <form method="post" action="{{ url_for('service_milling.cancel_answer', ord_id=order.ORD_ID) }}" class="btn-pair">
+        {{ hidden() }}
+        <button class="action cancel-reject-btn" type="submit" name="answer" value="reject"
+                data-prompts='{{ [{"name": "reason", "label": t("rejectReasonPrompt"), "value": ""}]|tojson }}'>{{ t('btnReject') }}</button>
+        <button class="action primary cancel-approve-btn" type="submit" name="answer" value="approve" data-confirm="{{ t('confirmApproveCancel') }}"
+                data-prompts='{{ [{"name": "reason", "label": t("holdReasonPrompt", id=order.QR_ID), "value": t("holdReasonCancelApproved"), "required": true, "required_text": t("errHoldReason")}]|tojson }}'>{{ t('btnApprove') }}</button>
+      </form>
+      {% endif %}
+      {% if order.MILL_STATUS == 'I' %}<p class="block-note">{{ t('cancelRequestBlockNote', status=t(status_keys['F'])) }}</p>{% endif %}
+    </div>
+    {% endif %}
+
+    {% if order.ORDER_TYPE == 'D' and order.MILL_STATUS == 'D' %}
+    <div class="delivery-info-card">
+      <div class="d-row"><span class="d-label">{{ t('lblDeliveryLoc') }}</span><span>{{ order.REF_INV_LOC or '-' }}</span></div>
+      <div class="d-row"><span class="d-label">{{ t('lblDeliveryCust') }}</span><span>{{ order.customer.get('CUST_NAME', order.CUST_CODE) }}</span></div>
+      <form method="post" action="{{ url_for('service_milling.update_delivery', ord_id=order.ORD_ID) }}">
+        {{ hidden() }}
+        <fieldset {% if not can_edit %}disabled{% endif %} class="plain">
+        {% if order.DELIVERY_CONFIRM_FLG %}
+        {# confirmed: the order goes back to its normal place in the list #}
+        <div class="d-row"><span class="d-label">{{ t('lblDeliveryAddr') }}</span><span>{{ order.DELIVERY_ADDRESS or '-' }}</span></div>
+        <div class="d-row"><span class="d-label">{{ t('lblArrivalTime') }}</span><span>{{ fmt_datetime(order.DELIVERY_ARRIVAL_TIME) }}</span></div>
+        <p class="d-confirmed">&#9989; {{ t('deliveryTimeConfirmedLabel') }}</p>
+        <p class="cap-note">{{ t('deliveryRetryNote') }}</p>
+        <input type="hidden" name="action" value="reopen">
+        <button type="submit" class="action update-delivery-btn delivery-reedit-btn">{{ t('btnUpdateDelivery') }}</button>
+        {% else %}
+        {# not confirmed yet: the order stays at the top of the list #}
+        <label for="delivery-addr-{{ order.ORD_ID }}">{{ t('lblDeliveryAddr') }}</label>
+        <input type="text" class="delivery-addr-input" id="delivery-addr-{{ order.ORD_ID }}" name="DELIVERY_ADDRESS" value="{{ order.DELIVERY_ADDRESS or '' }}" maxlength="200" required>
+        <label for="delivery-km-{{ order.ORD_ID }}">{{ t('lblDistanceKm') }}</label>
+        <input type="number" min="0" step="0.1" id="delivery-km-{{ order.ORD_ID }}" name="DELIVERY_DISTANCE" value="{{ order.DELIVERY_DISTANCE|plain }}" required>
+        <label for="delivery-arrival-{{ order.ORD_ID }}">{{ t('lblArrivalTime') }}</label>
+        <input type="datetime-local" class="delivery-arrival-input" id="delivery-arrival-{{ order.ORD_ID }}" name="DELIVERY_ARRIVAL_TIME" value="{{ order.arrival_input }}" required>
+        <input type="hidden" name="action" value="confirm">
+        <button type="submit" class="action primary confirm-delivery-time-btn">{{ t('btnConfirmDeliveryTime') }}</button>
+        {% endif %}
+        </fieldset>
+      </form>
+    </div>
+    {% endif %}
+  </div>
+  {% else %}
+  <p class="hint home-empty">{{ t('noOrders') }}</p>
+  {% endfor %}
+</div>
+</div>
+{% endblock %}

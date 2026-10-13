@@ -1,0 +1,259 @@
+"""Automation: AI, Hardware Control, Electricity, Machine Usage Statistics (branch signed in to)."""
+from datetime import timedelta
+
+from flask import Blueprint, abort, redirect, render_template, request, session, url_for
+
+from ..i18n import t
+from ..models import ai, supply
+from ..models.automation import (COMMANDS, MACHINE_STATUSES, MACHINE_TYPES, RUNNING, SOURCE_USER, Machine, MachineCommand,
+                                 Meter, elec_rate, paddy_milled, period_bounds, post_month_to_account, set_elec_rate)
+from ..models.base import ValidationError
+from ..security import can, current_user, operating_branch, require
+from ..timeutil import fmt_datetime, local_tz, now_local, now_utc, parse_local_datetime
+from .common import flash_error, flash_ok
+from ..models.variety import mat_name
+
+bp = Blueprint("automation", __name__, url_prefix="/automation")
+AI_MENU, HARDWARE, ELECTRIC, USAGE = "AT_AI", "AT_HARDWARE", "AT_ELECTRIC", "AT_MACHINE"
+STATUS_KEYS = {"R": "mcRunning", "I": "mcIdle", "F": "mcFault", "M": "mcMaintenance", "O": "mcOffline"}
+STATUS_BADGE = {"R": "approved", "I": "manual", "F": "blocked", "M": "pending", "O": "neutral"}
+TYPE_KEYS = {m: "mcType" + m.capitalize() for m in MACHINE_TYPES}
+CMD_STATUS_KEYS = {"P": "cmdPending", "S": "cmdSent", "D": "cmdDone", "F": "cmdFailed", "X": "cmdExpired"}
+PERIODS = (1, 7, 30)
+
+
+def _user_id():
+    return current_user()["USER_ID"]
+
+
+def _days():
+    try:
+        days = int(request.args.get("days", 7))
+    except ValueError:
+        days = 7
+    return days if days in PERIODS else 7
+
+
+def _run(action, ok_key, endpoint, **values):
+    try:
+        result = action()
+    except ValidationError as error:
+        flash_error(error)
+    else:
+        if ok_key:
+            flash_ok(ok_key, **(result if isinstance(result, dict) else {}))
+    return redirect(url_for(endpoint, **values))
+
+
+def _bars(values, w=360, h=190, pt=20, pb=34, pl=14):
+    """Bar geometry for a simple one-series chart: [(label, value, title)] -> list of dicts."""
+    if not values:
+        return []
+    plot_h = h - pt - pb
+    slot = (w - 2 * pl) / len(values)
+    bw = min(26, slot * 0.55)
+    top = max([v for _l, v, _t in values] + [0.0001])
+    out = []
+    for i, (label, value, title) in enumerate(values):
+        bh = max(value / top * plot_h, 2 if value > 0 else 0)
+        x = pl + slot * i + (slot - bw) / 2
+        out.append({"label": label, "value": value, "title": title, "x": round(x, 1), "y": round(pt + plot_h - bh, 1),
+                    "w": round(bw, 1), "h": round(bh, 1), "cx": round(x + bw / 2, 1)})
+    return out
+
+
+# ---------- Hardware Control ----------
+@bp.route("/hardware", methods=["GET", "POST"])
+@require(HARDWARE)
+def hardware():
+    branch = operating_branch()
+    if request.method == "POST":
+        action = request.form.get("action")
+        machine = Machine.find(branch, request.form.get("MACHINE_ID"))
+        if action in ("status", "command", "key") and not machine:
+            abort(404)
+        if action == "status":
+            if not can(HARDWARE, "edit"):
+                abort(403)
+            return _run(lambda: Machine.set_status(machine, request.form.get("MACHINE_STATUS"), SOURCE_USER, _user_id(),
+                                                   note=request.form.get("NOTE")) and None, "msgMachineStatus", "automation.hardware")
+        if action == "command":
+            if not can(HARDWARE, "approve"):
+                abort(403)
+
+            def send():
+                cmd = MachineCommand.request(machine, request.form.get("CMD"), _user_id())
+                return {"cmd": t("cmd" + cmd["CMD"].capitalize()), "name": machine["MACHINE_NAME"]}
+            return _run(send, "msgCommandSent", "automation.hardware")
+        if action in ("save", "key"):
+            if not can(HARDWARE, "create"):
+                abort(403)
+            if action == "key":
+                def issue():
+                    session["device_key"] = {"id": machine["MACHINE_ID"], "key": Machine.issue_key(branch, machine["MACHINE_ID"], _user_id())}
+                return _run(issue, None, "automation.hardware", setup=1)
+            creating = request.form.get("mode") == "new"
+            return _run(lambda: Machine.save(branch, request.form, _user_id(), creating) and None, "msgMachineSaved",
+                        "automation.hardware", setup=1)
+        abort(400)
+    machines = Machine.for_branch(branch)
+    for m in machines:
+        m["online"] = Machine.is_online(m)
+        m["since"] = fmt_datetime(m.get("STATUS_TIME"))
+        m["can_command"] = bool(m.get("CONTROL_FLG") and m.get("DEVICE_KEY_HASH") and m["online"])
+    events = Machine.events(branch, now_utc() - timedelta(days=7), limit=20)
+    names = {m["MACHINE_ID"]: m["MACHINE_NAME"] for m in machines}
+    edit = Machine.find(branch, request.args.get("edit")) if request.args.get("edit") else None
+    return render_template("automation/hardware.html", machines=machines, events=events, names=names,
+                           commands=MachineCommand.for_branch(branch, 10), edit=edit, setup=bool(request.args.get("setup") or edit),
+                           new_key=session.pop("device_key", None), meters=Meter.for_branch(branch),
+                           status_keys=STATUS_KEYS, status_badge=STATUS_BADGE, type_keys=TYPE_KEYS, types=MACHINE_TYPES,
+                           statuses=MACHINE_STATUSES, commands_all=COMMANDS, cmd_status_keys=CMD_STATUS_KEYS,
+                           can_edit=can(HARDWARE, "edit"), can_command=can(HARDWARE, "approve"), can_setup=can(HARDWARE, "create"))
+
+
+# ---------- Machine Usage Statistics ----------
+@bp.route("/usage")
+@require(USAGE)
+def usage():
+    branch = operating_branch()
+    days = _days()
+    start, end = period_bounds(days)
+    machines = Machine.for_branch(branch)
+    rows = []
+    for m in machines:
+        u = Machine.usage(m, start, end)
+        metered = Meter.used_between(branch, start, end, m["METER_ID"]) if m.get("METER_ID") else None
+        rows.append({"m": m, "u": u, "metered": metered})
+    paddy = paddy_milled(branch, start, end)
+    run_total = sum(r["u"]["hours"][RUNNING] for r in rows)
+    bars = _bars([(r["m"]["MACHINE_ID"], r["u"]["hours"][RUNNING], "%s · %.1f h" % (r["m"]["MACHINE_NAME"], r["u"]["hours"][RUNNING])) for r in rows])
+    daily = {}
+    for m in machines:
+        for day, hours in Machine.daily_run_hours(m, 14):
+            daily[day] = daily.get(day, 0.0) + hours
+    trend = _bars([(d.strftime("%d/%m"), round(h, 2), "%s · %.1f h" % (d.strftime("%d/%m"), h)) for d, h in sorted(daily.items())])
+    return render_template("automation/usage.html", rows=rows, days=days, periods=PERIODS, paddy=paddy, run_total=run_total,
+                           kg_per_hour=(paddy / run_total) if run_total else None, bars=bars, trend=trend,
+                           status_keys=STATUS_KEYS, statuses=MACHINE_STATUSES, type_keys=TYPE_KEYS)
+
+
+# ---------- Electricity ----------
+@bp.route("/electricity", methods=["GET", "POST"])
+@require(ELECTRIC)
+def electricity():
+    branch = operating_branch()
+    if request.method == "POST":
+        action = request.form.get("action")
+        if action == "reading":
+            if not can(ELECTRIC, "create"):
+                abort(403)
+            meter = Meter.find(branch, request.form.get("METER_ID"))
+            if not meter:
+                abort(404)
+            when = parse_local_datetime(request.form.get("READ_DATE")) if request.form.get("READ_DATE") else None
+            if when is not None and abs((now_utc() - when).total_seconds()) < 60:
+                when = None                     # the form's default "now" (minutes only): keep the exact time
+            return _run(lambda: Meter.add_reading(meter, request.form.get("READ_KWH"), when, SOURCE_USER, _user_id()) and None,
+                        "msgReadingSaved", "automation.electricity")
+        if action == "rate":
+            if not can(ELECTRIC, "edit"):
+                abort(403)
+            return _run(lambda: set_elec_rate(branch, request.form.get("SYSP_ELEC_RATE"), _user_id()) and None,
+                        "msgElecRateSaved", "automation.electricity")
+        if action == "post":
+            if not can(ELECTRIC, "approve"):
+                abort(403)
+            try:
+                year, month = (int(x) for x in request.form.get("MONTH", "").split("-"))
+            except ValueError:
+                abort(400)
+
+            def post():
+                entry, kwh = post_month_to_account(branch, year, month, t("elecAcctDesc", month="%02d/%04d" % (month, year)) + " (%(kwh)s kWh)", _user_id())
+                return {"amount": "%.2f" % entry["ACC_AMOUNT"]}
+            return _run(post, "msgElecPosted", "automation.electricity")
+        if action in ("meter", "key"):
+            if not can(ELECTRIC, "create"):
+                abort(403)
+            if action == "key":
+                meter = Meter.find(branch, request.form.get("METER_ID"))
+                if not meter:
+                    abort(404)
+
+                def issue():
+                    session["device_key"] = {"id": meter["METER_ID"], "key": Meter.issue_key(branch, meter["METER_ID"], _user_id())}
+                return _run(issue, None, "automation.electricity", setup=1)
+            creating = request.form.get("mode") == "new"
+            return _run(lambda: Meter.save(branch, request.form, _user_id(), creating) and None, "msgMeterSaved",
+                        "automation.electricity", setup=1)
+        abort(400)
+    days = _days()
+    start, end = period_bounds(days)
+    rate = elec_rate(branch)
+    kwh = Meter.used_between(branch, start, end)
+    paddy = paddy_milled(branch, start, end)
+    meters = Meter.for_branch(branch)
+    for m in meters:
+        last = Meter.last_reading(m["METER_ID"])
+        m["last"] = last
+        m["period_kwh"] = Meter.used_between(branch, start, end, m["METER_ID"])
+        m["online"] = bool(m.get("LAST_SEEN")) and (now_utc() - m["LAST_SEEN"]).total_seconds() <= 3600
+    daily = Meter.daily_use(branch, 14)
+    bars = _bars([(d.strftime("%d/%m"), v, "%s · %.1f kWh · %.2f THB" % (d.strftime("%d/%m"), v, v * rate)) for d, v in daily])
+    today = now_local()
+    this_month = "%04d-%02d" % (today.year, today.month)
+    prev = (today.replace(day=1) - timedelta(days=1))
+    prev_month = "%04d-%02d" % (prev.year, prev.month)
+    edit = Meter.find(branch, request.args.get("edit")) if request.args.get("edit") else None
+    return render_template("automation/electricity.html", days=days, periods=PERIODS, rate=rate, kwh=kwh, cost=kwh * rate,
+                           paddy=paddy, kwh_per_kg=(kwh / paddy) if paddy else None, meters=meters, bars=bars,
+                           readings=Meter.readings(branch, now_utc() - timedelta(days=60), limit=15),
+                           months=[this_month, prev_month], machines=Machine.for_branch(branch), edit=edit,
+                           setup=bool(request.args.get("setup") or edit), new_key=session.pop("device_key", None),
+                           now_input=now_local().strftime("%Y-%m-%dT%H:%M"),
+                           can_read=can(ELECTRIC, "create"), can_rate=can(ELECTRIC, "edit"), can_post=can(ELECTRIC, "approve"),
+                           can_setup=can(ELECTRIC, "create"))
+
+
+# ---------- AI ----------
+@bp.route("/ai", methods=["GET", "POST"])
+@require(AI_MENU)
+def ai_screen():
+    branch = operating_branch()
+    answer = None
+    if request.method == "POST":
+        if not can(AI_MENU, "create"):
+            abort(403)
+        if request.form.get("action") == "supply":
+            try:
+                n = supply.fetch(_user_id())
+            except ValidationError as error:
+                flash_error(error)
+            else:
+                flash_ok("spFetched", n=n)
+            return redirect(url_for("automation.ai_screen", _anchor="ai-supply"))
+        try:
+            answer = ai.ask(branch, _user_id(), request.form.get("QUESTION"), session.get("lang", "th"))
+        except ValidationError as error:
+            flash_error(error)
+            return redirect(url_for("automation.ai_screen", _anchor="ai-ask"))
+        session["ai_answer"] = {"q": request.form.get("QUESTION"), "a": answer}
+        return redirect(url_for("automation.ai_screen", _anchor="ai-ask"))
+    fc = ai.forecast(branch)
+    bars = _bars([(f["day"].strftime("%d/%m"), f["kg"], "%s · %.0f kg · %.1f %s" % (f["day"].strftime("%d/%m"), f["kg"], f["orders"], t("aiOrders")))
+                  for f in fc])
+    advice = ai.price_advice(branch)
+    for a in advice:
+        a["name"] = mat_name(a["mat"])
+    alerts = ai.anomalies(branch)
+    for a in alerts:
+        if "mat" in a["params"]:
+            a["params"] = dict(a["params"], mat=mat_name(a["params"]["mat"]))
+    sp = supply.summary()
+    sp_bars = _bars([("%s/%s" % (d["PERIOD"][5:], str(d["YEAR_TH"])[2:]), d["INDEX_VALUE"],
+                      "%s/%s · %.1f" % (d["PERIOD"][5:], d["YEAR_TH"], d["INDEX_VALUE"])) for d in supply.series(sp["scope"] if sp else None, 24)])
+    return render_template("automation/ai.html", supply=sp, supply_bars=sp_bars, can_ask_fetch=can(AI_MENU, "create"), forecast=fc, bars=bars, queue=ai.queue_load(branch), advice=advice,
+                           alerts=alerts, configured=ai.ai_configured(), last=session.pop("ai_answer", None),
+                           recent=ai.recent_questions(branch, _user_id()), can_ask=can(AI_MENU, "create"),
+                           basis=min((f["basis"] for f in fc), default=0))

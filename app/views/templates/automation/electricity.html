@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% from "_macros.html" import page_head %}
+{% from "automation/_chart.html" import bar_chart, period_chips, key_box %}
+{% macro money(v) %}{{ "{:,.2f}".format(v) }}{% endmacro %}
+{% block content %}
+<div id="tab-electricity" class="auto-page">
+{{ page_head(t('tabElectric'), url_for('home.index', g='AT')) }}
+<div class="card gap"><p class="desc-text">{{ t('elDesc') }}</p></div>
+{{ key_box(new_key) }}
+{{ period_chips('automation.electricity', days, periods) }}
+<div class="auto-kpis">
+  <div class="card"><p class="card-title">{{ t('elUsed') }}</p><p class="kpi-value">{{ "{:,.1f}".format(kwh) }} kWh</p></div>
+  <div class="card"><p class="card-title">{{ t('elCost') }}</p><p class="kpi-value">{{ money(cost) }} THB</p></div>
+  <div class="card"><p class="card-title">{{ t('elPerKg') }}</p><p class="kpi-value">{{ '%.3f'|format(kwh_per_kg) if kwh_per_kg else '-' }}</p></div>
+</div>
+<div class="card mt14">
+  <p class="card-title sub">{{ t('elDaily') }}</p>
+  {{ bar_chart(bars, 'chart-kwh-daily', t('elDaily'), t('elUnitKwh')) }}
+</div>
+
+<div class="card mt14">
+  <p class="card-title sub">{{ t('elMeters') }}</p>
+  <div class="inv-table-wrap"><table class="tv-table" id="meter-table">
+    <thead><tr><th>{{ t('elMeter') }}</th><th class="num">{{ t('elLastReading') }}</th><th class="num">{{ t('elPeriodKwh') }}</th></tr></thead>
+    <tbody>{% for m in meters %}<tr><td>{{ m.METER_NAME }}<small class="inv-sub">{{ m.METER_ID }}{% if m.MACHINE_ID %} &middot; {{ m.MACHINE_ID }}{% endif %}{% if m.DEVICE_KEY_HASH %} &middot; {{ t('mcConnected') if m.online else t('mcNotConnected') }}{% endif %}</small></td>
+      <td class="num">{% if m.last %}{{ "{:,.1f}".format(m.last.READ_KWH) }}<small class="inv-sub">{{ fmt_datetime(m.last.READ_DATE) }}</small>{% else %}-{% endif %}</td>
+      <td class="num">{{ "{:,.1f}".format(m.period_kwh) }}</td></tr>
+    {% else %}<tr><td colspan="3" class="hint center">{{ t('elNoMeters') }}</td></tr>{% endfor %}</tbody>
+  </table></div>
+  {% if can_read and meters %}
+  <form method="post" class="inv-form mt14" id="reading-form" autocomplete="off">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="reading">
+    <p class="card-title sub">{{ t('elAddReading') }}</p>
+    <div class="two-col field-row">
+      <div><label class="field-label" for="rd-meter">{{ t('elMeter') }}</label><select id="rd-meter" name="METER_ID">{% for m in meters %}<option value="{{ m.METER_ID }}">{{ m.METER_ID }} · {{ m.METER_NAME }}</option>{% endfor %}</select></div>
+      <div><label class="field-label" for="rd-kwh">{{ t('elReadingKwh') }}</label><input type="number" id="rd-kwh" name="READ_KWH" min="0" step="0.1" required></div>
+    </div>
+    <div class="field-row"><label class="field-label" for="rd-date">{{ t('elReadTime') }}</label><input type="datetime-local" id="rd-date" name="READ_DATE" value="{{ now_input }}"></div>
+    <p class="cap-note">{{ t('elReadingNote') }}</p>
+    <button class="action primary full" type="submit" id="reading-save">{{ t('btnSave') }}</button>
+  </form>
+  {% endif %}
+</div>
+
+<div class="card mt14">
+  <p class="card-title sub">{{ t('elReadings') }}</p>
+  <div class="inv-table-wrap"><table class="tv-table" id="reading-table">
+    <thead><tr><th>{{ t('colTime') }}</th><th>{{ t('elMeter') }}</th><th class="num">{{ t('elReadingKwh') }}</th><th class="num">{{ t('elUsedKwh') }}</th></tr></thead>
+    <tbody>{% for r in readings %}<tr><td class="nowrap">{{ fmt_datetime(r.READ_DATE) }}</td><td>{{ r.METER_ID }}<small class="inv-sub">{{ t('mcSrcDevice') if r.SOURCE == 'DEVICE' else r.OPE_USER }}</small></td>
+      <td class="num">{{ "{:,.1f}".format(r.READ_KWH) }}</td><td class="num">{{ "{:,.1f}".format(r.USED_KWH) }}</td></tr>
+    {% else %}<tr><td colspan="4" class="hint center">{{ t('autoNoData') }}</td></tr>{% endfor %}</tbody>
+  </table></div>
+</div>
+
+<div class="card mt14">
+  <p class="card-title sub">{{ t('elRateTitle') }}</p>
+  <form method="post" class="od-inline" id="rate-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="rate">
+    <input type="number" name="SYSP_ELEC_RATE" value="{{ rate|plain }}" min="0" step="0.0001" aria-label="{{ t('elRateTitle') }}" {% if not can_rate %}disabled{% endif %}>
+    {% if can_rate %}<button class="action" type="submit">{{ t('btnSave') }}</button>{% endif %}
+  </form>
+  {% if can_post %}
+  <form method="post" class="od-inline mt14" id="post-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="post">
+    <select name="MONTH" aria-label="{{ t('elPostTitle') }}">{% for m in months %}<option value="{{ m }}">{{ m[5:] }}/{{ m[:4] }}</option>{% endfor %}</select>
+    <button class="action" type="submit" data-confirm="{{ t('confirmElecPost') }}">{{ t('elPostTitle') }}</button>
+  </form>
+  <p class="cap-note">{{ t('elPostNote') }}{% if can('FN_ACCOUNT') %} <a href="{{ url_for('finance.account', f='expense') }}">{{ t('tabAccount') }} &rarr;</a>{% endif %}</p>
+  {% endif %}
+</div>
+
+{% if can_setup %}
+<details class="card mt14 setup-box" id="meter-setup"{% if setup %} open{% endif %}>
+  <summary class="card-title sub">{{ t('elSetup') }}</summary>
+  <form method="post" class="inv-form mt6" id="meter-form" autocomplete="off">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="meter">
+    <input type="hidden" name="mode" value="{{ 'edit' if edit else 'new' }}">
+    <div class="two-col field-row">
+      <div><label class="field-label" for="mt-id">{{ t('elMeterId') }}</label><input type="text" id="mt-id" name="METER_ID" value="{{ edit.METER_ID if edit else '' }}" maxlength="20" {% if edit %}readonly{% endif %} required placeholder="F2-DRYER"></div>
+      <div><label class="field-label" for="mt-name">{{ t('elMeterName') }}</label><input type="text" id="mt-name" name="METER_NAME" value="{{ edit.METER_NAME if edit else '' }}" maxlength="100" required></div>
+    </div>
+    <div class="field-row"><label class="field-label" for="mt-machine">{{ t('elMeterMachine') }}</label><select id="mt-machine" name="MACHINE_ID">
+      <option value="">-</option>{% for mc in machines %}<option value="{{ mc.MACHINE_ID }}"{% if edit and edit.MACHINE_ID == mc.MACHINE_ID %} selected{% endif %}>{{ mc.MACHINE_ID }} · {{ mc.MACHINE_NAME }}</option>{% endfor %}</select></div>
+    <div class="btn-pair">
+      {% if edit %}<a class="action" href="{{ url_for('automation.electricity', setup=1) }}">{{ t('btnCancel') }}</a>{% endif %}
+      <button class="action primary" type="submit">{{ t('btnSave') }}</button>
+    </div>
+  </form>
+  <div class="inv-table-wrap mt14"><table class="tv-table">
+    <thead><tr><th>{{ t('elMeterId') }}</th><th>{{ t('elMeterName') }}</th><th>{{ t('mcDeviceKey') }}</th><th></th></tr></thead>
+    <tbody>{% for m in meters %}<tr><td>{{ m.METER_ID }}</td><td>{{ m.METER_NAME }}</td><td>{{ t('mcKeySet') if m.DEVICE_KEY_HASH else '-' }}</td>
+      <td class="nowrap"><a href="{{ url_for('automation.electricity', edit=m.METER_ID) }}">{{ t('btnEdit') }}</a> &middot;
+        <form method="post" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="key"><input type="hidden" name="METER_ID" value="{{ m.METER_ID }}">
+        <button type="submit" class="link-btn" data-confirm="{{ t('confirmNewKey', id=m.METER_ID) }}">{{ t('mcNewKey') }}</button></form></td></tr>{% endfor %}</tbody>
+  </table></div>
+  <p class="cap-note">{{ t('elApiNote') }}</p>
+</details>
+{% endif %}
+</div>
+{% endblock %}

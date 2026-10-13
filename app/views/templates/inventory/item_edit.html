@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block content %}
+<div id="tab-inventory-form">
+<a class="back-btn" href="{{ url_for('inventory.item_list') }}">&larr; <span>{{ t('tabInventoryList') }}</span></a>
+<p class="tv-section-title plain" id="inv-form-title">{{ t('invFormEditTitle') }}</p>
+<div class="card mt14 order-details" id="inv-item" data-inv="{{ item.INV_ID }}">
+  <div class="od-row"><span class="od-label">{{ t('lblSkuName') }}</span><span class="od-value">{{ item.name }}</span></div>
+  <div class="od-row"><span class="od-label">{{ t('colLot') }}</span><span class="od-value">{{ item.SUB_1 or '-' }}</span></div>
+  <div class="od-row"><span class="od-label">{{ t('colStatus') }}</span><span class="od-value"><span class="badge {{ status_badge[item.INV_STATUS] }}">{{ t(inv_status_keys[item.INV_STATUS]) }}</span></span></div>
+  <div class="od-row"><span class="od-label">{{ t('invKeptFor') }}</span><span class="od-value">{{ item.kept_for or t('invOwnStock') }}</span></div>
+  <div class="od-row"><span class="od-label">{{ t('colOnHand') }}</span><span class="od-value" id="inv-item-total">{{ item.qty|num }} kg</span></div>
+  <p class="od-section">{{ t('lblLocations') }}</p>
+  <table class="rate-table" id="inv-form-loc-table">
+    <thead><tr><th>{{ t('lblLocation') }}</th><th class="num">{{ t('colOnHand') }}</th><th></th></tr></thead>
+    <tbody>
+    {% for r in item.locations %}
+      <tr><td>{{ r.LOC_ID }}</td><td class="num">{{ r.INV_QTY|num }}</td>
+        <td class="num">{% if can_edit %}<a class="inv-mini-link" href="{{ url_for('inventory.transfer', inv=r.INV_ID) }}">{{ t('btnTransfer') }}</a>{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if can_edit %}
+<div class="card mt14">
+  <form method="post" class="inv-form" id="inv-op-form" autocomplete="off">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="field-row">
+      <label class="field-label" for="inv-form-optype">{{ t('lblOperationType') }}</label>
+      <select id="inv-form-optype" name="OPE_TYPE" data-optype>
+        {% for c in ['AI', 'AD', 'I', 'O', 'ST'] %}<option value="{{ c }}"{% if values.get('OPE_TYPE') == c %} selected{% endif %}>{{ t(ope_keys[c]) }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="two-col field-row">
+      <div><label class="field-label" for="inv-op-rec">{{ t('lblLocation') }}</label>
+        <select id="inv-op-rec" name="REC_ID">
+          {% for r in item.locations %}<option value="{{ r.INV_ID }}"{% if values.get('REC_ID') == r.INV_ID %} selected{% endif %}>{{ r.LOC_ID }} ({{ r.INV_QTY|num }})</option>{% endfor %}
+        </select></div>
+      <div><label class="field-label" for="inv-op-qty">{{ t('colQty') }} (kg)</label>
+        <input type="number" id="inv-op-qty" name="INV_QTY" value="{{ values.get('INV_QTY', '') }}" min="0.001" step="0.001"></div>
+    </div>
+    <div class="field-row" data-op-show="increase">
+      <label class="field-label" for="inv-op-newloc">{{ t('invNewLocation') }}</label>
+      <input type="text" id="inv-op-newloc" name="LOC_ID" value="{{ values.get('LOC_ID', '') }}" placeholder="{{ t('invNewLocationPh') }}" pattern="[0-9]{2}-[0-9]{3}-[0-9]{3}" maxlength="10" inputmode="numeric">
+    </div>
+    <div class="field-row" data-op-show="status">
+      <label class="field-label" for="inv-op-status">{{ t('invNewStatus') }}</label>
+      <select id="inv-op-status" name="NEW_STATUS">
+        {% for c, key in inv_status_keys.items() %}{% if c != item.INV_STATUS %}<option value="{{ c }}">{{ t(key) }}</option>{% endif %}{% endfor %}
+      </select>
+    </div>
+    <div data-op-show="increase">{% with group='increase' %}{% include "inventory/_reason.html" %}{% endwith %}</div>
+    <div data-op-show="decrease">{% with group='decrease' %}{% include "inventory/_reason.html" %}{% endwith %}</div>
+    <div class="field-row inv-remark-row" hidden>
+      <label class="field-label" for="inv-op-remark">{{ t('lblRemark') }}</label>
+      <input type="text" id="inv-op-remark" name="REMARK" value="{{ values.get('REMARK', '') }}" maxlength="180" placeholder="{{ t('remarkPlaceholder') }}">
+    </div>
+    <p class="cap-note" data-op-show="status">{{ t('invStatusNote') }}</p>
+    <div class="btn-pair mt14">
+      <a class="action" href="{{ url_for('inventory.item_list') }}">{{ t('btnCancel') }}</a>
+      <button class="action primary" type="submit" id="inv-form-save">{{ t('btnSave') }}</button>
+    </div>
+  </form>
+</div>
+{% endif %}
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/inventory.js') }}" defer></script>{% endblock %}
