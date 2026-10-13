@@ -233,3 +233,32 @@
     if (formatted !== input.value) input.value = formatted;
   });
 })();
+
+/* Start milling (In process): the scanned QR must be this order's label. A handheld scanner types the code and
+   presses Enter, which would send the form; the check here stops a wrong bag before it reaches the server. */
+(function () {
+  document.addEventListener("submit", function (event) {
+    var form = event.target;
+    if (!form.classList || !form.classList.contains("scan-start-form")) return;
+    var input = form.querySelector('input[name="SCAN_QR"]');
+    var code = (input.value || "").replace(/\s+/g, "").toUpperCase();
+    var expect = input.getAttribute("data-expect").toUpperCase();
+    if (code !== expect && code !== expect.replace(/^AOI-/, "")) {
+      event.preventDefault();
+      input.setCustomValidity(input.getAttribute("data-wrong"));
+      input.reportValidity();
+      input.select();
+    }
+  }, true);
+  document.addEventListener("input", function (event) {
+    if (event.target.name === "SCAN_QR" && event.target.setCustomValidity) event.target.setCustomValidity("");
+  });
+  // the scanner's Enter goes on to the weight instead of sending the form
+  document.addEventListener("keydown", function (event) {
+    if (event.key !== "Enter" || event.target.name !== "SCAN_QR") return;
+    var kg = event.target.form && event.target.form.querySelector('input[name="ACT_PADDY"]');
+    if (!kg) return;
+    event.preventDefault();
+    kg.focus(); kg.select();
+  });
+})();

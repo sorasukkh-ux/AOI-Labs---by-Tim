@@ -7,6 +7,7 @@ SUBGROUP_LABELS = {"MILL": "subAdminMilling", "USER": "subAdminUser", "CUST": "s
 LABEL_KEYS = {
     "SV_SERVICE": "tabService", "SV_STATUS": "tabTV", "SV_PRICE": "tabCurrentPrice", "SV_MILLSTATUS": "tabUpdateStatus",
     "SV_BSSTATUS": "tabUpdateBuySellStatus", "SV_DASHBOARD": "tabServiceDashboard",
+    "SV_ANALYSIS": "tabMillAnalysis",
     "IV_LIST": "tabInventoryList", "IV_HISTORY": "tabInventoryHistory", "IV_DASHBOARD": "tabInventoryDashboard",
     "FN_PRICING": "tabPricing", "FN_MARGIN": "tabMargin", "FN_ACCOUNT": "tabAccount", "FN_MARKETING": "tabMarketing",
     "AD_MILLPROD": "tabMillingProduction", "AD_MILLTIME": "tabMillingTime", "AD_USER": "tabUser", "AD_ROLE": "tabRole",
@@ -15,7 +16,7 @@ LABEL_KEYS = {
 }
 ICONS = {
     "SV_SERVICE": "\U0001F9FE", "SV_STATUS": "\U0001F4FA", "SV_PRICE": "\U0001F4B0", "SV_MILLSTATUS": "\U0001F504",
-    "SV_BSSTATUS": "\U0001F6D2", "SV_DASHBOARD": "\U0001F4CA", "IV_LIST": "\U0001F4E6", "IV_HISTORY": "\U0001F4DC",
+    "SV_BSSTATUS": "\U0001F6D2", "SV_DASHBOARD": "\U0001F4CA", "SV_ANALYSIS": "\U0001F50E", "IV_LIST": "\U0001F4E6", "IV_HISTORY": "\U0001F4DC",
     "IV_DASHBOARD": "\U0001F4C8", "FN_PRICING": "\U0001F3F7", "FN_MARGIN": "\U0001F4D0", "FN_ACCOUNT": "\U0001F4D2",
     "FN_MARKETING": "\U0001F4E3", "AD_MILLPROD": "\U0001F3ED", "AD_MILLTIME": "⏱", "AD_USER": "\U0001F465",
     "AD_ROLE": "\U0001F510", "AD_CUSTOMER": "\U0001F464",

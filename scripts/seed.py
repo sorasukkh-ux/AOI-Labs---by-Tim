@@ -51,6 +51,7 @@ MENUS = [  # MENU_CODE, MENU_NAME, MENU_GROUP, MENU_SUBGROUP, MENU_SEQ
     ("SV_SERVICE", "Customer Service", "SV", "", 1), ("SV_STATUS", "Service Status", "SV", "", 2),
     ("SV_PRICE", "Current Price", "SV", "", 3), ("SV_MILLSTATUS", "Milling Order List", "SV", "", 4),
     ("SV_BSSTATUS", "Buying/Selling Order List", "SV", "", 5), ("SV_DASHBOARD", "Service Dashboard", "SV", "", 6),
+    ("SV_ANALYSIS", "Milling Analysis", "SV", "", 7),
     ("IV_LIST", "Inventory List", "IV", "", 1), ("IV_HISTORY", "Inventory Historical", "IV", "", 2),
     ("IV_DASHBOARD", "Inventory Dashboard", "IV", "", 3),
     ("FN_PRICING", "Pricing Maintenance", "FN", "", 1), ("FN_MARGIN", "Margin Maintenance", "FN", "", 2),
@@ -68,14 +69,14 @@ ROLES = [("ADMIN", "Administrator", "Full access to every screen"),
 # v = view, c = create, e = edit, d = delete/cancel, a = approve. ADMIN needs no rows: it always has full access.
 ROLE_AUTH = {
     "MANAGER": {"SV_SERVICE": "vced", "SV_STATUS": "v", "SV_PRICE": "v", "SV_MILLSTATUS": "veda", "SV_BSSTATUS": "vea",
-                "SV_DASHBOARD": "v", "IV_LIST": "vced", "IV_HISTORY": "v", "IV_DASHBOARD": "v", "FN_PRICING": "vea",
+                "SV_DASHBOARD": "v", "SV_ANALYSIS": "v", "IV_LIST": "vced", "IV_HISTORY": "v", "IV_DASHBOARD": "v", "FN_PRICING": "vea",
                 "FN_MARGIN": "ve", "FN_ACCOUNT": "v", "FN_MARKETING": "ve", "AD_CUSTOMER": "vced", "AD_MILLTIME": "ve",
                 "AD_MILLPROD": "ve", "AD_USER": "v", "AT_AI": "vc", "AT_HARDWARE": "vcea", "AT_ELECTRIC": "vcea",
                 "AT_MACHINE": "v"},
     "OPERATOR": {"SV_SERVICE": "vce", "SV_STATUS": "v", "SV_PRICE": "v", "SV_MILLSTATUS": "ve", "SV_BSSTATUS": "ve",
                  "IV_LIST": "vce", "IV_HISTORY": "v", "AD_CUSTOMER": "vce", "AT_HARDWARE": "ve", "AT_ELECTRIC": "vc",
                  "AT_MACHINE": "v"},
-    "ACCOUNT": {"SV_PRICE": "v", "SV_BSSTATUS": "ve", "SV_DASHBOARD": "v", "IV_DASHBOARD": "v", "FN_PRICING": "v",
+    "ACCOUNT": {"SV_PRICE": "v", "SV_BSSTATUS": "ve", "SV_DASHBOARD": "v", "SV_ANALYSIS": "v", "IV_DASHBOARD": "v", "FN_PRICING": "v",
                 "FN_MARGIN": "v", "FN_ACCOUNT": "vced", "FN_MARKETING": "v", "AT_AI": "v", "AT_ELECTRIC": "va",
                 "AT_MACHINE": "v"},
 }
@@ -200,6 +201,11 @@ def seed(log=print, reset=False):
     for code, name, mobile, line_id, address, distance in CUSTOMERS:
         add("AOIMS_CUSTOMER", {"CUST_CODE": code}, {"CUST_NAME": name, "MOBILE_NO": mobile, "LINE_ID": line_id,
                                                     "ADDRESS": address, "DISTANCE_KM": distance})
+    # update 22: the status timeline of orders made before it, from their AOILOG_ORDMILLING snapshots (once)
+    from app.models import mill_event
+    rebuilt = mill_event.backfill()
+    if rebuilt:
+        log("Status timeline rebuilt for %d earlier milling order(s)" % rebuilt)
     if added:
         log("Seed data added: " + ", ".join("%s %d" % item for item in sorted(added.items())))
     else:

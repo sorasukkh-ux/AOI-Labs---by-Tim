@@ -11,6 +11,7 @@ MENU_ENDPOINTS = {
     "SV_STATUS": "service_info.tv",
     "SV_PRICE": "service_info.current_price",
     "SV_DASHBOARD": "service_info.dashboard",
+    "SV_ANALYSIS": "service_info.analysis",
     "SV_BSSTATUS": "service_buysell.order_list",
     "IV_LIST": "inventory.item_list",
     "IV_HISTORY": "inventory.history",

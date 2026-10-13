@@ -10,7 +10,7 @@ from ..models.buysell_order import BuySellOrder
 from ..models.customer import Customer
 from ..models.inventory import Inventory, lot_of
 from ..models.mill_yield import MillYield
-from ..models import notify
+from ..models import notify, mill_event
 from ..models.milling_order import MillingOrder, PRIORITIES
 from ..models.rules import status_flow as flow
 from ..security import can, current_user, operating_branch, require
@@ -201,6 +201,7 @@ def _decorate(orders, details=False):
         if order["MILL_STATUS"] == flow.DELIVERY:
             order["arrival_input"] = input_local_datetime(order.get("DELIVERY_ARRIVAL_TIME")) or default_arrival(order["BRANCH_ID"])
         if details:
+            order["events"] = mill_event.for_order(order["ORD_ID"])
             order["linked"] = BuySellOrder.for_milling(order["ORD_ID"])
             order["stock"] = Inventory.for_order(order["BRANCH_ID"], order["ORD_ID"])
     return orders

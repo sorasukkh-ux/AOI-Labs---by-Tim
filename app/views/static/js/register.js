@@ -122,9 +122,9 @@
         byId("reg-sku-bran").textContent = q.take.bran.toFixed(2) + " kg";       // what the customer takes home
         byId("reg-sku-broken").textContent = q.take.broken.toFixed(2) + " kg";
         byId("reg-sku-husk").textContent = q.outputs.husk.toFixed(2) + " kg";
-        byId("reg-qr-preview-wrap").hidden = q.is_delivery;                       // the label is for take-away orders
-        confirmBtn.textContent = q.is_delivery ? text.btnConfirmOrder : text.btnPrintQR;
-        if (!q.is_delivery && window.AOILabel) window.AOILabel.render(byId("reg-qr-label"), q.label);
+        byId("reg-qr-preview-wrap").hidden = false;     // every order gets the label: it goes on the paddy (delivery too)
+        confirmBtn.textContent = text.btnPrintQR;
+        if (window.AOILabel) window.AOILabel.render(byId("reg-qr-label"), q.label);
         panel.hidden = false; panel.classList.remove("stale"); staleNote.hidden = true; confirmBtn.disabled = false; reviewed = true;
         panel.scrollIntoView({ block: "nearest" });
       })
@@ -139,7 +139,7 @@
     });
   }
   function printThenAsk(result) {
-    if (result.is_delivery || !window.AOILabel) return askNext(result);       // delivery orders have no label
+    if (!window.AOILabel) return askNext(result);
     window.AOILabel.render(byId("reg-qr-label"), result.label);              // the real queue number, not the preview
     var asked = false;
     var after = function () { if (!asked) { asked = true; askNext(result); } };

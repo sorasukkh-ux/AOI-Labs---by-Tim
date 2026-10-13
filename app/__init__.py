@@ -68,6 +68,14 @@ def create_app(overrides=None):
         except (TypeError, ValueError):
             return ""
 
+    @app.template_filter("duration")
+    def duration_filter(minutes):
+        """Minutes as '45 min' or '2 h 05 min' (the timeline and the analysis)."""
+        if minutes is None:
+            return "-"
+        total = int(round(float(minutes)))
+        return "%d min" % total if total < 60 else "%d h %02d min" % (total // 60, total % 60)
+
     @app.template_filter("plain")
     def plain_number(value):
         """50.0 -> 50, 0.273 -> 0.273 (for number fields); text such as a re-shown form value passes through."""

@@ -4,7 +4,6 @@
 <div class="card" id="order-detail" data-order="{{ order.ORD_ID }}">
   {% include "service/_order_details.html" %}
 </div>
-{% if order.ORDER_TYPE == 'T' %}
 <div class="card mt14">
   <div class="qr-preview-wrap mt6">
     <p>{{ t('qrPreviewLabel') }}</p>
@@ -15,5 +14,4 @@
     <a class="action" href="{{ url_for('service_milling.new_order') }}">{{ t('tabService') }}</a>
   </div>
 </div>
-{% endif %}
 {% endblock %}

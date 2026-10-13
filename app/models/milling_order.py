@@ -2,6 +2,7 @@
 
 Every change is also written to AOILOG_ORDMILLING.
 """
+import re
 from .account import Account
 from .buysell_order import BuySellOrder
 from .inventory import Inventory, MOVE_MILL, MOVE_MILL_PICKUP, lot_of
@@ -12,6 +13,7 @@ from .customer import Customer
 from .mill_yield import MillYield
 from .price import Price, Promotion, MAT_BRAN
 from . import variety as var
+from . import mill_event
 from .rules import charges as charge_rule
 from .rules import receive_time, status_flow as flow, yield_rule
 from ..timeutil import now_local, now_utc, parse_local_datetime, to_local, today_local
@@ -176,6 +178,7 @@ class MillingOrder:
             "EST_PAY_BROKE": charges["broken"]["amount"], "EST_PAY_DELIVERY": charges["delivery"]["amount"],
             "DELIVERY_ADDRESS": data["address"], "DELIVERY_DISTANCE": data["distance"],
             "REMARK": data["remark"], "REF_QR_PRINT": None, "REF_BUYING_ORDER": None, "REF_INV_LOC": None,
+            "SCAN_DATE": None, "ACT_PADDY": None, "ACT_RICE": None,
         }
         order.update(audit_new(ope_user))
         try:
@@ -187,7 +190,9 @@ class MillingOrder:
         if linked:
             col(cls.COL).update_one({"ORD_ID": order["ORD_ID"]}, {"$set": {"REF_BUYING_ORDER": ",".join(linked)}})
         cls._log(order["ORD_ID"])
-        return cls.find(order["ORD_ID"]), quote
+        saved = cls.find(order["ORD_ID"])
+        mill_event.record(saved, "", ope_user, when=saved["REGIST_DATE"])
+        return saved, quote
 
     # ---------- changes ----------
     @classmethod
@@ -202,7 +207,29 @@ class MillingOrder:
         values.update(audit_update(ope_user))
         col(cls.COL).update_one({"ORD_ID": order["ORD_ID"]}, {"$set": values})
         cls._log(order["ORD_ID"])
-        return cls.find(order["ORD_ID"])
+        saved = cls.find(order["ORD_ID"])
+        if saved["MILL_STATUS"] != order["MILL_STATUS"]:     # every status change is kept for the timeline / analysis
+            mill_event.record(saved, order["MILL_STATUS"], ope_user,
+                              reason=values.get("HOLD_REASON") if saved["MILL_STATUS"] == flow.HOLD else None,
+                              scanned="SCAN_DATE" in values)
+        return saved
+
+    @classmethod
+    def _scan(cls, order, form):
+        """In process: the operator scans the QR label on the paddy (the key between the order and the material)
+        and weighs the paddy. A label of another order is refused."""
+        code = re.sub(r"\s+", "", (form or {}).get("SCAN_QR") or "").upper()
+        if not code:
+            raise ValidationError("errScanRequired", id=order["QR_ID"])
+        if code not in ("AOI-" + order["ORD_ID"], order["ORD_ID"]):
+            raise ValidationError("errScanWrong", id=order["QR_ID"])
+        try:
+            paddy = to_number((form or {}).get("ACT_PADDY"), order["REGIST_PADDY"])
+        except ValueError:
+            raise ValidationError("errNumber")
+        if paddy is None or paddy <= 0:
+            raise ValidationError("alertEnterPaddy")
+        return {"SCAN_DATE": now_utc(), "ACT_PADDY": round_half_up(paddy, 3)}
 
     @classmethod
     def _open_order(cls, ord_id, branch_id):
@@ -238,10 +265,13 @@ class MillingOrder:
             values["HOLD_REASON"] = None                     # the reason belongs to the hold that ends now
             if new_status in (flow.QUEUE, flow.IN_PROCESS):
                 values["CANCEL_REQ_FLG"] = flow.REQ_NONE     # resumed: an approved cancellation is dropped
+        if new_status == flow.IN_PROCESS:
+            values.update(cls._scan(order, form))
         inbound = None
         if flow.needs_inbound(new_status):                   # checked before anything is saved
             inbound = Inventory.parse_inbound(form or {}, order["EXPCT_RICE"])
             values["REF_INV_LOC"] = inbound["loc"]
+            values["ACT_RICE"] = inbound["qty"]              # the rice actually received
         if inbound:
             Inventory.inbound(branch_id, var.code(order.get("RICE_VARIETY"), var.RICE), inbound, lot_of(order["ORD_ID"]), order["ORD_ID"], "ML", MOVE_MILL, ope_user)
         updated = cls._save(order, values, ope_user)

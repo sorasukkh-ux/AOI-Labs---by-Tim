@@ -134,3 +134,61 @@ def dashboard():
                        h_sell=total_sell / top * 94, h_buy=total_buy / top * 94,
                        sell_trend=_rate_points(recent(SELL)), buy_trend=_rate_points(recent(BUY)))
     return render_template("service/dashboard.html", **context)
+
+
+# ---------- Milling Analysis (update 22): the status timeline of the orders of a period ----------
+ANALYSIS = "SV_ANALYSIS"
+CSV_ORDER_COLS = ("ORD_ID", "QR_ID", "REGIST_DATE", "CUST_CODE", "CUST_NAME", "RICE_VARIETY", "ORDER_TYPE", "MILL_STATUS",
+                  "REGIST_PADDY", "ACT_PADDY", "EXPCT_RICE", "ACT_RICE", "YIELD_PCT", "EXPECTED_PCT", "QR_SCANNED",
+                  "WAIT_MIN", "MILLING_MIN", "HOLD_COUNT", "HOLD_MIN", "READY_MIN", "PICKUP_MIN")
+CSV_EVENT_COLS = ("EVENT_ID", "ORD_ID", "QR_ID", "EVENT_DATE", "CUST_CODE", "RICE_VARIETY", "ORDER_TYPE", "FROM_STATUS",
+                  "TO_STATUS", "MINUTES_IN_FROM", "REASON", "SCAN_FLG", "REGIST_PADDY", "ACT_PADDY", "ACT_RICE", "OPE_USER", "SOURCE")
+
+
+def _csv(name, header, rows):
+    import csv
+    import io
+    from flask import Response
+    out = io.StringIO()
+    out.write("﻿")                                   # Excel opens Thai text correctly with the BOM
+    writer = csv.writer(out)
+    writer.writerow(header)
+    writer.writerows(rows)
+    return Response(out.getvalue(), mimetype="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": "attachment; filename=%s" % name})
+
+
+@bp.route("/analysis")
+@require(ANALYSIS)
+def analysis():
+    from ..models import mill_analysis as ma
+    from ..models import variety as var
+    branch = operating_branch()
+    start, end = ma.period(request.args.get("start"), request.args.get("end"))
+    variety = request.args.get("variety") if request.args.get("variety") in var.VARIETIES else None
+    result = ma.analyse(branch, start, end, variety)
+    names = {}
+
+    def cust_name(code):
+        if code not in names:
+            names[code] = (Customer.find(code) or {}).get("CUST_NAME", code)
+        return names[code]
+    stamp = "%s_%s_%s" % (branch, start.isoformat(), end.isoformat())
+    kind = request.args.get("csv")
+    if kind == "orders":
+        def local(value):
+            return to_local(value).strftime("%Y-%m-%d %H:%M") if value else ""
+        rows = [(r["ord_id"], r["qr"], local(r["regist"]), r["cust"], cust_name(r["cust"]), r["variety"], r["type"], r["status"],
+                 r["regist_paddy"], r["act_paddy"] or "", r["expct_rice"], r["act_rice"] or "", ma.pct(r["yield"]) or "",
+                 ma.pct(r["expected"]) or "", "Y" if r["scanned"] else "N", r["wait"] if r["wait"] is not None else "",
+                 r["milling"] if r["milling"] is not None else "", r["hold_count"], r["hold_min"],
+                 r["ready"] if r["ready"] is not None else "", r["pickup"] if r["pickup"] is not None else "")
+                for r in result["rows"]]
+        return _csv("milling_orders_%s.csv" % stamp, CSV_ORDER_COLS, rows)
+    if kind == "events":
+        events = ma.events_between(branch, start, end)
+        rows = [tuple((to_local(e[c]).strftime("%Y-%m-%d %H:%M:%S") if c == "EVENT_DATE" else
+                       ("" if e.get(c) is None else e.get(c))) for c in CSV_EVENT_COLS) for e in events]
+        return _csv("milling_status_events_%s.csv" % stamp, CSV_EVENT_COLS, rows)
+    return render_template("service/analysis.html", start=start, end=end, variety=variety, result=result,
+                           cust_name=cust_name, pct=ma.pct, branch_name=branch_label(branch))

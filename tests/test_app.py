@@ -110,6 +110,8 @@ class Base(unittest.TestCase):
             data["LOC_ID"] = "01-001-001"
         if status == "H":
             data["HOLD_REASON"] = "Machine check"
+        if status == "I":
+            data["SCAN_QR"] = "AOI-" + ord_id                # the QR label on the paddy (update 22)
         data.update(fields)
         return self.post("/service/milling/%s/status" % ord_id, data)
 
@@ -294,7 +296,7 @@ class Administration(Base):
         rows = {r["MENU_CODE"]: r for r in self.db("AOIMS_ROLEAUTH") if r["ROLE_CODE"] == "SUPERVISOR"}
         self.assertTrue(rows["SV_SERVICE"]["CAN_VIEW"] and rows["SV_SERVICE"]["CAN_CREATE"])
         self.assertFalse(rows["AD_USER"]["CAN_EDIT"])                    # dropped: the screen cannot be viewed
-        self.assertEqual(len(rows), 22)                                  # one row per menu (4 Automation menus in update 9)
+        self.assertEqual(len(rows), 23)                                  # one row per menu (Milling Analysis in update 22)
         self.assertIn("already exists", self.post("/admin/roles/save", data, "/admin/roles/").get_data(as_text=True))
 
     def test_role_in_use_cannot_be_made_inactive_and_admin_stays_full(self):
@@ -1011,7 +1013,7 @@ class Update7(Base):
 
     def test_customer_stock_shows_who_it_is_kept_for(self):
         order = self.new_order()
-        self.post("/service/milling/%s/status" % order["ORD_ID"], {"new_status": "I"})
+        self.set_status(order["ORD_ID"], "I")
         self.post("/service/milling/%s/status" % order["ORD_ID"], {"new_status": "F", "LOC_ID": "01-002-005"})
         page = self.text("/inventory/")
         self.assertIn("Kept for: Milling #0001", page)
@@ -1120,7 +1122,7 @@ class Update8(Base):
         self.assertEqual(len(self.db("AOITS_ACCOUNT")), 1)
         order = self.new_order()
         for status in ("I", "F", "C"):
-            self.post("/service/milling/%s/status" % order["ORD_ID"], {"new_status": status, "LOC_ID": "01-001-001"})
+            self.set_status(order["ORD_ID"], status)
         page = self.text("/finance/account")
         self.assertIn("-1,250.50", page)
         self.assertIn("+12.00", page)
@@ -1146,7 +1148,7 @@ class Update8(Base):
 
     def test_service_status_price_and_dashboard(self):
         a, b = self.new_order(), self.new_order(MILL_PRIORITY="U")
-        self.post("/service/milling/%s/status" % a["ORD_ID"], {"new_status": "I"})
+        self.set_status(a["ORD_ID"], "I")
         tv = self.text("/service/status")
         self.assertIn('data-auto-refresh="30"', tv)
         self.assertLess(tv.index("In process"), tv.index("Queue"))
@@ -1984,6 +1986,113 @@ class Update21(Base):
         with mock.patch("app.models.notify.queue", side_effect=RuntimeError("down")):
             self.set_status(ord_id, "F")
         self.assertEqual(self.order(ord_id)["MILL_STATUS"], "F")
+
+
+class Update22(Base):
+    """QR label as the key (delivery too), scan + weigh to start milling, status timeline and Milling Analysis."""
+    def setUp(self):
+        super().setUp()
+        self.login("admin")
+        self.client.get("/lang/en")
+
+    def events(self, ord_id):
+        return sorted((e for e in self.db("AOILOG_MILLSTATUS") if e["ORD_ID"] == ord_id), key=lambda e: e["EVENT_SEQ"])
+
+    def test_delivery_orders_print_the_label_too(self):
+        page = self.text("/service/milling/" + self.new_order(ORDER_TYPE="D")["ORD_ID"])
+        self.assertIn('id="qr-label"', page)
+        self.assertIn('id="print-label-btn"', page)
+
+    def test_milling_starts_only_with_this_orders_qr(self):
+        a, b = self.new_order(ORDER_TYPE="D"), self.new_order()
+        self.assertIn('data-form="start-%s"' % a["ORD_ID"], self.text("/service/milling/"))
+        self.set_status(a["ORD_ID"], "I", SCAN_QR="")
+        self.assertEqual(self.order(a["ORD_ID"])["MILL_STATUS"], "Q")
+        self.set_status(a["ORD_ID"], "I", SCAN_QR="AOI-" + b["ORD_ID"])            # the label of another bag
+        self.assertEqual(self.order(a["ORD_ID"])["MILL_STATUS"], "Q")
+        self.set_status(a["ORD_ID"], "I", SCAN_QR=" aoi-" + a["ORD_ID"].lower(), ACT_PADDY="31.5")
+        saved = self.order(a["ORD_ID"])
+        self.assertEqual((saved["MILL_STATUS"], saved["ACT_PADDY"]), ("I", 31.5))
+        self.assertIsNotNone(saved["SCAN_DATE"])
+        self.set_status(a["ORD_ID"], "F", INV_QTY="16.2")
+        self.assertEqual(self.order(a["ORD_ID"])["ACT_RICE"], 16.2)
+
+    def test_every_status_change_is_tracked(self):
+        ord_id = self.new_order()["ORD_ID"]
+        self.set_status(ord_id, "I")
+        self.set_status(ord_id, "H", HOLD_REASON="Belt broken")
+        self.set_status(ord_id, "I", ACT_PADDY="32")
+        self.set_status(ord_id, "F", INV_QTY="16.5")
+        self.set_status(ord_id, "C")
+        events = self.events(ord_id)
+        self.assertEqual([(e["FROM_STATUS"], e["TO_STATUS"]) for e in events],
+                         [("", "Q"), ("Q", "I"), ("I", "H"), ("H", "I"), ("I", "F"), ("F", "C")])
+        self.assertEqual(events[2]["REASON"], "Belt broken")
+        self.assertTrue(events[1]["SCAN_FLG"] and events[3]["SCAN_FLG"])
+        self.assertEqual((events[3]["ACT_PADDY"], events[4]["ACT_RICE"]), (32.0, 16.5))
+        self.assertIsNone(events[0]["MINUTES_IN_FROM"])
+        self.assertTrue(all(e["MINUTES_IN_FROM"] is not None for e in events[1:]))
+        self.assertTrue(all(e["OPE_USER"] == "admin" and e["CUST_CODE"] == "C261001001" for e in events))
+        self.post("/service/milling/%s/priority" % ord_id, {"priority": "H"})    # not a status change: nothing new
+        self.assertEqual(len(self.events(ord_id)), 6)
+        page = self.text("/service/milling/%s?popup=1" % ord_id)
+        self.assertIn('id="od-timeline"', page)
+        self.assertIn("Belt broken", page)
+        self.assertIn("Rice received", page)
+
+    def test_cancel_approval_and_pickup_change_are_tracked(self):
+        ord_id = self.new_order()["ORD_ID"]
+        self.post("/service/milling/%s/cancel-request" % ord_id)
+        self.post("/service/milling/%s/cancel-answer" % ord_id, {"answer": "approve", "reason": "Customer changed mind"})
+        self.post("/service/milling/%s/status" % ord_id, {"new_status": "CC"})
+        self.assertEqual([e["TO_STATUS"] for e in self.events(ord_id)], ["Q", "H", "CC"])
+        self.assertEqual(self.events(ord_id)[1]["REASON"], "Customer changed mind")
+
+    def test_backfill_from_the_old_snapshots(self):
+        ord_id = self.new_order()["ORD_ID"]
+        self.set_status(ord_id, "I")
+        self.set_status(ord_id, "H")
+        with self.app.app_context():
+            from app.models import mill_event
+            col("AOILOG_MILLSTATUS").delete_many({})              # an order made before update 22
+            self.assertEqual(mill_event.backfill(), 1)
+            self.assertEqual(mill_event.backfill(), 0)            # once only
+        events = self.events(ord_id)
+        self.assertEqual([e["TO_STATUS"] for e in events], ["Q", "I", "H"])
+        self.assertEqual({e["SOURCE"] for e in events}, {"BACKFILL"})
+        self.assertEqual(events[2]["REASON"], "Machine check")
+
+    def test_milling_analysis_and_csv(self):
+        a = self.new_order(RICE_VARIETY="HM", REGIST_PADDY="100")["ORD_ID"]
+        b = self.new_order(RICE_VARIETY="WH", REGIST_PADDY="50")["ORD_ID"]
+        self.set_status(a, "I", ACT_PADDY="98")
+        self.set_status(a, "F", INV_QTY="49")
+        self.set_status(b, "CC")
+        page = self.text("/service/analysis")
+        self.assertIn("Milling Analysis", page)
+        self.assertIn('id="ma-variety-table"', page)
+        self.assertIn("50.00%", page)                               # 49 kg rice / 98 kg weighed paddy
+        self.assertIn("อรุณ พงษ์ไพร", page)
+        with self.app.app_context():
+            from app.models import mill_analysis as ma
+            from app.timeutil import today_local
+            result = ma.analyse("factory2", today_local(), today_local())
+        self.assertEqual((result["total"]["orders"], result["total"]["done"], result["total"]["cancelled"]), (2, 1, 1))
+        self.assertEqual(result["total"]["scanned"], 1)
+        row = next(r for r in result["rows"] if r["ord_id"] == a)
+        self.assertAlmostEqual(row["yield"], 0.5)
+        self.assertIsNotNone(row["wait"])
+        self.assertEqual(self.text("/service/analysis?variety=GL").count("<tr><td>"), 0)
+        csv_orders = self.client.get("/service/analysis?csv=orders")
+        self.assertEqual(csv_orders.mimetype, "text/csv")
+        body = csv_orders.get_data(as_text=True)
+        self.assertTrue(body.startswith("\ufeffORD_ID,QR_ID"))
+        self.assertIn(a, body)
+        events = self.client.get("/service/analysis?csv=events").get_data(as_text=True)
+        self.assertEqual(events.count("EV-" + a), 3)               # Q, I, F
+        self.logout()
+        self.login("somchai.k", "factory1")                         # operators do not see the analysis
+        self.assertEqual(self.client.get("/service/analysis").status_code, 403)
 
 
 if __name__ == "__main__":

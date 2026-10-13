@@ -226,6 +226,19 @@ for testing; for TVs that run all day the system needs a permanent server.
 - Prices of the day at the bottom; the data refreshes every 15 seconds without reloading; the clock follows the
   server's time zone. Customer names show the first name and the surname's initial only (public screen).
 
+## QR label, scan to start, and the status timeline
+
+Every milling order (take-away and delivery) prints a QR label at registration; it goes on the customer's paddy
+and is the key between the order and the material. To set an order to **In process**, the operator scans that
+label (a handheld scanner types it; the code can also be typed: `AOI-ML-YYYYMMDD-NNNN`) and weighs the paddy.
+A label of another order is refused. The rice received at Finished is kept as the actual rice.
+
+Every status change is written to `AOILOG_MILLSTATUS` (from -> to, time, user, reason, QR scan, weights, minutes
+in the previous status) and shown as a timeline in the order details. **Service > Milling Analysis** shows, for a
+period, waiting and milling times, holds, cancellations and the real yield against the expected one, per rice
+variety and per customer, with CSV downloads (orders, and every status change). Orders made before this update
+get their timeline once from `AOILOG_ORDMILLING` when `start.sh` runs.
+
 ## LINE messages to customers
 
 When a take-away order is set to **Finished** the customer gets "your rice is ready"; for a delivery order the

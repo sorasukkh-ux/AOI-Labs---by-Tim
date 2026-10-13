@@ -102,7 +102,24 @@
   <div class="od-row od-part"><span class="od-label">{{ t('payDeliveryLabel') }}</span><span class="od-value">{{ order.EST_PAY_DELIVERY|num }} THB</span></div>
   {% endif %}
   <div class="od-row"><span class="od-label">{{ t('receiveTimeLabel') }}</span><span class="od-value">{{ fmt_datetime(order.EXPCT_RECEIVE_TIME) }}</span></div>
-  <div class="od-row"><span class="od-label">{{ t('detNotify') }}</span><span class="od-value">-</span></div>
+  <div class="od-row"><span class="od-label">{{ t('detNotify') }}</span><span class="od-value">{% if order.notify %}{{ t({'1': 'notifySentLabel', '9': 'notifyFailLabel'}.get(order.notify.NOTIFY_FLG, 'notifyWaitLabel')) }}{% else %}-{% endif %}</span></div>
+  {% if order.ACT_PADDY or order.ACT_RICE %}
+  <p class="od-section">{{ t('detSecActual') }}</p>
+  {% if order.ACT_PADDY %}<div class="od-row"><span class="od-label">{{ t('lblActPaddyShort') }}</span><span class="od-value">{{ order.ACT_PADDY|num }} kg{% if order.SCAN_DATE %} &middot; &#10003; QR {{ fmt_time(order.SCAN_DATE) }}{% endif %}</span></div>{% endif %}
+  {% if order.ACT_RICE %}<div class="od-row"><span class="od-label">{{ t('lblActRice') }}</span><span class="od-value">{{ order.ACT_RICE|num }} kg{% if order.ACT_PADDY %} &middot; {{ '%.2f'|format(order.ACT_RICE / order.ACT_PADDY * 100) }}%{% endif %}</span></div>{% endif %}
+  {% endif %}
+  {% if order.events %}
+  <p class="od-section">{{ t('detSecTimeline') }}</p>
+  <ol class="od-timeline" id="od-timeline">
+    {% for ev in order.events %}
+    <li class="tl-item tl-{{ status_class.get(ev.TO_STATUS, '') }}">
+      <span class="tl-time">{{ fmt_datetime(ev.EVENT_DATE) }}</span>
+      <span class="tl-what">{% if ev.FROM_STATUS %}{{ t(status_keys[ev.FROM_STATUS]) }} &rarr; {% endif %}<b>{{ t(status_keys[ev.TO_STATUS]) }}</b>{% if ev.SCAN_FLG %} &middot; &#10003; QR{% endif %}</span>
+      <span class="tl-sub">{% if ev.MINUTES_IN_FROM is not none %}{{ t('tlMinutesIn', min=ev.MINUTES_IN_FROM|duration) }} &middot; {% endif %}{{ ev.OPE_USER or '-' }}{% if ev.REASON %} &middot; {{ ev.REASON }}{% endif %}{% if ev.TO_STATUS == 'I' and ev.ACT_PADDY %} &middot; {{ ev.ACT_PADDY|num }} kg{% endif %}{% if ev.TO_STATUS == 'F' and ev.ACT_RICE %} &middot; {{ t('lblActRice') }} {{ ev.ACT_RICE|num }} kg{% endif %}</span>
+    </li>
+    {% endfor %}
+  </ol>
+  {% endif %}
   <div class="od-qr" data-qr="{{ label.qr }}"></div>
   {% if order.can_request_cancel and can_edit %}
   <form method="post" action="{{ url_for('service_milling.cancel_request', ord_id=order.ORD_ID) }}" class="od-actions">
