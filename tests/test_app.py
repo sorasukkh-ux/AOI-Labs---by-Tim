@@ -58,7 +58,8 @@ class Base(unittest.TestCase):
             patcher.start()
             self.addCleanup(patcher.stop)
         # ... and no LINE message leaves: not connected unless a test sets the token and fakes the push
-        for patcher in (mock.patch.dict(os.environ, {"AOI_LINE_CHANNEL_TOKEN": ""}),
+        for patcher in (mock.patch.dict(os.environ, {"AOI_LINE_CHANNEL_TOKEN": "", "AOI_LINE_CHANNEL_SECRET": "", "AOI_LINE_OA_ID": ""}),
+                        mock.patch("app.models.notify._post", return_value="offline in tests"),
                         mock.patch("app.models.notify._push", return_value="offline in tests")):
             patcher.start()
             self.addCleanup(patcher.stop)
@@ -2093,6 +2094,170 @@ class Update22(Base):
         self.logout()
         self.login("somchai.k", "factory1")                         # operators do not see the analysis
         self.assertEqual(self.client.get("/service/analysis").status_code, 403)
+
+
+class Update23(Base):
+    """Mobile country code (+66 default); Ready for Delivery pop-up confirms the time and sends LINE."""
+    USER = "U" + "0123456789abcdef" * 2
+
+    def setUp(self):
+        super().setUp()
+        self.login("admin")
+        self.client.get("/lang/en")
+
+    def customer(self, code="C261001001"):
+        return next(c for c in self.db("AOIMS_CUSTOMER") if c["CUST_CODE"] == code)
+
+    def test_mobile_country_code(self):
+        page = self.text("/admin/customers/C261001001")
+        self.assertIn('name="MOBILE_CC"', page)
+        self.assertIn('<option value="+66" selected>', page)
+        form = {"CUST_NAME": "อรุณ พงษ์ไพร", "MOBILE_NO": "09 123 4567", "ADDRESS": "45 หมู่ 2", "MOBILE_CC": "+95"}
+        self.post("/admin/customers/C261001001", form, "/admin/customers/C261001001")
+        self.assertEqual((self.customer()["MOBILE_CC"], self.customer()["MOBILE_NO"]), ("+95", "09 123 4567"))
+        self.post("/admin/customers/C261001001", dict(form, MOBILE_CC="+999"), "/admin/customers/C261001001")
+        self.assertEqual(self.customer()["MOBILE_CC"], "+66")                     # unknown code: Thailand
+        self.post("/admin/customers/C261001001", dict(form, MOBILE_NO="abc"), "/admin/customers/C261001001")
+        self.assertEqual(self.customer()["MOBILE_NO"], "09 123 4567")              # refused
+        self.assertIn("+66 9 123 4567", self.text("/admin/customers/"))
+        found = self.client.get("/service/milling/customers.json?q=6691234").get_json()
+        self.assertTrue(any(c["code"] == "C261001001" for c in found["customers"]))
+        from app.models import phone
+        self.assertEqual(phone.display("+66", "081-234-5678"), "+66 81-234-5678")
+        self.assertEqual(phone.display(None, ""), "")
+
+    def test_ready_for_delivery_popup_confirms_and_sends_line(self):
+        ord_id = self.new_order(ORDER_TYPE="D")["ORD_ID"]
+        for status in ("I", "F"):
+            self.set_status(ord_id, status)
+        page = self.text("/service/milling/")
+        self.assertIn('data-form="ready-%s"' % ord_id, page)
+        self.assertIn('name="DELIVERY_ARRIVAL_TIME"', page)
+        self.set_status(ord_id, "D", DELIVERY_ADDRESS="9 New Road", DELIVERY_DISTANCE="10", DELIVERY_ARRIVAL_TIME="")
+        self.assertEqual(self.order(ord_id)["MILL_STATUS"], "F")                    # no time: nothing changes
+        with self.app.app_context():
+            col("AOIMS_CUSTOMER").update_one({"CUST_CODE": "C261001001"}, {"$set": {"LINE_USER_ID": self.USER}})
+            col("AOIMS_SYSPARAM").update_one({"BRANCH_ID": "factory2"}, {"$set": {"SYSP_DELIVERYFEEKM": 5.0}})
+        with mock.patch.dict(os.environ, {"AOI_LINE_CHANNEL_TOKEN": "token"}), \
+                mock.patch("app.models.notify._push", return_value=None) as push:
+            response = self.set_status(ord_id, "D", DELIVERY_ADDRESS="9 New Road", DELIVERY_DISTANCE="10",
+                                       DELIVERY_ARRIVAL_TIME="2026-10-09T15:30")
+        saved = self.order(ord_id)
+        self.assertEqual((saved["MILL_STATUS"], saved["DELIVERY_CONFIRM_FLG"], saved["EST_PAY_DELIVERY"]), ("D", True, 50.0))
+        push.assert_called_once()
+        self.assertIn("15:30", push.call_args[0][1])
+        notices = self.text(response.headers["Location"])
+        self.assertIn("LINE message sent to the customer", notices)
+        self.assertIn("LINE Sent", notices)
+
+    def test_line_problem_is_told_to_the_operator(self):
+        ord_id = self.new_order()["ORD_ID"]
+        self.set_status(ord_id, "I")
+        response = self.set_status(ord_id, "F")
+        self.assertIn("The LINE message was not sent", self.text(response.headers["Location"]))
+
+
+class Update24(Base):
+    """LINE registration through the webhook: ticket QR or mobile number; reasons on the card; setup card."""
+    SECRET = "test-channel-secret"
+    USER = "U" + "fedcba9876543210" * 2
+
+    def setUp(self):
+        super().setUp()
+        self.login("admin")
+        self.client.get("/lang/en")
+        env = mock.patch.dict(os.environ, {"AOI_LINE_CHANNEL_TOKEN": "token", "AOI_LINE_CHANNEL_SECRET": self.SECRET,
+                                           "AOI_LINE_OA_ID": "@783ycdvd"})
+        env.start()
+        self.addCleanup(env.stop)
+        self.replies = []
+        post = mock.patch("app.models.notify._post", side_effect=lambda url, payload: self.replies.append(payload) or None)
+        post.start()
+        self.addCleanup(post.stop)
+
+    def call(self, events, secret=None):
+        import base64, hashlib, hmac as _hmac
+        body = json.dumps({"destination": "Uxxx", "events": events}).encode("utf-8")
+        sign = base64.b64encode(_hmac.new((secret or self.SECRET).encode(), body, hashlib.sha256).digest()).decode()
+        return self.app.test_client().post("/line/webhook", data=body, headers={"X-Line-Signature": sign, "Content-Type": "application/json"})
+
+    def text_event(self, text, user=None):
+        return {"type": "message", "replyToken": "r-%d" % len(self.replies), "source": {"type": "user", "userId": user or self.USER},
+                "message": {"type": "text", "id": "1", "text": text}}
+
+    def last_reply(self):
+        return self.replies[-1]["messages"][0]["text"]
+
+    def cust(self, code="C261001001"):
+        return next(c for c in self.db("AOIMS_CUSTOMER") if c["CUST_CODE"] == code)
+
+    def test_signature_is_required(self):
+        self.assertEqual(self.app.test_client().get("/line/webhook").status_code, 200)
+        self.assertEqual(self.call([], secret="wrong").status_code, 403)
+        self.assertEqual(self.call([]).status_code, 200)                       # LINE's Verify button
+        self.assertEqual(self.app.test_client().post("/line/webhook", data=b"{}").status_code, 403)
+
+    def test_follow_says_how_to_link(self):
+        self.call([{"type": "follow", "replyToken": "r", "source": {"type": "user", "userId": self.USER}}])
+        self.assertIn("QR LINE", self.last_reply())
+        self.assertEqual(self.replies[-1]["replyToken"], "r")
+        self.assertEqual(self.db("AOILOG_LINE")[-1]["RESULT"], "welcome")
+
+    def test_ticket_qr_links_and_resends_the_waiting_message(self):
+        order = self.new_order()
+        ord_id = order["ORD_ID"]
+        self.set_status(ord_id, "I")
+        self.set_status(ord_id, "F")                                           # not linked yet: lnNoUser
+        note = next(n for n in self.db("AOITS_NOTIFY") if n["ORD_ID"] == ord_id)
+        self.assertEqual(note["ERROR"], "lnNoUser")
+        page = self.text("/service/milling/")
+        self.assertIn("Customer not linked to LINE yet", page)                 # the reason is on the card
+        detail = self.text("/service/milling/" + ord_id)
+        self.assertIn("oaMessage/%40783ycdvd/?text=LINK%20" + ord_id, detail)  # the LINE QR on the label
+        with self.app.app_context():
+            from app.models import line_link
+            code = line_link.link_text(ord_id)
+        with mock.patch("app.models.notify._push", return_value=None) as push:
+            self.call([self.text_event(code + "  ")])
+        self.assertEqual(self.cust()["LINE_USER_ID"], self.USER)
+        self.assertIn("#" + order["QR_ID"], self.last_reply())
+        push.assert_called_once()                                              # the "rice ready" message went out
+        self.assertEqual(next(n for n in self.db("AOITS_NOTIFY") if n["ORD_ID"] == ord_id)["NOTIFY_FLG"], "1")
+        self.assertEqual(self.db("AOILOG_LINE")[-1]["RESULT"], "linked_ticket")
+
+    def test_a_guessed_ticket_is_refused(self):
+        ord_id = self.new_order()["ORD_ID"]
+        self.call([self.text_event("LINK %s-000000" % ord_id)])
+        self.assertFalse(self.cust().get("LINE_USER_ID"))
+        self.assertEqual(self.db("AOILOG_LINE")[-1]["RESULT"], "bad_ticket")
+
+    def test_mobile_number_links_once(self):
+        self.call([self.text_event("081-234-5678")])
+        self.assertEqual(self.cust()["LINE_USER_ID"], self.USER)
+        self.assertIn("✅", self.last_reply())
+        other = "U" + "1" * 32
+        self.call([self.text_event("+66812345678", user=other)])               # someone else with the same number
+        self.assertEqual(self.cust()["LINE_USER_ID"], self.USER)
+        self.assertEqual(self.db("AOILOG_LINE")[-1]["RESULT"], "phone_taken")
+        self.call([self.text_event("0899999999", user=other)])
+        self.assertEqual(self.db("AOILOG_LINE")[-1]["RESULT"], "phone_not_found")
+        self.call([self.text_event("hello", user=self.USER)])
+        self.assertEqual(self.db("AOILOG_LINE")[-1]["RESULT"], "help_linked")
+
+    def test_setup_card_and_poster(self):
+        page = self.text("/admin/milling/maintenance?branch=factory2")
+        self.assertIn('id="line-setup"', page)
+        self.assertIn('data-tv-path="/line/webhook"', page)
+        self.assertIn("@783ycdvd", page)
+        poster = self.text("/admin/milling/line-poster")
+        self.assertIn('data-qr="https://line.me/R/ti/p/%40783ycdvd"', poster)
+        self.assertIn("poster.js", poster)
+
+    def test_not_a_friend_reason(self):
+        from app.models import notify
+        self.assertEqual(notify.reason_key("HTTP 400 Failed to send messages"), "lnNotFriend")
+        self.assertEqual(notify.reason_key("timed out"), "lnApiError")
+        self.assertEqual(notify.reason_key("lnNoUser"), "lnNoUser")
 
 
 if __name__ == "__main__":

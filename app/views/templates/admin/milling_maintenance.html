@@ -106,5 +106,30 @@
     <button class="action" type="submit" id="tv-key-btn" data-confirm="{{ t('tvConfirmIssue', branch=branch_label(branch)) }}">{{ t('tvIssue') }}</button></form>
   {% endif %}
 </div>
+
+<div class="card mt14" id="line-setup">
+  <p class="card-title sub">&#128172; {{ t('lnCardTitle') }}</p>
+  <p class="cap-note tight">{{ t('lnCardNote') }}</p>
+  <table class="tv-table ln-check">
+    <tbody>
+      <tr><td>{{ t('lnChkToken') }}</td><td class="{{ 'ok' if line.token else 'bad' }}">{{ '&#9989; '|safe ~ t('lnOk') if line.token else '&#10060; '|safe ~ t('lnMissing') }}</td></tr>
+      <tr><td>{{ t('lnChkSecret') }}</td><td class="{{ 'ok' if line.secret else 'bad' }}">{{ '&#9989; '|safe ~ t('lnOk') if line.secret else '&#10060; '|safe ~ t('lnMissing') }}</td></tr>
+      <tr><td>{{ t('lnChkOa') }}</td><td class="{{ 'ok' if line.oa else 'bad' }}">{% if line.oa %}&#9989; {{ line.oa }}{% else %}&#10060; {{ t('lnMissing') }}{% endif %}</td></tr>
+      <tr><td>{{ t('lnChkLinked') }}</td><td>{{ line.linked }}</td></tr>
+    </tbody>
+  </table>
+  <label class="field-label mt10" for="line-webhook">{{ t('lnWebhookUrl') }}</label>
+  <input type="text" id="line-webhook" class="mono" readonly value="{{ webhook_path }}" data-tv-path="{{ webhook_path }}">
+  {% if line.friend_url %}
+  <p class="mt10"><a class="action" id="line-poster-btn" href="{{ url_for('admin_milling.line_poster') }}" target="_blank" rel="noopener">{{ t('lnPrintPoster') }} &rarr;</a></p>
+  {% endif %}
+  {% if line_events %}
+  <p class="card-title sub mt14">{{ t('lnRecent') }}</p>
+  <div class="inv-table-wrap"><table class="tv-table" id="line-events">
+    <thead><tr><th>{{ t('colTime') }}</th><th>{{ t('lnColEvent') }}</th><th>{{ t('lnColText') }}</th><th>{{ t('lnColResult') }}</th></tr></thead>
+    <tbody>{% for ev in line_events %}<tr><td class="nowrap">{{ fmt_datetime(ev.LOG_DATE) }}</td><td>{{ ev.EVENT_TYPE }}</td><td>{{ ev.TEXT or '-' }}</td><td>{{ ev.RESULT }}{% if ev.CUST_CODE %} &middot; {{ ev.CUST_CODE }}{% endif %}</td></tr>{% endfor %}</tbody>
+  </table></div>
+  {% endif %}
+</div>
 </div>
 {% endblock %}

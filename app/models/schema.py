@@ -1,4 +1,4 @@
-"""Every collection of AOI DB Structure 1.28 and its indexes.
+"""Every collection of AOI DB Structure 1.30 and its indexes.
 
 MongoDB creates a collection the first time a record is written, so "creating the tables" means
 creating the indexes below. Unique indexes are the primary keys of the DB structure.
@@ -30,6 +30,7 @@ COLLECTIONS = {
     # ---- logs ----
     "AOILOG_ONHAND": [(["INV_ID", "LOG_DATE"], False)],
     "AOILOG_ORDMILLING": [(["ORD_ID", "LOG_DATE"], False)],
+    "AOILOG_LINE": [(["LOG_ID"], True), (["LOG_DATE"], False), (["LINE_USER_ID"], False)],
     "AOILOG_MILLSTATUS": [(["EVENT_ID"], True), (["ORD_ID", "EVENT_DATE"], False), (["BRANCH_ID", "EVENT_DATE"], False)],
     "AOILOG_ORDBUYSELL": [(["ORD_ID", "LOG_DATE"], False)],
     "AOILOG_PRICE": [(["BRANCH_ID", "MAT_CODE", "LOG_DATE"], False)],

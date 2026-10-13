@@ -2,6 +2,7 @@
 import re
 from .base import col, NO_ID, ValidationError, audit_new, audit_update, clean_text, to_number, round_half_up, DuplicateKey
 from .counter import Counter
+from . import phone
 from ..timeutil import now_local
 
 
@@ -20,8 +21,10 @@ class Customer:
         out = []
         for c in col(cls.COL).find({}, NO_ID).sort([("CUST_NAME", 1)]):
             mobile_digits = "".join(ch for ch in (c.get("MOBILE_NO") or "") if ch.isdigit())
+            # also the international form: +66 81 234 5678 finds 081-234-5678
+            full = (c.get("MOBILE_CC") or phone.DEFAULT).lstrip("+") + (mobile_digits[1:] if mobile_digits.startswith("0") else mobile_digits)
             text = " ".join([c["CUST_CODE"], c.get("CUST_NAME") or "", c.get("MOBILE_NO") or ""]).lower()
-            if not query or query in text or (len(digits) >= 3 and digits in mobile_digits):
+            if not query or query in text or (len(digits) >= 3 and (digits in mobile_digits or digits in full)):
                 out.append(c)
                 if len(out) >= limit:
                     break
@@ -48,6 +51,8 @@ class Customer:
         name, mobile, address = clean_text(form.get("CUST_NAME")), clean_text(form.get("MOBILE_NO"), 20), clean_text(form.get("ADDRESS"))
         if not name or not mobile or not address:
             raise ValidationError("custErrRequired")
+        if not re.match(r"^[0-9 ()\-]+$", mobile) or not 6 <= len(re.sub(r"\D", "", mobile)) <= 15:
+            raise ValidationError("custErrMobile")
         try:
             distance = to_number(form.get("DISTANCE_KM"))
         except ValueError:
@@ -55,6 +60,7 @@ class Customer:
         if distance is not None and distance < 0:
             raise ValidationError("custErrDistance")
         values = {"CUST_NAME": name, "LINE_ID": clean_text(form.get("LINE_ID"), 50), "MOBILE_NO": mobile, "ADDRESS": address,
+                  "MOBILE_CC": phone.clean_code(form.get("MOBILE_CC")),
                   "DISTANCE_KM": None if distance is None else round_half_up(distance, 3)}
         if "LINE_USER_ID" in form:                # Customer Maintenance only: LINE's own ID for sending messages
             user_id = (form.get("LINE_USER_ID") or "").strip()

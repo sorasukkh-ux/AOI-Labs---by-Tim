@@ -672,3 +672,22 @@ td.advice.raise_buy { color: var(--pink-text); font-weight: 600; } td.advice.low
 #tab-mill-analysis .tv-table .pos { color: var(--closed-text); } #tab-mill-analysis .tv-table .neg, #tab-mill-analysis .cap-note .neg { color: var(--pink-text); }
 #tab-mill-analysis .block-sub { display: block; font-size: 11px; color: var(--text-secondary); }
 .ma-filter-row input, .ma-filter-row select { width: 100%; box-sizing: border-box; }
+/* customer mobile with country code (update 23) */
+.phone-group { display: grid; grid-template-columns: minmax(118px, 42%) 1fr; gap: 6px; }
+.phone-group select, .phone-group input { width: 100%; min-width: 0; box-sizing: border-box; }
+/* queue label: LINE registration QR (update 24) */
+.qr-label .ql-line-reg { display: flex; align-items: center; gap: 8px; border-top: 1px dashed #999; padding: 6px 0; margin-bottom: 6px; }
+.qr-label .ql-line-qr { width: 40%; flex-shrink: 0; } .qr-label .ql-line-qr svg { display: block; width: 100%; height: auto; }
+.qr-label .ql-line-text { font-size: 11px; line-height: 1.35; } .qr-label .ql-line-text b { color: #06C755; font-size: 13px; }
+.ln-reason { display: block; flex-basis: 100%; font-size: 12px; color: var(--pink-text); margin-top: 2px; }
+/* LINE setup card and counter poster (update 24) */
+.ln-check td.ok { color: var(--closed-text); } .ln-check td.bad { color: var(--pink-text); }
+body.line-poster { background: #fff; }
+.lp-page { max-width: 640px; margin: 24px auto; padding: 24px; text-align: center; font-family: inherit; color: #111; }
+.lp-logo { width: 220px; height: auto; } .lp-page h1 { font-size: 30px; margin: 18px 0 4px; } .lp-line { color: #06C755; }
+.lp-sub { color: #555; margin: 0 0 14px; font-size: 16px; }
+.lp-qr { display: flex; flex-direction: column; align-items: center; gap: 6px; } .lp-qr svg { width: 300px; height: 300px; }
+.lp-qr span { font-size: 12px; color: #666; word-break: break-all; }
+.lp-steps { text-align: left; font-size: 18px; line-height: 1.5; margin: 18px auto; max-width: 520px; } .lp-steps li { margin-bottom: 10px; }
+.lp-steps small { color: #666; font-size: 13px; }
+@media print { .lp-print { display: none; } .lp-page { margin: 0 auto; } }

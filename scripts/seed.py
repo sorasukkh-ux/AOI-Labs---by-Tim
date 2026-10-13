@@ -199,8 +199,10 @@ def seed(log=print, reset=False):
                 "USER_NAME": name, "PASSWORD_HASH": password_hash, "ROLE_CODE": role, "BRANCH_ID": branch,
                 "MOBILE_NO": mobile, "USER_STATUS": status, "LOGIN_FAIL_COUNT": 0, "LAST_LOGIN": None})
     for code, name, mobile, line_id, address, distance in CUSTOMERS:
-        add("AOIMS_CUSTOMER", {"CUST_CODE": code}, {"CUST_NAME": name, "MOBILE_NO": mobile, "LINE_ID": line_id,
+        add("AOIMS_CUSTOMER", {"CUST_CODE": code}, {"CUST_NAME": name, "MOBILE_NO": mobile, "MOBILE_CC": "+66", "LINE_ID": line_id,
                                                     "ADDRESS": address, "DISTANCE_KM": distance})
+    # update 23: mobile numbers saved before the country code are Thai numbers
+    db["AOIMS_CUSTOMER"].update_many({"MOBILE_CC": {"$exists": False}}, {"$set": {"MOBILE_CC": "+66"}})
     # update 22: the status timeline of orders made before it, from their AOILOG_ORDMILLING snapshots (once)
     from app.models import mill_event
     rebuilt = mill_event.backfill()

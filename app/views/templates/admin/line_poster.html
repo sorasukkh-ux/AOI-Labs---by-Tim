@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="th"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex">
+<title>AOI LINE</title><link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}"></head>
+<body class="line-poster">
+<div class="lp-page">
+  <img class="lp-logo" src="{{ url_for('static', filename='img/logo.png') }}" alt="AOI">
+  <h1>รับแจ้งเตือนข้าวสีเสร็จทาง <span class="lp-line">LINE</span></h1>
+  <p class="lp-sub">Get a LINE message when your rice is ready</p>
+  {% if friend_url %}<div class="od-qr lp-qr" data-qr="{{ friend_url }}"></div>{% endif %}
+  <ol class="lp-steps">
+    <li><b>สแกน QR</b> แล้วกด <b>เพิ่มเพื่อน</b> AOI Labs {{ oa or '' }}<br><small>Scan, then tap Add friend</small></li>
+    <li><b>พิมพ์เบอร์มือถือ</b> ที่ให้ไว้กับโรงสี แล้วกดส่ง (เช่น 0812345678)<br><small>Send the mobile number you gave the mill</small></li>
+    <li>หรือ <b>สแกน QR LINE บนบัตรคิว</b> แล้วกดส่งข้อความ<br><small>Or scan the LINE QR on your queue ticket and tap Send</small></li>
+  </ol>
+  <button class="action lp-print" type="button" data-print>พิมพ์ / Print</button>
+</div>
+<script src="{{ url_for('static', filename='js/qr.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/label.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/poster.js') }}" defer></script>
+</body></html>

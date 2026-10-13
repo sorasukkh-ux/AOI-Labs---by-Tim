@@ -20,7 +20,7 @@
   <div id="cust-result-list" class="cust-result-list">
     {% for c in customers %}
     <a class="demo-row cust-row{% if customer and c.CUST_CODE == customer.CUST_CODE %} selected{% endif %}" href="{{ url_for('admin_customers.customer_view', code=c.CUST_CODE, q=query or None, next=next_url or None) }}" data-cust-code="{{ c.CUST_CODE }}">
-      <span class="demo-id">{{ c.CUST_NAME }}</span><span class="demo-meta">{{ c.CUST_CODE }} &middot; {{ c.MOBILE_NO }}</span>
+      <span class="demo-id">{{ c.CUST_NAME }}</span><span class="demo-meta">{{ c.CUST_CODE }} &middot; {{ phone_of(c) }}</span>
       {% if c.DISTANCE_KM is not none %}<span class="badge manual">{{ c.DISTANCE_KM|num }} {{ t('unitKm') }}</span>{% endif %}
     </a>
     {% else %}
@@ -44,11 +44,18 @@
       <div><label class="field-label" for="cust-lineid">{{ t('fieldLineId') }}</label><input type="text" id="cust-lineid" name="LINE_ID" value="{{ values.get('LINE_ID') or '' }}" maxlength="50" autocapitalize="none"></div>
     </div>
     <div class="field-row">
-      <div><label class="field-label" for="cust-lineuser">{{ t('fieldLineUserId') }}</label><input type="text" id="cust-lineuser" name="LINE_USER_ID" value="{{ values.get('LINE_USER_ID') or '' }}" maxlength="33" autocapitalize="none" class="mono" placeholder="U1234567890abcdef1234567890abcdef">
+      <div><label class="field-label" for="cust-lineuser">{{ t('fieldLineUserId') }}</label><input type="text" id="cust-lineuser" name="LINE_USER_ID" value="{{ values.get('LINE_USER_ID') or '' }}" maxlength="33" autocapitalize="none" class="mono" placeholder="U…">
         <p class="cap-note tight">{{ t('fieldLineUserNote') }}</p></div>
     </div>
     <div class="two-col field-row">
-      <div><label class="field-label" for="cust-phone">{{ t('fieldPhone') }}</label><input type="text" id="cust-phone" name="MOBILE_NO" value="{{ values.get('MOBILE_NO') or '' }}" inputmode="tel" maxlength="20"></div>
+      <div><label class="field-label" for="cust-phone">{{ t('fieldPhone') }}</label>
+        <div class="phone-group">
+          {% set cc = values.get('MOBILE_CC') or phone_default %}
+          <select id="cust-phone-cc" name="MOBILE_CC" aria-label="{{ t('fieldCountryCode') }}">
+            {% for code, flag, en, th in phone_countries %}<option value="{{ code }}"{% if code == cc %} selected{% endif %}>{{ flag }} {{ code }} {{ th if lang == 'th' else en }}</option>{% endfor %}
+          </select>
+          <input type="text" id="cust-phone" name="MOBILE_NO" value="{{ values.get('MOBILE_NO') or '' }}" inputmode="tel" maxlength="20" placeholder="081-234-5678">
+        </div></div>
       <div><label class="field-label" for="cust-name">{{ t('custNameLabel') }}</label><input type="text" id="cust-name" name="CUST_NAME" value="{{ values.get('CUST_NAME') or '' }}" maxlength="200"></div>
     </div>
     <div class="field-row">

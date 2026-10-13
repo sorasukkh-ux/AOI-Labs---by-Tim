@@ -45,9 +45,10 @@ def create_app(overrides=None):
 
     # ---- helpers available in every template and macro (VIEW) ----
     from .controllers.common import branch_label
-    from .models import variety
+    from .models import variety, phone
     app.jinja_env.globals.update(
-        mat_name=variety.mat_name, varieties=variety.VARIETIES, var_keys=variety.VAR_KEYS, default_priority=variety.DEFAULT_PRIORITY, variety_of=variety.variety_of,
+        mat_name=variety.mat_name, varieties=variety.VARIETIES, var_keys=variety.VAR_KEYS, default_priority=variety.DEFAULT_PRIORITY,
+        phone_of=phone.of, phone_countries=phone.COUNTRIES, phone_default=phone.DEFAULT, variety_of=variety.variety_of,
         t=i18n.t, can=security.can, csrf_token=security.csrf_token, branch_label=branch_label,
         fmt_datetime=timeutil.fmt_datetime, fmt_date=timeutil.fmt_date, fmt_time=timeutil.fmt_time)
 
@@ -84,7 +85,7 @@ def create_app(overrides=None):
     @app.before_request
     def protect_forms():
         # the device API is used by machines with their own device key, not by a signed-in browser
-        if request.endpoint != "static" and request.blueprint != "device_api":
+        if request.endpoint != "static" and request.blueprint not in ("device_api", "line_api"):
             security.check_csrf()
 
     @app.after_request

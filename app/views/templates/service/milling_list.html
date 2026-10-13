@@ -34,6 +34,7 @@
       {% if order.CANCEL_REQ_FLG == 'A' and order.is_open %}<span class="badge blocked">&#9888; {{ t('cancelApprovedTag') }}</span>{% endif %}
       {% if order.notify %}{% set nf = order.notify %}
       <span class="badge {{ {'1': 'approved', '9': 'blocked'}.get(nf.NOTIFY_FLG, 'pending') }}" title="{{ nf.NOTIFY_MESSAGE }}{% if nf.ERROR %} &middot; {{ t(nf.ERROR) if nf.ERROR.startswith('ln') else nf.ERROR }}{% endif %}">&#128172; {{ t({'1': 'notifySentLabel', '9': 'notifyFailLabel'}.get(nf.NOTIFY_FLG, 'notifyWaitLabel')) }}</span>
+      {% if nf.NOTIFY_FLG != '1' %}<span class="ln-reason">{{ t(ln_reason(nf.ERROR)) }}</span>{% endif %}
       {% if nf.NOTIFY_FLG != '1' and editable %}<form method="post" action="{{ url_for('service_milling.line_resend', ord_id=order.ORD_ID) }}" class="inline-form">{{ hidden() }}<button class="action small-btn" type="submit">{{ t('lnResend') }}</button></form>{% endif %}
       {% endif %}
       <a class="action order-detail-btn" href="{{ url_for('service_milling.order_detail', ord_id=order.ORD_ID) }}" data-popup>{{ t('colDetails') }}</a>
@@ -52,6 +53,7 @@
             {% if nxt == 'F' and order.CANCEL_REQ_FLG == 'P' %}disabled{% endif %}
             {% if nxt == 'F' %}data-form="inbound-{{ order.ORD_ID }}"
             {% elif nxt == 'I' %}data-form="start-{{ order.ORD_ID }}"
+            {% elif nxt == 'D' %}data-form="ready-{{ order.ORD_ID }}"
             {% elif nxt == 'H' %}data-prompts='{{ [{"name": "HOLD_REASON", "label": t("holdReasonPrompt", id=order.QR_ID), "value": "", "required": true, "required_text": t("errHoldReason")}]|tojson }}'
             {% elif nxt == 'CC' %}data-confirm="{{ t('confirmCancelOrder', id=order.QR_ID) }}"
             {% elif nxt == 'C' %}data-confirm="{{ t('confirmCloseOrder', id=order.QR_ID) }}"
@@ -107,6 +109,36 @@
         <div class="btn-pair">
           <button type="button" class="action" data-modal-close>{{ t('btnCancel') }}</button>
           <button type="submit" class="action primary scan-start-btn">{{ t('btnStartMilling') }}</button>
+        </div>
+      </form>
+    </template>
+    {% endif %}
+
+    {% if editable and 'D' in order.next_statuses %}
+    {# Ready for Delivery: the delivery details and the arrival time are confirmed at once, and the customer gets LINE #}
+    <template id="ready-{{ order.ORD_ID }}">
+      <form method="post" action="{{ url_for('service_milling.change_status', ord_id=order.ORD_ID) }}" class="ready-form inbound-form order-details" autocomplete="off">
+        {{ hidden() }}
+        <input type="hidden" name="new_status" value="D">
+        <p class="od-title">{{ t('readyTitle', id=order.QR_ID) }}</p>
+        <p class="cap-note">{{ t('readyNote') }}</p>
+        <div class="od-row"><span class="od-label">{{ t('colCustomer') }}</span><span class="od-value">{{ order.customer.get('CUST_NAME', order.CUST_CODE) }}</span></div>
+        <div class="od-row"><span class="od-label">{{ t('lblDeliveryLoc') }}</span><span class="od-value">{{ order.REF_INV_LOC or '-' }}</span></div>
+        <div class="field-row">
+          <label class="field-label" for="ready-addr-{{ order.ORD_ID }}">{{ t('lblDeliveryAddr') }}</label>
+          <input type="text" id="ready-addr-{{ order.ORD_ID }}" name="DELIVERY_ADDRESS" value="{{ order.DELIVERY_ADDRESS or '' }}" maxlength="200" required>
+        </div>
+        <div class="field-row">
+          <label class="field-label" for="ready-km-{{ order.ORD_ID }}">{{ t('lblDistanceKm') }}</label>
+          <input type="number" min="0" step="0.1" id="ready-km-{{ order.ORD_ID }}" name="DELIVERY_DISTANCE" value="{{ order.DELIVERY_DISTANCE|plain }}" required>
+        </div>
+        <div class="field-row">
+          <label class="field-label" for="ready-arrival-{{ order.ORD_ID }}">{{ t('lblArrivalTime') }}</label>
+          <input type="datetime-local" id="ready-arrival-{{ order.ORD_ID }}" name="DELIVERY_ARRIVAL_TIME" value="{{ order.arrival_input }}" required>
+        </div>
+        <div class="btn-pair">
+          <button type="button" class="action" data-modal-close>{{ t('btnCancel') }}</button>
+          <button type="submit" class="action primary ready-save-btn">{{ t('btnConfirmSendLine') }}</button>
         </div>
       </form>
     </template>

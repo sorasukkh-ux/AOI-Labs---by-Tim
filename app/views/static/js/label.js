@@ -28,6 +28,15 @@
     try { qr.innerHTML = qrSvg(data.qr); } catch (error) { qr.textContent = data.qr; }
     host.appendChild(qr);
     host.appendChild(el("div", "ql-code", data.qr));
+    if (data.line) {                     // LINE registration: scan, add the account, send the ready-made message
+      var line = el("div", "ql-line-reg"), lqr = el("div", "ql-line-qr");
+      try { lqr.innerHTML = qrSvg(data.line); } catch (error) { lqr.textContent = ""; }
+      var txt = el("div", "ql-line-text");
+      txt.appendChild(el("b", "", "LINE")); txt.appendChild(el("br"));
+      txt.appendChild(document.createTextNode("\u0e2a\u0e41\u0e01\u0e19\u0e23\u0e31\u0e1a\u0e41\u0e08\u0e49\u0e07\u0e40\u0e15\u0e37\u0e2d\u0e19"));
+      txt.appendChild(el("br")); txt.appendChild(document.createTextNode("Scan for LINE updates"));
+      line.appendChild(lqr); line.appendChild(txt); host.appendChild(line);
+    }
     var foot = el("div", "ql-foot"), contact = el("div");
     contact.appendChild(document.createTextNode("Tel: " + data.tel)); contact.appendChild(el("br")); contact.appendChild(document.createTextNode("Email: " + data.email));
     var date = el("div", "ql-date"); date.appendChild(document.createTextNode(data.date)); date.appendChild(el("br")); date.appendChild(document.createTextNode(data.time));

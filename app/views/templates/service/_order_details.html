@@ -25,7 +25,7 @@
   {% endif %}
   <p class="od-section">{{ t('colCustomer') }}</p>
   <div class="od-row"><span class="od-label">{{ t('custNameLabel') }}</span><span class="od-value" data-cust-name>{{ order.customer.get('CUST_NAME', order.CUST_CODE) }}</span></div>
-  <div class="od-row"><span class="od-label">{{ t('lblCustMobile') }}</span><span class="od-value" data-cust-mobile>{{ order.customer.get('MOBILE_NO') or '-' }}</span></div>
+  <div class="od-row"><span class="od-label">{{ t('lblCustMobile') }}</span><span class="od-value" data-cust-mobile>{{ phone_of(order.customer) or '-' }}</span></div>
   {% if edit %}
   <div class="od-field od-cust-search">
     <label class="field-label" for="od-cust-q-{{ order.ORD_ID }}">{{ t('detChangeCustomer') }}</label>
@@ -103,6 +103,7 @@
   {% endif %}
   <div class="od-row"><span class="od-label">{{ t('receiveTimeLabel') }}</span><span class="od-value">{{ fmt_datetime(order.EXPCT_RECEIVE_TIME) }}</span></div>
   <div class="od-row"><span class="od-label">{{ t('detNotify') }}</span><span class="od-value">{% if order.notify %}{{ t({'1': 'notifySentLabel', '9': 'notifyFailLabel'}.get(order.notify.NOTIFY_FLG, 'notifyWaitLabel')) }}{% else %}-{% endif %}</span></div>
+  {% if order.notify and order.notify.NOTIFY_FLG != '1' %}<p class="cap-note tight ln-reason-detail">{{ t(ln_reason(order.notify.ERROR)) }}{% if order.notify.ERROR and not order.notify.ERROR.startswith('ln') %} ({{ order.notify.ERROR }}){% endif %}</p>{% endif %}
   {% if order.ACT_PADDY or order.ACT_RICE %}
   <p class="od-section">{{ t('detSecActual') }}</p>
   {% if order.ACT_PADDY %}<div class="od-row"><span class="od-label">{{ t('lblActPaddyShort') }}</span><span class="od-value">{{ order.ACT_PADDY|num }} kg{% if order.SCAN_DATE %} &middot; &#10003; QR {{ fmt_time(order.SCAN_DATE) }}{% endif %}</span></div>{% endif %}

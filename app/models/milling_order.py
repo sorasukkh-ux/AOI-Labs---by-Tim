@@ -257,7 +257,17 @@ class MillingOrder:
         if flow.blocked_by_pending_request(order, new_status):
             raise ValidationError("errPendingRequest")
         values = {"MILL_STATUS": new_status}
-        if new_status == flow.DELIVERY:                       # the delivery time is confirmed on the list next
+        arrival = None
+        if new_status == flow.DELIVERY and form is not None and "DELIVERY_ARRIVAL_TIME" in form:
+            # the Ready for Delivery pop-up: address, distance and arrival time confirmed in the same step
+            address, distance = cls._delivery_inputs(form, None)
+            arrival = parse_local_datetime(form.get("DELIVERY_ARRIVAL_TIME"))
+            if arrival is None:
+                raise ValidationError("errArrivalTime")
+            values.update({"DELIVERY_ADDRESS": address, "DELIVERY_DISTANCE": distance,
+                           "EST_PAY_DELIVERY": cls._delivery_fee(branch_id, distance),
+                           "DELIVERY_ARRIVAL_TIME": arrival, "DELIVERY_CONFIRM_FLG": True})
+        elif new_status == flow.DELIVERY:                     # the delivery time is confirmed on the list next
             values.update({"DELIVERY_CONFIRM_FLG": False, "DELIVERY_ARRIVAL_TIME": None})
         if flow.needs_reason(new_status):
             values["HOLD_REASON"] = cls._hold_reason(form)
@@ -282,6 +292,8 @@ class MillingOrder:
             BuySellOrder.cancel_for_milling(order["ORD_ID"], ope_user)
         elif new_status == flow.FINISHED and updated["ORDER_TYPE"] == flow.TAKEAWAY:
             cls._notify(updated, "finished", now_utc())      # LINE: the rice is ready to pick up
+        elif arrival is not None:
+            cls._notify(updated, "delivery", arrival)        # LINE: the expected arrival time
         return updated
 
     @staticmethod

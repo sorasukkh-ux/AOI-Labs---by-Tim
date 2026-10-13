@@ -21,7 +21,7 @@
   <p class="cap-note" id="reg-new-customer-row" hidden><a id="reg-new-customer" href="{{ url_for('admin_customers.customer_new', next=url_for('service_milling.new_order')) }}">{{ t('btnRegisterCustomer') }}</a></p>
   {% endif %}
   <div class="two-col field-row mt6 mb0">
-    <div><label class="field-label" for="top-cust-mobile">{{ t('lblCustMobile') }}</label><input type="text" id="top-cust-mobile" value="{{ customer.MOBILE_NO if customer else '' }}" placeholder="{{ t('mobilePh') }}" disabled></div>
+    <div><label class="field-label" for="top-cust-mobile">{{ t('lblCustMobile') }}</label><input type="text" id="top-cust-mobile" value="{{ phone_of(customer) if customer else '' }}" placeholder="{{ t('mobilePh') }}" disabled></div>
     <div><label class="field-label" for="top-cust-lineid">{{ t('fieldLineId') }}</label><input type="text" id="top-cust-lineid" value="{{ (customer.LINE_ID or '') if customer else '' }}" disabled></div>
   </div>
 </div>

@@ -8,7 +8,7 @@ from ..i18n import texts
 from ..models.base import ValidationError
 from ..models.branch import Branch
 from ..models.customer import Customer
-from ..models import tv
+from ..models import tv, line_link
 from ..models.mill_test import MillTest
 from ..models.mill_yield import MillYield
 from ..models import variety as var
@@ -100,7 +100,8 @@ def maintenance():
     tv_path = url_for("tv.board", branch=branch, key=key) if key else None
     tv_link = (request.url_root.rstrip("/") + tv_path) if key else None
     return render_template("admin/milling_maintenance.html", branch=branch, branches=maintainable_branches(), tv_link=tv_link,
-                           tv_path=tv_path,
+                           tv_path=tv_path, line=line_link.status(), line_events=line_link.recent(8),
+                           webhook_path=url_for("line_api.webhook"),
                            values=values or saved, editable=can("AD_MILLTIME", "edit"), preview=_queue_preview(saved))
 
 
@@ -115,3 +116,10 @@ def _queue_preview(branch):
         rows.append({"order": order, "customer": (Customer.find(order["CUST_CODE"]) or {}).get("CUST_NAME", order["CUST_CODE"]),
                      "minutes": slot["minutes"], "finish": slot["finish"], "receive": slot["receive"]})
     return rows
+
+
+@bp.route("/line-poster")
+@require("AD_MILLTIME")
+def line_poster():
+    """A4 poster for the counter: add the mill's LINE account, then send the mobile number."""
+    return render_template("admin/line_poster.html", friend_url=line_link.friend_url(), oa=line_link.oa_id())

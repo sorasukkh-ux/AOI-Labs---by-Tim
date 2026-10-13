@@ -33,6 +33,13 @@ if grep -q '^AOI_SECRET_KEY=$' .env || ! grep -q '^AOI_SECRET_KEY=' .env; then
   fi
   echo "== Added a new secret key to .env"
 fi
+# settings added in later updates: an empty line is added so they are easy to fill in (values are never changed)
+for NAME in AOI_LINE_CHANNEL_TOKEN AOI_LINE_CHANNEL_SECRET AOI_LINE_OA_ID; do
+  if ! grep -q "^${NAME}=" .env; then
+    echo "${NAME}=" >> .env
+    echo "== Added an empty ${NAME}= line to .env (fill it in to use LINE)"
+  fi
+done
 
 if [ "${1:-}" = "demo" ]; then
   echo "== Demo mode: no database, nothing is saved"

@@ -251,13 +251,24 @@ LINE Official Account (push message):
 
 1. Create a LINE Official Account for the mill and turn on its Messaging API (LINE Developers console).
 2. Copy the channel access token into `.env` as `AOI_LINE_CHANNEL_TOKEN`, then restart (`bash start.sh`).
-3. Each customer needs a **LINE user ID** (`U` + 32 characters) on Customer Maintenance. It is not the LINE ID
-   people type: LINE gives it only when the customer adds the Official Account as a friend. For a first test,
-   put your own user ID (LINE Developers > the channel > Basic settings > Your user ID) on a test customer.
+3. Put the channel secret in `.env` as `AOI_LINE_CHANNEL_SECRET` and the account's basic ID (for example
+   `@783ycdvd`) as `AOI_LINE_OA_ID`, restart, and make port 5000 Public in Codespaces.
+4. Administration > Milling Maintenance > **LINE messages to customers** shows the checklist and the
+   **Webhook URL** (`https://<server>/line/webhook`). Paste it in LINE Developers > Messaging API > Webhook URL,
+   tap **Verify**, turn on **Use webhook**, and in LINE Official Account Manager > Response settings turn the
+   default auto-response off (otherwise both answer).
 
-Push messages count toward the Official Account's monthly message quota (replies do not); check the plans
-for Thailand before real use. Collecting the user IDs automatically (a webhook when a customer adds the
-account or scans the QR on the queue ticket) is the next step.
+**How customers link their LINE** (LINE never shows a user ID, so the customer links themself):
+- the queue label has a second QR "LINE": the customer scans it, adds the account and taps Send; the ready-made
+  message `LINK <order>-<check>` links that order's customer (the 6-character check stops guessed order numbers);
+- or, from the counter poster (Milling Maintenance > Print poster), the customer adds the account and sends the
+  mobile number registered at the mill (only when exactly one customer has it and it is not linked to another LINE).
+The system answers in the chat (reply messages are free). A "rice ready" message that could not be sent because
+the customer was not linked is sent again right after linking. Every event is listed on the setup card
+(`AOILOG_LINE`). The order card shows why a message was not sent.
+
+Push messages count toward the Official Account's monthly quota (replies do not). For daily use the system needs
+a permanent server: a sleeping codespace cannot receive LINE's calls.
 
 ## Automation and devices
 

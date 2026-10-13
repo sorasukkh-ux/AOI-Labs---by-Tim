@@ -28,6 +28,7 @@ from ..timeutil import now_utc, to_local
 COL = "AOITS_NOTIFY"
 UNSENT, SENT, ERROR = "0", "1", "9"
 PUSH_URL = "https://api.line.me/v2/bot/message/push"
+REPLY_URL = "https://api.line.me/v2/bot/message/reply"
 USER_ID = re.compile(r"^U[0-9a-f]{32}$")
 TIMEOUT = 6
 
@@ -57,6 +58,41 @@ def _push(user_id, text):
         return ("HTTP %s %s" % (exc.code, detail)).strip()[:200]
     except Exception as exc:                              # noqa: BLE001 - network errors, timeouts
         return str(exc)[:200] or exc.__class__.__name__
+
+
+def _post(url, payload):
+    """POST to the LINE Messaging API; None when accepted, otherwise the error text."""
+    body = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(url, data=body, method="POST", headers={
+        "Content-Type": "application/json", "Authorization": "Bearer " + _token()})
+    try:
+        with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
+            return None if 200 <= resp.status < 300 else "HTTP %s" % resp.status
+    except urllib.error.HTTPError as exc:
+        try:
+            detail = json.loads(exc.read().decode("utf-8")).get("message", "")
+        except Exception:                                 # noqa: BLE001
+            detail = ""
+        return ("HTTP %s %s" % (exc.code, detail)).strip()[:200]
+    except Exception as exc:                              # noqa: BLE001
+        return str(exc)[:200] or exc.__class__.__name__
+
+
+def reply(reply_token, text):
+    """Answers a message the customer sent (reply API: free, not counted in the monthly messages)."""
+    if not reply_token or not configured():
+        return "lnNotConfigured"
+    return _post(REPLY_URL, {"replyToken": reply_token, "messages": [{"type": "text", "text": text[:5000]}]})
+
+
+def reason_key(error):
+    """Text key of a stored ERROR for the order list: lnNotConfigured / lnNoUser / lnNotFriend / lnApiError."""
+    error = error or ""
+    if error.startswith("ln"):
+        return error
+    if "HTTP 400" in error or "HTTP 403" in error or "HTTP 404" in error:
+        return "lnNotFriend"
+    return "lnApiError"
 
 
 def _message(kind, order, when):

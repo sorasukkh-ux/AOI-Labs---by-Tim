@@ -10,7 +10,7 @@ from ..models.buysell_order import BuySellOrder
 from ..models.customer import Customer
 from ..models.inventory import Inventory, lot_of
 from ..models.mill_yield import MillYield
-from ..models import notify, mill_event
+from ..models import notify, mill_event, phone, line_link
 from ..models.milling_order import MillingOrder, PRIORITIES
 from ..models.rules import status_flow as flow
 from ..security import can, current_user, operating_branch, require
@@ -38,7 +38,9 @@ def label_data(queue_no, qr_text, customer_name, pay_total, receive, registered)
     return {"no": queue_no, "qr": qr_text, "customer": customer_name, "pay": "%.2f" % pay_total,
             "receive": fmt_datetime(receive), "date": fmt_date(registered), "time": fmt_time(registered),
             "addrEn": config["LABEL_ADDRESS_EN"], "addrTh": config["LABEL_ADDRESS_TH"], "tel": config["LABEL_TEL"],
-            "email": config["LABEL_EMAIL"], "logo": url_for("static", filename="img/logo.png")}
+            "email": config["LABEL_EMAIL"], "logo": url_for("static", filename="img/logo.png"),
+            # second QR: the customer adds the LINE Official Account and links LINE to this order in one scan
+            "line": line_link.ticket_url(qr_text[4:]) if qr_text.startswith("AOI-ML-") else None}
 
 
 def _trade_rows(branch_id):
@@ -146,7 +148,7 @@ def customer_search():
         found = [exact] if exact else Customer.search_code(code, limit=8)
     else:
         found = Customer.search(request.args.get("q", ""), limit=8)
-    return jsonify({"exact": bool(exact), "customers": [{"code": c["CUST_CODE"], "name": c["CUST_NAME"], "mobile": c.get("MOBILE_NO") or "",
+    return jsonify({"exact": bool(exact), "customers": [{"code": c["CUST_CODE"], "name": c["CUST_NAME"], "mobile": phone.of(c),
                      "line": c.get("LINE_ID") or "", "address": c.get("ADDRESS") or "", "distance": c.get("DISTANCE_KM")}
                     for c in found]})
 
@@ -198,7 +200,7 @@ def _decorate(orders, details=False):
             order["suggest_loc"] = suggest_loc
         order["needs_attention"] = MillingOrder.needs_attention(order)
         order["qty_editable"] = flow.quantities_editable(order)
-        if order["MILL_STATUS"] == flow.DELIVERY:
+        if order["MILL_STATUS"] == flow.DELIVERY or flow.DELIVERY in order["next_statuses"]:
             order["arrival_input"] = input_local_datetime(order.get("DELIVERY_ARRIVAL_TIME")) or default_arrival(order["BRANCH_ID"])
         if details:
             order["events"] = mill_event.for_order(order["ORD_ID"])
@@ -209,7 +211,7 @@ def _decorate(orders, details=False):
 
 def _context():
     from .service_buysell import BS_STATUS_KEYS, MAT_KEYS, INV_STATUS_KEYS
-    return {"status_keys": STATUS_KEYS, "priority_keys": PRIORITY_KEYS, "type_keys": TYPE_KEYS, "status_class": STATUS_CLASS,
+    return {"ln_reason": notify.reason_key, "status_keys": STATUS_KEYS, "priority_keys": PRIORITY_KEYS, "type_keys": TYPE_KEYS, "status_class": STATUS_CLASS,
             "priorities": PRIORITIES, "flow": flow, "bs_status_keys": BS_STATUS_KEYS, "mat_keys": MAT_KEYS,
             "inv_status_keys": INV_STATUS_KEYS,
             "can_edit": can(STATUS, "edit"), "can_approve": can(STATUS, "approve"), "can_cancel": can(STATUS, "delete")}
@@ -254,13 +256,28 @@ def _back(ord_id):
 
 def _run(ord_id, action, ok_key="msgOrderUpdated"):
     order = _order_or_404(ord_id)
+    started = now_utc()
     try:
         action(order)
     except ValidationError as error:
         flash_error(error)
     else:
         flash_ok(ok_key, id=order["QR_ID"])
+        _flash_line(order, started)
     return _back(order["ORD_ID"])
+
+
+def _flash_line(order, since):
+    """Tells the operator what happened to the LINE message written by this change, if any."""
+    from flask import flash
+    doc = notify.last_for([order["ORD_ID"]]).get(order["ORD_ID"])
+    if not doc or not doc.get("LAST_UPDATE") or doc["LAST_UPDATE"] < since:
+        return
+    if doc["NOTIFY_FLG"] == notify.SENT:
+        flash(t("lnSentNotice", message=doc["NOTIFY_MESSAGE"]), "ok")
+    else:
+        error = doc.get("ERROR") or ""
+        flash(t("lnNotSentNotice", reason=t(error) if error.startswith("ln") else error), "error")
 
 
 @bp.route("/<ord_id>/status", methods=["POST"])
