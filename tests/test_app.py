@@ -299,7 +299,7 @@ class Administration(Base):
         rows = {r["MENU_CODE"]: r for r in self.db("AOIMS_ROLEAUTH") if r["ROLE_CODE"] == "SUPERVISOR"}
         self.assertTrue(rows["SV_SERVICE"]["CAN_VIEW"] and rows["SV_SERVICE"]["CAN_CREATE"])
         self.assertFalse(rows["AD_USER"]["CAN_EDIT"])                    # dropped: the screen cannot be viewed
-        self.assertEqual(len(rows), 23)                                  # one row per menu (update 25: analysis merged, LINE messages added)
+        self.assertEqual(len(rows), 23)                                  # one row per menu (update 27: Investment & Break-even)
         self.assertIn("already exists", self.post("/admin/roles/save", data, "/admin/roles/").get_data(as_text=True))
 
     def test_role_in_use_cannot_be_made_inactive_and_admin_stays_full(self):
@@ -1152,7 +1152,9 @@ class Update8(Base):
     def test_service_status_price_and_dashboard(self):
         a, b = self.new_order(), self.new_order(MILL_PRIORITY="U")
         self.set_status(a["ORD_ID"], "I")
-        tv = self.text("/service/status")
+        self.assertIn("/service/price#cs-status", self.client.get("/service/status").headers["Location"])
+        tv = self.text("/service/price")                                   # Current Services: prices + the queue
+        self.assertIn('id="cs-status"', tv)
         self.assertIn('data-auto-refresh="30"', tv)
         self.assertLess(tv.index("In process"), tv.index("Queue"))
         self.assertIn("#" + b["QR_ID"], tv)
@@ -2376,6 +2378,165 @@ class Update25(Base):
         self.assertIn('data-mkh-sku="PADDY_HM" checked', page)
         self.assertIn("market_chart.js", page)
         self.assertIn('data-mkh-period="36M"', page)
+
+
+class Update26(Base):
+    """Quick jump; Current Services; customer name check, delete, queue prompt; relink LINE from Customer Maintenance."""
+    USER = "U" + "0123456789abcdef" * 2
+
+    def setUp(self):
+        super().setUp()
+        self.login("admin")
+        self.client.get("/lang/en")
+
+    def customer(self, **fields):
+        data = {"CUST_NAME": "Test Newcomer", "MOBILE_CC": "+66", "MOBILE_NO": "0891112222", "ADDRESS": "1 Road", "DISTANCE_KM": ""}
+        data.update(fields)
+        return self.post("/admin/customers/new", data, "/admin/customers/new")
+
+    def test_duplicate_name_is_refused(self):
+        self.assertEqual(self.customer(CUST_NAME="  อรุณ   พงษ์ไพร ").status_code, 200)       # same name, extra spaces
+        self.assertEqual(len([c for c in self.db("AOIMS_CUSTOMER") if c["CUST_NAME"].replace(" ", "") == "อรุณพงษ์ไพร"]), 1)
+        check = self.client.get("/admin/customers/check.json?name=" + "อรุณ พงษ์ไพร").get_json()
+        self.assertEqual((check["ok"], check["dup"]["code"]), (False, "C261001001"))
+        self.assertTrue(self.client.get("/admin/customers/check.json?name=อรุณ พงษ์ไพร&code=C261001001").get_json()["ok"])
+        self.post("/admin/customers/C261001002", {"CUST_NAME": "อรุณ พงษ์ไพร", "MOBILE_CC": "+66", "MOBILE_NO": "0898765432",
+                                                    "ADDRESS": "x"}, "/admin/customers/C261001002")
+        self.assertEqual(next(c for c in self.db("AOIMS_CUSTOMER") if c["CUST_CODE"] == "C261001002")["CUST_NAME"], "สุนีย์ แก้วมณี")
+
+    def test_new_customer_asks_to_queue(self):
+        response = self.customer()
+        self.assertEqual(response.status_code, 302)
+        code = next(c for c in self.db("AOIMS_CUSTOMER") if c["CUST_NAME"] == "Test Newcomer")["CUST_CODE"]
+        page = self.text(response.headers["Location"])
+        self.assertIn("/service/milling/new?cust=" + code, page)
+        self.assertIn("data-return-text", page)
+
+    def test_delete_customer(self):
+        self.customer()
+        code = next(c for c in self.db("AOIMS_CUSTOMER") if c["CUST_NAME"] == "Test Newcomer")["CUST_CODE"]
+        self.post("/admin/customers/%s/delete" % code, {}, "/admin/customers/" + code)
+        self.assertFalse(any(c["CUST_CODE"] == code for c in self.db("AOIMS_CUSTOMER")))       # no orders: removed
+        ord_id = self.new_order()["ORD_ID"]
+        self.post("/admin/customers/C261001001/delete", {}, "/admin/customers/C261001001")      # open order: refused
+        self.assertNotEqual(next(c for c in self.db("AOIMS_CUSTOMER") if c["CUST_CODE"] == "C261001001").get("CUST_STATUS"), "D")
+        with self.app.app_context():
+            col("AOITS_ORDMILLING").update_one({"ORD_ID": ord_id}, {"$set": {"MILL_STATUS": "C"}})
+        self.post("/admin/customers/C261001001/delete", {}, "/admin/customers/C261001001")      # past orders: hidden
+        c = next(c for c in self.db("AOIMS_CUSTOMER") if c["CUST_CODE"] == "C261001001")
+        self.assertEqual(c["CUST_STATUS"], "D")
+        self.assertIn("No customers match", self.text("/admin/customers/?q=อรุณ"))
+        self.assertEqual(self.customer(CUST_NAME="อรุณ พงษ์ไพร").status_code, 302)            # the name is free again
+        before = len(self.db("AOITS_ORDMILLING"))
+        self.post("/service/milling/new", {"CUST_CODE": "C261001001", "REGIST_PADDY": "33", "BRAN_ORDER": "0", "BROKE_ORDER": "0",
+                                           "ORDER_TYPE": "T", "MILL_PRIORITY": "M"}, "/service/milling/new")
+        self.assertEqual(len(self.db("AOITS_ORDMILLING")), before)
+
+    def test_current_services_replaces_service_status(self):
+        self.assertNotIn('data-menu="SV_STATUS"', self.text("/?g=SV"))
+        self.assertIn("Current Services", self.text("/?g=SV"))
+        self.assertFalse(any("SV_STATUS" in m.values() for m in self.db("AOIMS_MENU")))
+        page = self.text("/service/price")
+        self.assertIn('id="cs-prices"', page)
+        self.assertIn('id="cs-status"', page)
+
+    def test_quick_jump_on_administration_pages(self):
+        self.assertIn("data-quick-jump", self.text("/admin/milling/"))
+        self.assertIn("data-quick-jump", self.text("/?g=AD"))
+        self.assertNotIn("data-quick-jump", self.text("/?g=SV"))
+
+    def test_relink_another_line_account(self):
+        with self.app.app_context():
+            col("AOIMS_CUSTOMER").update_one({"CUST_CODE": "C261001001"}, {"$set": {"LINE_USER_ID": "Uold", "LINE_LINK_VIA": "PHONE"}})
+        with mock.patch.dict(os.environ, {"AOI_LINE_OA_ID": "@x"}):
+            page = self.text("/admin/customers/C261001001")
+        self.assertIn('id="cust-line-relink"', page)
+        self.assertIn("LINK%20C261001001-", page)
+        with self.app.app_context():
+            from app.models import line_link
+            _, bad, _ = line_link.answer_text(self.USER, "LINK C261001001-000000")
+            reply, result, cust = line_link.answer_text(self.USER, line_link.link_text("C261001001"))
+        self.assertEqual((bad, result, cust), ("bad_ticket", "linked_customer", "C261001001"))
+        c = next(c for c in self.db("AOIMS_CUSTOMER") if c["CUST_CODE"] == "C261001001")
+        self.assertEqual((c["LINE_USER_ID"], c["LINE_LINK_VIA"]), (self.USER, "STAFF_QR"))
+        self.post("/admin/customers/C261001001/line-unlink", {}, "/admin/customers/C261001001")
+        self.assertIsNone(next(c for c in self.db("AOIMS_CUSTOMER") if c["CUST_CODE"] == "C261001001")["LINE_USER_ID"])
+
+
+class Update27(Base):
+    """Financial > Investment & Break-even (draft): investment items, budget vs actual, break-even point."""
+
+    def setUp(self):
+        super().setUp()
+        self.login("admin")
+        self.client.get("/lang/en")
+
+    def inv(self, data, tab="capex"):
+        data = dict(data, branch="factory2", tab=tab)
+        return self.post("/finance/investment", data, "/finance/investment?branch=factory2")
+
+    def test_menu_and_rights(self):
+        self.assertIn('data-menu="FN_INVEST"', self.text("/?g=FN"))
+        for tab in ("capex", "budget", "breakeven"):
+            self.assertEqual(self.client.get("/finance/investment?tab=" + tab).status_code, 200)
+        self.logout()
+        self.login("somchai.k", branch="factory1")                     # operator: no right
+        self.assertEqual(self.client.get("/finance/investment").status_code, 403)
+
+    def test_capex_depreciation_and_loan(self):
+        self.inv({"action": "capex_save", "CAPEX_CAT": "MACHINE", "CAPEX_NAME": "Mill set", "CAPEX_AMOUNT": "1100000",
+                  "SALVAGE_VALUE": "100000", "LIFE_YEARS": "", "FUND_SOURCE": "LOAN", "BUY_DATE": "2026-01-05"})
+        self.inv({"action": "capex_save", "CAPEX_CAT": "LAND", "CAPEX_NAME": "Land", "CAPEX_AMOUNT": "500000"})
+        self.inv({"action": "capex_save", "CAPEX_CAT": "EQUIP", "CAPEX_NAME": "Bad", "CAPEX_AMOUNT": "10", "SALVAGE_VALUE": "20"})
+        items = self.db("AOIMS_CAPEX")
+        self.assertEqual(len(items), 2)                                   # salvage above the amount is refused
+        self.inv({"action": "project", "LOAN_AMOUNT": "1000000", "LOAN_RATE": "10", "LOAN_YEARS": "2",
+                  "SERVICE_SHARE": "100", "BYPROD_KEEP": "100", "CALC_VARIETY": "HM"})
+        with self.app.test_request_context():
+            from app.models import investment
+            a = investment.analyse("factory2", 2026)
+        self.assertEqual((a["total"], a["dep_year"]), (1600000.0, 100000.0))   # 10 years by default, land not depreciated
+        self.assertEqual(a["loan"]["interest_year1"], 100000.0)
+        self.assertAlmostEqual(a["loan"]["payment_year"], 576190.48, places=2)
+        self.assertEqual(a["fixed_month"], round((100000 + 100000) / 12, 2))
+        self.assertEqual(a["var_kg"], round(a["eval"]["energy_cost"] + a["eval"]["other"], 3))
+        self.assertEqual(a["be_month"], round(a["fixed_month"] / a["cm_kg"]))
+        mill = items[0]["CAPEX_ID"] if items[0]["CAPEX_CAT"] == "MACHINE" else items[1]["CAPEX_ID"]
+        self.inv({"action": "capex_delete", "CAPEX_ID": mill})
+        self.assertEqual(len(self.db("AOIMS_CAPEX")), 1)
+        self.assertEqual({l["LOG_ACTION"] for l in self.db("AOILOG_INVEST")}, {"C", "D"})
+
+    def test_budget_and_actual(self):
+        from datetime import date
+        year = date.today().year
+        self.inv({"action": "budget_fill", "year": str(year)}, "budget")
+        lines = {b["BUDGET_CAT"]: b for b in self.db("AOITS_BUDGET")}
+        self.assertEqual(lines["LABOUR"]["BUDGET_AMOUNT"], 600 * 2 * 26 * 12)
+        self.assertEqual((lines["ELEC"]["BUDGET_AMOUNT"], lines["ELEC"]["COST_TYPE"]), (108000, "V"))
+        self.inv({"action": "budget", "year": str(year), "B_MAINT": "12000", "C_MAINT": "F", "B_LABOUR": "374400", "C_LABOUR": "F",
+                  "B_ELEC": "108000", "C_ELEC": "V", "B_MILLFEE": "60000"}, "budget")
+        self.post("/finance/account", {"ACC_TYPE": "EX", "ACC_DESC": "Belt", "ACC_AMOUNT": "500", "ACC_CAT": "MAINT"}, "/finance/account")
+        self.post("/finance/account", {"ACC_TYPE": "IN", "ACC_DESC": "Misc", "ACC_AMOUNT": "50"}, "/finance/account")
+        with self.app.test_request_context():
+            from app.models import investment
+            bva = investment.budget_vs_actual("factory2", year)
+            a = investment.analyse("factory2", year)
+        by = {l["BUDGET_CAT"]: l for l in bva["lines"]}
+        self.assertEqual((by["MAINT"]["actual"], by["OTHERIN"]["actual"], by["MAINT"]["BUDGET_AMOUNT"]), (500, 50, 12000))
+        self.assertEqual(bva["totals"]["EX"]["budget"], 374400 + 12000 + 108000)
+        self.assertEqual(a["fixed_parts"]["budget"], round((374400 + 12000) / 12, 2))    # electricity is variable
+        self.assertIn('id="iv-budget-table"', self.text("/finance/investment?tab=budget&year=%d" % year))
+        self.inv({"action": "budget_copy", "year": str(year + 1)}, "budget")
+        self.assertEqual(len([b for b in self.db("AOITS_BUDGET") if b["BUDGET_YEAR"] == year + 1]), 4)
+
+    def test_sample_project(self):
+        self.inv({"action": "sample"})
+        self.assertEqual(len(self.db("AOIMS_CAPEX")), 6)
+        page = self.text("/finance/investment?tab=breakeven")
+        self.assertIn('id="iv-be-chart"', page)
+        self.assertIn("investment.js", page)
+        self.inv({"action": "sample"})                                    # only once
+        self.assertEqual(len(self.db("AOIMS_CAPEX")), 6)
 
 
 if __name__ == "__main__":

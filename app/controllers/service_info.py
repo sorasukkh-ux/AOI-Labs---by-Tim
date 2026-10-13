@@ -30,9 +30,14 @@ def _start_of_today_utc():
 
 
 @bp.route("/status")
-@require("SV_STATUS")
 def tv():
-    """Service Status: what the customers see on the TV - finished, in process and queued orders."""
+    """Service Status is part of Current Services since update 26."""
+    from flask import redirect, url_for
+    return redirect(url_for("service_info.current_price", _anchor="cs-status"))
+
+
+def _status_sections():
+    """Finished, in process and queued orders of the branch (the former Service Status)."""
     orders = MillingOrder.sort_for_list(MillingOrder.for_branch(operating_branch(), [s for s, _c, _k in TV_SECTIONS]))
     names = {}
     sections = []
@@ -44,15 +49,17 @@ def tv():
             rows.append({"no": o["QR_ID"], "customer": names[o["CUST_CODE"]], "time": fmt_datetime(o["EXPCT_RECEIVE_TIME"]),
                          "delivery": o["ORDER_TYPE"] == flow.DELIVER})
         sections.append({"css": css, "key": key, "rows": rows})
-    return render_template("service/tv.html", sections=sections, branch=branch_label(operating_branch()))
+    return sections
 
 
 @bp.route("/price")
 @require("SV_PRICE")
 def current_price():
+    """Current Services: today's buying / selling prices and the milling queue (finished, in process, queued)."""
     rows = [{"name": mat_name(p["MAT_CODE"]), "variety": variety_of(p["MAT_CODE"]), "buy": p.get("PRICE_BUY") or 0, "sell": p.get("PRICE_SELL") or 0,
              "waiting": p.get("PRICE_STATUS") == "W"} for p in Price.for_branch(operating_branch())]
-    return render_template("service/current_price.html", rows=rows, branch=branch_label(operating_branch()))
+    return render_template("service/current_price.html", rows=rows, sections=_status_sections(),
+                           branch=branch_label(operating_branch()))
 
 
 def _donut(segments, cx=80, cy=80, r=64, inner=34):

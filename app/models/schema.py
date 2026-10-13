@@ -1,4 +1,4 @@
-"""Every collection of AOI DB Structure 1.31 and its indexes.
+"""Every collection of AOI DB Structure 1.33 and its indexes.
 
 MongoDB creates a collection the first time a record is written, so "creating the tables" means
 creating the indexes below. Unique indexes are the primary keys of the DB structure.
@@ -26,6 +26,11 @@ COLLECTIONS = {
     "AOITS_ORDBUYSELL": [(["ORD_ID"], True), (["BRANCH_ID", "ORD_STATUS"], False), (["REF_ORD_ID"], False)],
     "AOITS_QR_PRINT": [(["PRINT_ID"], True), (["ORD_ID"], False)],
     "AOITS_NOTIFY": [(["NOTIFY_ID"], True), (["ORD_ID"], False)],
+    # ---- investment & break-even (1.33, draft) ----
+    "AOIMS_INVPROJECT": [(["BRANCH_ID"], True)],
+    "AOIMS_CAPEX": [(["CAPEX_ID"], True), (["BRANCH_ID"], False)],
+    "AOITS_BUDGET": [(["BRANCH_ID", "BUDGET_YEAR", "BUDGET_CAT"], True)],
+    "AOILOG_INVEST": [(["LOG_ID"], True), (["TABLE_NAME", "REC_KEY"], False)],
     "AOITS_ACCOUNT": [(["ACC_ID"], True), (["BRANCH_ID", "ACC_DATE"], False)],
     "AOINV_ONHAND": [(["INV_ID"], True), (["BRANCH_ID", "LOC_ID"], False), (["BRANCH_ID", "SUB_2"], False), (["MAT_CODE"], False)],
     # ---- logs ----

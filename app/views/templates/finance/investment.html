@@ -1,0 +1,259 @@
+{% extends "base.html" %}
+{% from "_macros.html" import page_head, branch_picker %}
+{% macro money(v, p=0) %}{{ ("{:,.%df}" % p).format(v) if v is not none else '-' }}{% endmacro %}
+{% block content %}
+<div id="tab-invest">
+{{ page_head(t('tabInvest'), url_for('home.index', g='FN')) }}
+<p class="notice warn" id="iv-draft">{{ t('ivDraftNote') }}</p>
+<div class="card branch-pick-card">
+  {{ branch_picker('finance.investment', branch, branches, 'iv-branch-select') }}
+</div>
+<div class="seg-tabs mt14" role="tablist" id="iv-tabs">
+  {% for key, icon in (('capex', '&#127959;&#65039;'), ('budget', '&#128202;'), ('breakeven', '&#9878;&#65039;')) %}
+  <a class="seg-tab{% if tab == key %} active{% endif %}" role="tab" aria-selected="{{ 'true' if tab == key else 'false' }}" id="iv-tab-{{ key }}"
+     href="{{ url_for('finance.investment', branch=branch, tab=key, year=year) }}">{{ icon|safe }} {{ t('ivTab_' ~ key) }}</a>
+  {% endfor %}
+</div>
+
+<div class="auto-kpis mt14" id="iv-kpis">
+  <div class="card"><p class="card-title">{{ t('ivTotalInvest') }}</p><p class="kpi-value">{{ money(d.total) }}</p><p class="cap-note tight">{{ t('ivOwnLoan', own=money(d.own), loan=money(d.loan.amount)) }}</p></div>
+  <div class="card"><p class="card-title">{{ t('ivBeDay') }}</p><p class="kpi-value">{{ (money(d.be_day) ~ ' kg') if d.be_day is not none else t('ivNoBe') }}</p><p class="cap-note tight">{{ t('ivPlannedDay', kg=money(d.planned_day)) }}</p></div>
+  <div class="card"><p class="card-title">{{ t('ivProfitMonth') }}</p><p class="kpi-value {{ 'neg' if d.profit_month < 0 else 'pos' }}">{{ money(d.profit_month) }}</p><p class="cap-note tight">{{ t('ivAtPlanned') }}</p></div>
+  <div class="card"><p class="card-title">{{ t('ivPayback') }}</p><p class="kpi-value">{{ t('ivYears', n=d.payback) if d.payback is not none else '-' }}</p><p class="cap-note tight">ROI {{ (d.roi ~ '%') if d.roi is not none else '-' }} / {{ t('ivPerYear') }}</p></div>
+</div>
+
+{% if tab == 'capex' %}
+{# ---------------- Project investment ---------------- #}
+<div class="card mt14" id="iv-project">
+  <p class="card-title">{{ t('ivProjectTitle') }}</p>
+  <form method="post" autocomplete="off">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="project">
+    <input type="hidden" name="branch" value="{{ branch }}"><input type="hidden" name="tab" value="capex"><input type="hidden" name="year" value="{{ year }}">
+    <fieldset class="plain" {% if not can_edit %}disabled{% endif %}>
+    <div class="two-col field-row">
+      <div><label class="field-label" for="iv-pname">{{ t('ivProjectName') }}</label><input type="text" id="iv-pname" name="PROJECT_NAME" maxlength="100" value="{{ d.project.PROJECT_NAME }}"></div>
+      <div><label class="field-label" for="iv-pstart">{{ t('ivStartDate') }}</label><input type="date" id="iv-pstart" name="START_DATE" value="{{ start_date }}"></div>
+    </div>
+    <p class="field-label mt6"><b>{{ t('ivLoanTitle') }}</b></p>
+    <div class="three-col field-row">
+      <div><label class="field-label" for="iv-loan">{{ t('ivLoanAmount') }}</label><input type="number" min="0" step="1000" id="iv-loan" name="LOAN_AMOUNT" value="{{ d.project.LOAN_AMOUNT|plain }}"></div>
+      <div><label class="field-label" for="iv-rate">{{ t('ivLoanRate') }}</label><input type="number" min="0" max="30" step="0.01" id="iv-rate" name="LOAN_RATE" value="{{ d.project.LOAN_RATE|plain }}"></div>
+      <div><label class="field-label" for="iv-years">{{ t('ivLoanYears') }}</label><input type="number" min="0" max="40" step="1" id="iv-years" name="LOAN_YEARS" value="{{ d.project.LOAN_YEARS }}"></div>
+    </div>
+    {% if d.loan.amount %}<p class="cap-note tight" id="iv-loan-note">{{ t('ivLoanNote', pay=money(d.loan.payment_year), interest=money(d.loan.interest_year1)) }}</p>{% endif %}
+    <p class="field-label mt6"><b>{{ t('ivMixTitle') }}</b></p>
+    <div class="three-col field-row">
+      <div><label class="field-label" for="iv-service">{{ t('ivServiceShare') }}</label><input type="number" min="0" max="100" step="1" id="iv-service" name="SERVICE_SHARE" value="{{ d.project.SERVICE_SHARE|plain }}"></div>
+      <div><label class="field-label" for="iv-keep">{{ t('ivByprodKeep') }}</label><input type="number" min="0" max="100" step="1" id="iv-keep" name="BYPROD_KEEP" value="{{ d.project.BYPROD_KEEP|plain }}"></div>
+      <div><label class="field-label" for="iv-variety">{{ t('ivCalcVariety') }}</label>
+        <select id="iv-variety" name="CALC_VARIETY">{% for v in varieties %}<option value="{{ v }}"{% if v == d.variety %} selected{% endif %}>{{ t(var_keys[v]) }}</option>{% endfor %}</select></div>
+    </div>
+    <p class="cap-note tight">{{ t('ivMixNote') }}</p>
+    {% if can_edit %}<button class="action primary full" type="submit" id="iv-project-save">{{ t('btnSave') }}</button>{% endif %}
+    </fieldset>
+  </form>
+</div>
+
+<div class="card mt14" id="iv-capex">
+  <p class="card-title">{{ t('ivCapexTitle') }}</p>
+  <p class="cap-note tight">{{ t('ivCapexNote') }}</p>
+  <div class="inv-table-wrap"><table class="tv-table" id="iv-capex-table">
+    <thead><tr><th>{{ t('ivColItem') }}</th><th class="num">{{ t('ivColAmount') }}</th><th class="num">{{ t('ivColLife') }}</th><th class="num">{{ t('ivColDep') }}</th><th>{{ t('ivColFund') }}</th><th></th></tr></thead>
+    <tbody>
+    {% for i in d['items'] %}
+      <tr data-capex="{{ i.CAPEX_ID }}">
+        <td>{{ i.CAPEX_NAME }}<small class="inv-sub">{{ t('ivCat_' ~ i.CAPEX_CAT) }} &middot; {{ i.date }}{% if i.REMARK %} &middot; {{ i.REMARK }}{% endif %}</small></td>
+        <td class="num nowrap">{{ money(i.CAPEX_AMOUNT) }}{% if i.SALVAGE_VALUE %}<small class="inv-sub">{{ t('ivSalvageShort', v=money(i.SALVAGE_VALUE)) }}</small>{% endif %}</td>
+        <td class="num">{{ i.LIFE_YEARS or '-' }}</td>
+        <td class="num nowrap">{{ money(i.dep_year) if i.LIFE_YEARS else '-' }}</td>
+        <td>{{ t('ivFund_' ~ i.FUND_SOURCE) }}</td>
+        <td class="nowrap">{% if can_edit %}<a class="chip" href="{{ url_for('finance.investment', branch=branch, tab='capex', year=year, edit=i.CAPEX_ID) }}#iv-capex-form">{{ t('btnEdit') }}</a>{% endif %}
+          {% if can_delete %}<form method="post" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="capex_delete">
+            <input type="hidden" name="CAPEX_ID" value="{{ i.CAPEX_ID }}"><input type="hidden" name="branch" value="{{ branch }}"><input type="hidden" name="tab" value="capex">
+            <button type="submit" class="acct-delete-btn" aria-label="{{ t('ivConfirmDelete') }}" data-confirm="{{ t('ivConfirmDelete') }}">&#10005;</button></form>{% endif %}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="6" class="hint center">{{ t('ivNoCapex') }}</td></tr>
+    {% endfor %}
+    </tbody>
+    {% if d['items'] %}<tfoot><tr><td><b>{{ t('ivTotal') }}</b></td><td class="num"><b>{{ money(d.total) }}</b></td><td></td><td class="num"><b>{{ money(d.dep_year) }}</b></td><td colspan="2"></td></tr></tfoot>{% endif %}
+  </table></div>
+  {% if by_cat %}<p class="cap-note" id="iv-by-cat">{% for cat, amount in by_cat.items() %}{{ t('ivCat_' ~ cat) }} {{ money(amount) }} ({{ '%.0f'|format(amount / d.total * 100) }}%){% if not loop.last %} &middot; {% endif %}{% endfor %}</p>{% endif %}
+  {% if not d['items'] and can_create %}
+  <form method="post" class="mt6"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="sample">
+    <input type="hidden" name="branch" value="{{ branch }}"><input type="hidden" name="tab" value="capex">
+    <button class="action full" type="submit" id="iv-sample-btn" data-confirm="{{ t('ivSampleConfirm') }}">{{ t('ivSampleBtn') }}</button></form>
+  {% endif %}
+</div>
+
+{% if can_create or (editing and can_edit) %}
+<div class="card mt14" id="iv-capex-form">
+  <p class="card-title">{{ t('ivCapexEdit', id=editing.CAPEX_ID) if editing else t('ivCapexAdd') }}</p>
+  <form method="post" autocomplete="off">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="capex_save">
+    <input type="hidden" name="branch" value="{{ branch }}"><input type="hidden" name="tab" value="capex"><input type="hidden" name="year" value="{{ year }}">
+    <input type="hidden" name="CAPEX_ID" value="{{ editing.CAPEX_ID if editing else '' }}">
+    <div class="two-col field-row">
+      <div><label class="field-label" for="iv-cat">{{ t('ivColCategory') }}</label>
+        <select id="iv-cat" name="CAPEX_CAT">{% for cat, life in capex_cats.items() %}<option value="{{ cat }}" data-life="{{ life }}"{% if editing and editing.CAPEX_CAT == cat %} selected{% endif %}>{{ t('ivCat_' ~ cat) }}</option>{% endfor %}</select></div>
+      <div><label class="field-label" for="iv-date">{{ t('ivColDate') }}</label><input type="date" id="iv-date" name="BUY_DATE" value="{{ edit_date }}"></div>
+    </div>
+    <div class="field-row"><label class="field-label" for="iv-name">{{ t('ivColItem') }}</label><input type="text" id="iv-name" name="CAPEX_NAME" maxlength="100" required value="{{ editing.CAPEX_NAME if editing else '' }}"></div>
+    <div class="three-col field-row">
+      <div><label class="field-label" for="iv-amount">{{ t('ivColAmount') }}</label><input type="number" min="0.01" step="0.01" id="iv-amount" name="CAPEX_AMOUNT" required value="{{ editing.CAPEX_AMOUNT|plain if editing else '' }}"></div>
+      <div><label class="field-label" for="iv-life">{{ t('ivColLife') }}</label><input type="number" min="0" max="50" step="1" id="iv-life" name="LIFE_YEARS" value="{{ editing.LIFE_YEARS if editing else '' }}" placeholder="{{ t('ivLifeDefault') }}"></div>
+      <div><label class="field-label" for="iv-salvage">{{ t('ivColSalvage') }}</label><input type="number" min="0" step="0.01" id="iv-salvage" name="SALVAGE_VALUE" value="{{ editing.SALVAGE_VALUE|plain if editing else '0' }}"></div>
+    </div>
+    <div class="two-col field-row">
+      <div><label class="field-label" for="iv-fund">{{ t('ivColFund') }}</label>
+        <select id="iv-fund" name="FUND_SOURCE">{% for f in funds %}<option value="{{ f }}"{% if editing and editing.FUND_SOURCE == f %} selected{% endif %}>{{ t('ivFund_' ~ f) }}</option>{% endfor %}</select></div>
+      <div><label class="field-label" for="iv-remark">{{ t('ivColRemark') }}</label><input type="text" id="iv-remark" name="REMARK" maxlength="200" value="{{ editing.REMARK or '' if editing else '' }}"></div>
+    </div>
+    <p class="cap-note tight">{{ t('ivLifeNote') }}</p>
+    <div class="two-col">
+      {% if editing %}<a class="action" href="{{ url_for('finance.investment', branch=branch, tab='capex', year=year) }}">{{ t('btnCancel') }}</a>{% endif %}
+      <button class="action primary{% if not editing %} full{% endif %}" type="submit" id="iv-capex-save">{{ t('btnSave') }}</button>
+    </div>
+  </form>
+</div>
+{% endif %}
+
+{% if d.loan.schedule %}
+<div class="card mt14" id="iv-loan-table">
+  <p class="card-title">{{ t('ivLoanSchedule') }}</p>
+  <div class="inv-table-wrap"><table class="tv-table">
+    <thead><tr><th>{{ t('ivColYear') }}</th><th class="num">{{ t('ivColInterest') }}</th><th class="num">{{ t('ivColPrincipal') }}</th><th class="num">{{ t('ivColBalance') }}</th></tr></thead>
+    <tbody>{% for r in d.loan.schedule %}<tr><td>{{ r.year }}</td><td class="num">{{ money(r.interest) }}</td><td class="num">{{ money(r.principal) }}</td><td class="num">{{ money(r.balance) }}</td></tr>{% endfor %}</tbody>
+  </table></div>
+</div>
+{% endif %}
+
+{% elif tab == 'budget' %}
+{# ---------------- Budget ---------------- #}
+<div class="card mt14" id="iv-budget-year">
+  <form method="get" action="{{ url_for('finance.investment') }}" class="field-row">
+    <input type="hidden" name="branch" value="{{ branch }}"><input type="hidden" name="tab" value="budget">
+    <label class="field-label" for="iv-year">{{ t('ivBudgetYear') }}</label>
+    <select id="iv-year" name="year" data-autosubmit>{% for y in years %}<option value="{{ y }}"{% if y == year %} selected{% endif %}>{{ y }} ({{ y + 543 }})</option>{% endfor %}</select>
+  </form>
+  {% if can_edit %}
+  <div class="two-col">
+    <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="budget_fill">
+      <input type="hidden" name="branch" value="{{ branch }}"><input type="hidden" name="tab" value="budget"><input type="hidden" name="year" value="{{ year }}">
+      <button class="action full" type="submit" id="iv-fill-btn">{{ t('ivBudgetFill') }}</button></form>
+    <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="budget_copy">
+      <input type="hidden" name="branch" value="{{ branch }}"><input type="hidden" name="tab" value="budget"><input type="hidden" name="year" value="{{ year }}">
+      <button class="action full" type="submit" id="iv-copy-btn">{{ t('ivBudgetCopy', y=year - 1) }}</button></form>
+  </div>
+  {% endif %}
+</div>
+
+<div class="acct-totals mt14" id="iv-budget-totals">
+  {% for kind in ('IN', 'EX') %}{% set tt = bva.totals[kind] %}
+  <div class="result-panel {{ 'acct-income' if kind == 'IN' else 'acct-expense' }}"><div class="result-row acct-block"><span>{{ t('ivBudget_' ~ kind) }}</span><b>{{ money(tt.budget) }}</b></div>
+    <div class="result-row"><span>{{ t('ivActual') }}</span><b>{{ money(tt.actual) }}</b></div></div>
+  {% endfor %}
+</div>
+
+<form method="post" autocomplete="off" class="card mt14" id="iv-budget-form">
+  <p class="card-title">{{ t('ivBudgetTitle', y=year) }}</p>
+  <p class="cap-note tight">{{ t('ivBudgetNote') }}</p>
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="budget">
+  <input type="hidden" name="branch" value="{{ branch }}"><input type="hidden" name="tab" value="budget"><input type="hidden" name="year" value="{{ year }}">
+  <div class="inv-table-wrap"><table class="tv-table" id="iv-budget-table">
+    <thead><tr><th>{{ t('ivColCategory') }}</th><th>{{ t('ivColCostType') }}</th><th class="num">{{ t('ivColBudgetYear') }}</th><th class="num">{{ t('ivActual') }}</th><th>{{ t('ivColUsed') }}</th></tr></thead>
+    {% for kind in ('IN', 'EX') %}
+    <tbody>
+      <tr class="iv-group"><td colspan="5"><b>{{ t('ivBudget_' ~ kind) }}</b></td></tr>
+      {% for l in bva.lines if l.BUDGET_TYPE == kind %}
+      <tr data-cat="{{ l.BUDGET_CAT }}">
+        <td>{{ t('ivBc_' ~ l.BUDGET_CAT) }}</td>
+        <td>{% if kind == 'EX' %}<select name="C_{{ l.BUDGET_CAT }}" aria-label="{{ t('ivColCostType') }}" {% if not can_edit %}disabled{% endif %}>
+          <option value="F"{% if l.COST_TYPE == 'F' %} selected{% endif %}>{{ t('ivCost_F') }}</option><option value="V"{% if l.COST_TYPE == 'V' %} selected{% endif %}>{{ t('ivCost_V') }}</option></select>{% else %}-{% endif %}</td>
+        <td class="num"><input type="number" min="0" step="100" class="iv-budget-input" name="B_{{ l.BUDGET_CAT }}" value="{{ l.BUDGET_AMOUNT|plain if l.BUDGET_AMOUNT else '' }}" placeholder="0" aria-label="{{ t('ivBc_' ~ l.BUDGET_CAT) }}" {% if not can_edit %}disabled{% endif %}>
+          <small class="inv-sub">{{ t('ivPerMonth', v=money((l.BUDGET_AMOUNT or 0) / 12)) }}</small></td>
+        <td class="num nowrap">{{ money(l.actual) }}</td>
+        <td class="iv-used">{% if l.used_pct is not none %}{% set over = l.actual > l.to_date and l.to_date > 0 %}
+          <div class="iv-bar" role="img" aria-label="{{ l.used_pct }}%"><i class="iv-bar-fill{% if kind == 'EX' and l.used_pct > 100 %} over{% endif %}" data-pct="{{ [l.used_pct, 100]|min }}"></i><i class="iv-bar-mark" data-pct="{{ (bva.months_gone / 12 * 100)|round(1) }}"></i></div>
+          <small class="inv-sub">{{ l.used_pct }}%{% if kind == 'EX' and over %} &middot; <span class="warn">{{ t('ivOverToDate') }}</span>{% endif %}</small>{% else %}-{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    {% endfor %}
+  </table></div>
+  <p class="cap-note tight">{{ t('ivUsedNote', m=bva.months_gone) }}</p>
+  {% if can_edit %}<button class="action primary full" type="submit" id="iv-budget-save">{{ t('btnSave') }}</button>{% endif %}
+</form>
+
+<div class="card mt14" id="iv-months">
+  <p class="card-title">{{ t('ivMonthsTitle') }}</p>
+  <div class="inv-table-wrap"><table class="tv-table">
+    <thead><tr><th>{{ t('ivColMonth') }}</th><th class="num">{{ t('ivBudget_IN') }}</th><th class="num">{{ t('ivActualIn') }}</th><th class="num">{{ t('ivBudget_EX') }}</th><th class="num">{{ t('ivActualEx') }}</th><th class="num">{{ t('ivColNet') }}</th></tr></thead>
+    <tbody>{% for m in bva.months %}<tr{% if m.future %} class="muted"{% endif %}><td>{{ t('ivM' ~ m.month) }}</td><td class="num">{{ money(m.b_in) }}</td><td class="num">{{ money(m.a_in) if not m.future else '-' }}</td>
+      <td class="num">{{ money(m.b_ex) }}</td><td class="num">{{ money(m.a_ex) if not m.future else '-' }}</td><td class="num {{ 'neg' if m.net < 0 }}">{{ money(m.net) if not m.future else '-' }}</td></tr>{% endfor %}</tbody>
+  </table></div>
+  <p class="cap-note">{{ t('ivActualNote') }}{% if can('FN_ACCOUNT') %} <a href="{{ url_for('finance.account') }}">{{ t('tabAccount') }} &rarr;</a>{% endif %}</p>
+</div>
+
+{% else %}
+{# ---------------- Break-even ---------------- #}
+<div class="card mt14" id="iv-be-chart-card">
+  <p class="card-title">{{ t('ivBeChartTitle', y=year) }}</p>
+  <p class="cap-note tight">{{ t('ivBeChartNote') }}</p>
+  <div class="iv-legend" aria-hidden="true"><span><i class="iv-sw rev"></i>{{ t('ivChartRevenue') }}</span><span><i class="iv-sw cost"></i>{{ t('ivChartCost') }}</span><span><i class="iv-sw fixed"></i>{{ t('ivChartFixed') }}</span></div>
+  <div class="iv-chart-wrap"><div id="iv-be-chart" data-chart='{{ chart|tojson }}'></div><div id="iv-be-tip" class="mkh-tip" hidden></div></div>
+  {% if d.be_month is none %}<p class="notice warn mt6" id="iv-no-be">{{ t('ivNoBeNote') }}</p>{% endif %}
+</div>
+
+<div class="cs-grid mt14">
+<div class="card" id="iv-be-calc">
+  <p class="card-title">{{ t('ivFixedTitle') }}</p>
+  <table class="tv-table"><tbody>
+    <tr><td>{{ t('ivFixedDep') }}</td><td class="num">{{ money(d.fixed_parts.dep, 2) }}</td></tr>
+    <tr><td>{{ t('ivFixedInterest') }}</td><td class="num">{{ money(d.fixed_parts.interest, 2) }}</td></tr>
+    <tr><td>{{ t('ivFixedBudget') }}<small class="inv-sub">{{ t('ivFixedBudgetNote', y=year) }}</small></td><td class="num">{{ money(d.fixed_parts.budget, 2) }}</td></tr>
+    <tr class="pf-rec"><td><b>{{ t('ivFixedMonth') }}</b></td><td class="num"><b>{{ money(d.fixed_month, 2) }}</b></td></tr>
+  </tbody></table>
+  <p class="card-title mt14">{{ t('ivPerKgTitle', v=t(var_keys[d.variety])) }}</p>
+  <table class="tv-table"><tbody>
+    <tr><td>{{ t('ivFeeKg') }}</td><td class="num">{{ '%.3f'|format(d.fee_kg) }}</td></tr>
+    <tr><td>{{ t('ivByprodKg', pct=d.keep|plain) }}</td><td class="num">{{ '%.3f'|format(d.keep / 100 * d.eval.by_products) }}</td></tr>
+    <tr><td>{{ t('ivValueKg') }}<small class="inv-sub">{{ t('ivTradingShare', pct=(100 - d.service)|plain) }}</small></td><td class="num">{{ '%.3f'|format(d.eval.value) }}</td></tr>
+    <tr><td><b>{{ t('ivRevKg') }}</b><small class="inv-sub">{{ t('ivMixShort', s=d.service|plain) }}</small></td><td class="num"><b>{{ '%.3f'|format(d.rev_kg) }}</b></td></tr>
+    <tr><td>{{ t('ivVarEnergy') }}</td><td class="num">{{ '%.3f'|format(d.eval.energy_cost + d.eval.other) }}</td></tr>
+    <tr><td>{{ t('ivVarPaddy') }}<small class="inv-sub">{{ t('ivBuyAt', p=d.buy|num if d.buy is not none else '-') }}</small></td><td class="num">{{ '%.3f'|format((100 - d.service) / 100 * (d.buy or 0)) }}</td></tr>
+    <tr><td><b>{{ t('ivVarKg') }}</b></td><td class="num"><b>{{ '%.3f'|format(d.var_kg) }}</b></td></tr>
+    <tr class="pf-rec"><td><b>{{ t('ivCmKg') }}</b></td><td class="num {{ 'neg' if d.cm_kg <= 0 }}"><b>{{ '%.3f'|format(d.cm_kg) }}</b></td></tr>
+  </tbody></table>
+  <p class="cap-note">{{ t('ivPerKgNote') }} <a href="{{ url_for('finance.investment', branch=branch, tab='capex', year=year) }}#iv-project">{{ t('ivProjectTitle') }} &rarr;</a></p>
+</div>
+<div class="card" id="iv-be-result">
+  <p class="card-title">{{ t('ivBeTitle') }}</p>
+  <table class="tv-table"><tbody>
+    <tr class="pf-rec"><td><b>{{ t('ivBeMonth') }}</b></td><td class="num"><b>{{ money(d.be_month) }}</b> kg</td></tr>
+    <tr><td>{{ t('ivBeDay') }}</td><td class="num">{{ money(d.be_day) }} kg</td></tr>
+    <tr><td>{{ t('ivBeRevenue') }}</td><td class="num">{{ money(d.be_revenue) }}</td></tr>
+    <tr><td>{{ t('ivBeUtil') }}<small class="inv-sub">{{ t('ivCapacityDay', kg=money(d.capacity_day)) }}</small></td><td class="num">{{ (d.be_util ~ '%') if d.be_util is not none else '-' }}</td></tr>
+    <tr><td>{{ t('ivPlannedDayLbl') }}<small class="inv-sub">{{ t('ivActualDay', kg=money(d.actual_day) if d.actual_day else '-') }}</small></td><td class="num">{{ money(d.planned_day) }} kg</td></tr>
+    <tr><td>{{ t('ivSafety') }}</td><td class="num {{ 'neg' if d.safety is not none and d.safety < 0 }}">{{ (d.safety ~ '%') if d.safety is not none else '-' }}</td></tr>
+    <tr><td>{{ t('ivProfitMonth') }}</td><td class="num {{ 'neg' if d.profit_month < 0 }}">{{ money(d.profit_month) }}</td></tr>
+    <tr><td>{{ t('ivProfitYear') }}</td><td class="num {{ 'neg' if d.profit_year < 0 }}">{{ money(d.profit_year) }}</td></tr>
+    <tr><td>ROI</td><td class="num">{{ (d.roi ~ '%') if d.roi is not none else '-' }}</td></tr>
+    <tr class="pf-rec"><td><b>{{ t('ivPayback') }}</b></td><td class="num"><b>{{ t('ivYears', n=d.payback) if d.payback is not none else t('ivNoPayback') }}</b></td></tr>
+  </tbody></table>
+  <p class="cap-note">{{ t('ivPlannedNote') }}{% if can('AD_MILLTIME') %} <a href="{{ url_for('admin_milling.maintenance', branch=branch) }}">{{ t('tabMillingTime') }} &rarr;</a>{% endif %}</p>
+</div>
+</div>
+
+<div class="card mt14" id="iv-years-card">
+  <p class="card-title">{{ t('ivYearsTitle') }}</p>
+  <div class="inv-table-wrap"><table class="tv-table" id="iv-years-table">
+    <thead><tr><th>{{ t('ivColYear') }}</th><th class="num">{{ t('ivColProfit') }}</th><th class="num">{{ t('ivColCash') }}</th><th class="num">{{ t('ivColPrincipal') }}</th><th class="num">{{ t('ivColCumulative') }}</th></tr></thead>
+    <tbody>{% for y in d.years %}<tr{% if y.cumulative >= 0 and (loop.first or d.years[loop.index0 - 1].cumulative < 0) %} class="pf-rec"{% endif %}><td>{{ y.year }}</td><td class="num {{ 'neg' if y.profit < 0 }}">{{ money(y.profit) }}</td><td class="num">{{ money(y.cash) }}</td><td class="num">{{ money(y.principal) }}</td><td class="num {{ 'neg' if y.cumulative < 0 else 'pos' }}">{{ money(y.cumulative) }}</td></tr>{% endfor %}</tbody>
+  </table></div>
+  <p class="cap-note">{{ t('ivYearsNote') }}</p>
+</div>
+{% endif %}
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/investment.js') }}" defer></script>{% endblock %}

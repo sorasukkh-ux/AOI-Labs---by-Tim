@@ -34,9 +34,17 @@
     {% if can_edit and customer %}<a class="action" id="cust-edit-btn" href="{{ url_for('admin_customers.customer_view', code=customer.CUST_CODE, edit=1, next=next_url or None) }}">{{ t('btnEdit') }}</a>
     {% else %}<button class="action" id="cust-edit-btn" type="button" disabled>{{ t('btnEdit') }}</button>{% endif %}
   </div>
+  {% if can_delete and customer %}
+  <form method="post" action="{{ url_for('admin_customers.customer_delete', code=customer.CUST_CODE) }}" class="mb14" id="cust-delete-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="action danger full" type="submit" id="cust-delete-btn" data-confirm="{{ t('custConfirmDelete', code=customer.CUST_CODE, name=customer.CUST_NAME) }}">&#128465; {{ t('btnDeleteCust') }}</button>
+  </form>
+  {% endif %}
   {% endif %}
 
-  <form method="post" autocomplete="off" id="cust-form">
+  <form method="post" autocomplete="off" id="cust-form" data-mode="{{ mode }}" data-check-url="{{ url_for('admin_customers.customer_check') }}"
+        data-code="{{ customer.CUST_CODE if customer and mode != 'new' else '' }}"
+        data-text='{{ {"title": t("custConfirmTitle") if mode == "new" else t("custConfirmEditTitle"), "note": t("custConfirmNote"), "name": t("custNameLabel"), "phone": t("fieldPhone"), "address": t("fieldAddress"), "distance": t("fieldDistance"), "line": t("fieldLineId"), "dup": t("custErrDupName"), "required": t("custErrRequired"), "server": t("errServer")}|tojson }}'>
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <fieldset {% if mode == 'view' %}disabled{% endif %} class="plain">
     <div class="two-col field-row">
@@ -75,6 +83,28 @@
   </form>
 </div>
 
+{% if customer and mode != 'new' and can_edit %}
+<div class="card mb14" id="cust-line">
+  <p class="card-title">&#128172; {{ t('custLineTitle') }}</p>
+  {% if customer.LINE_USER_ID %}
+  <p class="cap-note tight">&#9989; {{ t('custLineLinked', name=customer.LINE_DISPLAY_NAME or '-', date=fmt_datetime(customer.LINE_LINK_DATE) if customer.LINE_LINK_DATE else '-', via=t('custLineVia_' ~ (customer.LINE_LINK_VIA or 'HAND'))) }}</p>
+  {% else %}<p class="cap-note tight">{{ t('custLineNone') }}</p>{% endif %}
+  {% if line_qr %}
+  <details class="mt6" id="cust-line-relink"{% if not customer.LINE_USER_ID %} open{% endif %}>
+    <summary class="action">{{ t('custLineRelink') if customer.LINE_USER_ID else t('custLineLinkNow') }}</summary>
+    <p class="cap-note">{{ t('custLineRelinkNote') }}</p>
+    <div class="od-qr cust-line-qr" data-qr="{{ line_qr }}"></div>
+  </details>
+  {% endif %}
+  {% if customer.LINE_USER_ID %}
+  <form method="post" action="{{ url_for('admin_customers.customer_line_unlink', code=customer.CUST_CODE) }}" class="mt6">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="action danger" type="submit" id="cust-line-unlink" data-confirm="{{ t('custLineUnlinkConfirm', name=customer.CUST_NAME) }}">{{ t('custLineUnlink') }}</button>
+  </form>
+  {% endif %}
+</div>
+{% endif %}
+
 {% if customer and mode != 'new' %}
 <p class="tv-section-title plain">{{ t('historyTitle') }}</p>
 <div class="table-scroll">
@@ -96,3 +126,4 @@
 {% endif %}
 </div>
 {% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/customers.js') }}" defer></script>{% endblock %}

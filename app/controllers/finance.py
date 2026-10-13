@@ -1,4 +1,4 @@
-"""Financial: Pricing Maintenance, Margin Maintenance, Account, Marketing.
+"""Financial: Pricing Maintenance, Margin Maintenance, Account, Marketing, Investment & Break-even (draft).
 
 Pricing, Margin and Marketing are maintenance screens: the branch can be chosen (within the user's authorized
 branches). Account shows the ledger of the branch signed in to.
@@ -12,7 +12,7 @@ from ..models.price import CUSTOM, WAITING, Price, Promotion
 from ..security import can, current_user, maintainable_branches, operating_branch, pick_maintenance_branch, require
 from ..timeutil import fmt_date, today_local, to_local
 from .common import flash_error, flash_ok
-from ..models import market, market_history, nabc_price, profit, variety as var
+from ..models import investment as investment_model, market, market_history, nabc_price, profit, variety as var
 from ..models.variety import mat_name
 
 bp = Blueprint("finance", __name__, url_prefix="/finance")
@@ -254,7 +254,8 @@ def account():
         rows.append(dict(e, date=fmt_date(e["ACC_DATE"]), ref_url=ref_url))
     return render_template("finance/account.html", rows=rows, income=income, expense=expense, net=net,
                            f=request.args.get("f"), today=today_local().isoformat(),
-                           can_create=can(ACCOUNT, "create"), can_delete=can(ACCOUNT, "delete"))
+                           can_create=can(ACCOUNT, "create"), can_delete=can(ACCOUNT, "delete"),
+                           budget_cats=investment_model.BUDGET_CATS)
 
 
 # ---------- Marketing ----------
@@ -280,3 +281,66 @@ def marketing():
     return render_template("finance/marketing.html", branch=branch, branches=maintainable_branches(), promo=promo,
                            state=state, pct=pct, examples=examples, valid_from=day(promo.get("VALID_FROM")),
                            valid_to=day(promo.get("VALID_TO")), can_edit=can(MARKETING, "edit"))
+
+
+# ---------- Investment & Break-even (draft, update 27) ----------
+INVEST = "FN_INVEST"
+INVEST_TABS = ("capex", "budget", "breakeven")
+
+
+def _year():
+    try:
+        year = int(request.values.get("year") or today_local().year)
+    except ValueError:
+        year = today_local().year
+    return min(max(year, 2000), 2100)
+
+
+@bp.route("/investment", methods=["GET", "POST"])
+@require(INVEST)
+def investment():
+    inv = investment_model
+    branch = _branch_or_403()
+    tab = request.values.get("tab") if request.values.get("tab") in INVEST_TABS else "capex"
+    year = _year()
+    back = dict(branch=branch, tab=tab, year=year)
+    if request.method == "POST":
+        action = request.form.get("action")
+        perm = {"capex_delete": "delete", "sample": "create", "capex_add": "create"}.get(action, "edit")
+        if action == "capex_save" and not request.form.get("CAPEX_ID"):
+            perm = "create"
+        if not can(INVEST, perm):
+            abort(403)
+        actions = {
+            "capex_save": (lambda: inv.save_capex(branch, request.form, _user_id()), "ivMsgCapexSaved"),
+            "capex_delete": (lambda: inv.delete_capex(branch, request.form.get("CAPEX_ID"), _user_id()), "ivMsgCapexDeleted"),
+            "project": (lambda: inv.save_project(branch, request.form, _user_id()), "ivMsgProjectSaved"),
+            "budget": (lambda: inv.save_budget(branch, year, request.form, _user_id()), "ivMsgBudgetSaved"),
+            "budget_copy": (lambda: inv.copy_budget(branch, year, _user_id()), "ivMsgBudgetCopied"),
+            "budget_fill": (lambda: inv.fill_from_settings(branch, year, _user_id()), "ivMsgBudgetFilled"),
+            "sample": (lambda: inv.load_sample(branch, _user_id()), "ivMsgSample"),
+        }
+        if action not in actions:
+            abort(400)
+        return _run(actions[action][0], actions[action][1], "finance.investment", **back)
+    data = inv.analyse(branch, year)
+    edit_id = request.args.get("edit")
+    editing = next((i for i in data["items"] if i["CAPEX_ID"] == edit_id), None)
+    for item in data["items"]:
+        item["date"] = fmt_date(item["BUY_DATE"]) if item.get("BUY_DATE") else "-"
+    by_cat = {}
+    for item in data["items"]:
+        by_cat[item["CAPEX_CAT"]] = by_cat.get(item["CAPEX_CAT"], 0.0) + item["CAPEX_AMOUNT"]
+    chart = dict(data["chart"], text={"x": t("ivChartX"), "y": t("ivChartY"), "rev": t("ivChartRevenue"),
+                                      "cost": t("ivChartCost"), "fixed": t("ivChartFixed"), "be": t("ivChartBe"),
+                                      "planned": t("ivChartPlanned"), "capacity": t("ivChartCapacity"),
+                                      "profit": t("ivChartProfit"), "loss": t("ivChartLoss"), "kg": t("ivKgMonth")})
+    proj = data["project"]
+    return render_template(
+        "finance/investment.html", branch=branch, branches=maintainable_branches(), tab=tab, year=year, d=data,
+        bva=inv.budget_vs_actual(branch, year) if tab == "budget" else None, editing=editing, by_cat=by_cat,
+        capex_cats=inv.CAPEX_CATS, budget_cats=inv.BUDGET_CATS, funds=inv.FUNDS, chart=chart, varieties=var.VARIETIES,
+        start_date=to_local(proj["START_DATE"]).date().isoformat() if proj.get("START_DATE") else "",
+        edit_date=to_local(editing["BUY_DATE"]).date().isoformat() if editing and editing.get("BUY_DATE") else today_local().isoformat(),
+        years=list(range(today_local().year - 2, today_local().year + 3)),
+        can_create=can(INVEST, "create"), can_edit=can(INVEST, "edit"), can_delete=can(INVEST, "delete"))

@@ -8,7 +8,6 @@ from ..models.branch import Branch
 MENU_ENDPOINTS = {
     "SV_SERVICE": "service_milling.new_order",
     "SV_MILLSTATUS": "service_milling.order_list",
-    "SV_STATUS": "service_info.tv",
     "SV_PRICE": "service_info.current_price",
     "AD_MILLANALYSIS": "admin_milling.analysis",
     "AD_LINEMSG": "admin_line.messages",
@@ -20,6 +19,7 @@ MENU_ENDPOINTS = {
     "FN_MARGIN": "finance.margin",
     "FN_ACCOUNT": "finance.account",
     "FN_MARKETING": "finance.marketing",
+    "FN_INVEST": "finance.investment",
     "AT_AI": "automation.ai_screen",
     "AT_HARDWARE": "automation.hardware",
     "AT_ELECTRIC": "automation.electricity",

@@ -25,7 +25,7 @@ from . import notify, phone
 from ..timeutil import now_utc
 
 LOG = "AOILOG_LINE"
-LINK_RE = re.compile(r"\bLINK\s*(ML-\d{8}-\d{4})-([0-9a-f]{6})\b", re.I)
+LINK_RE = re.compile(r"\bLINK\s*(ML-\d{8}-\d{4}|C\d{9})-([0-9a-f]{6})\b", re.I)
 RESEND_DAYS = 3
 
 
@@ -56,10 +56,22 @@ def link_text(ord_id):
 
 
 def ticket_url(ord_id):
-    """The label's LINE QR: opens the chat with the account and the link message typed in. None without AOI_LINE_OA_ID."""
+    """The label's LINE QR: opens the chat with the account and the link message typed in. None without AOI_LINE_OA_ID.
+    The same works with a customer code (Customer Maintenance > Link another LINE account)."""
     if not oa_id():
         return None
     return "https://line.me/R/oaMessage/%s/?text=%s" % (urllib.parse.quote(oa_id()), urllib.parse.quote(link_text(ord_id)))
+
+
+def unlink(cust_code, ope_user):
+    """Customer Maintenance: the customer's LINE account is removed; the next ticket shows the LINE QR again."""
+    customer = Customer.find(cust_code)
+    if not customer or not customer.get("LINE_USER_ID"):
+        return False
+    col(Customer.COL).update_one({"CUST_CODE": customer["CUST_CODE"]}, {"$set": {
+        "LINE_USER_ID": None, "LINE_DISPLAY_NAME": None, "LINE_LINK_VIA": None, "LINE_LINK_DATE": None}})
+    _log("unlink", customer["LINE_USER_ID"], "by " + (ope_user or "-"), "unlinked", customer["CUST_CODE"])
+    return True
 
 
 def friend_url():
@@ -101,7 +113,7 @@ def _short(name):
 
 def _by_phone(digits):
     found = []
-    for c in col(Customer.COL).find({}, NO_ID):
+    for c in col(Customer.COL).find({"CUST_STATUS": {"$ne": "D"}}, NO_ID):
         mine = re.sub(r"\D", "", c.get("MOBILE_NO") or "")
         if not mine:
             continue
@@ -118,6 +130,13 @@ def answer_text(user_id, text):
     match = LINK_RE.search(text or "")
     if match:
         ord_id, code = match.group(1).upper(), match.group(2).lower()
+        if ord_id.startswith("C"):                    # Customer Maintenance QR: this LINE replaces the customer's one
+            customer = Customer.find(ord_id)
+            if not customer or customer.get("CUST_STATUS") == "D" or not hmac.compare_digest(code, check_code(ord_id)):
+                return _m("LN_BAD_TICKET"), "bad_ticket", None
+            resent = _link(customer, user_id, "STAFF_QR")
+            reply = _m("LN_LINKED_PHONE", name=_short(customer.get("CUST_NAME", "")))
+            return reply + (("\n" + _m("LN_RESENT", n=resent)) if resent else ""), "linked_customer", customer["CUST_CODE"]
         order = MillingOrder.find(ord_id)
         if not order or not hmac.compare_digest(code, check_code(ord_id)):
             return _m("LN_BAD_TICKET"), "bad_ticket", None

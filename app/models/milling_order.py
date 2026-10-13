@@ -127,7 +127,7 @@ class MillingOrder:
     def parse(cls, branch_id, form):
         """Validates the registration form and returns the cleaned inputs."""
         customer = Customer.find(form.get("CUST_CODE"))
-        if not customer:
+        if not customer or customer.get("CUST_STATUS") == "D":          # a deleted customer takes no new orders
             raise ValidationError("errCustomerRequired")
         try:
             paddy = to_number(form.get("REGIST_PADDY"), 0)

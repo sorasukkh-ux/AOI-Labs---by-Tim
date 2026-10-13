@@ -1,9 +1,10 @@
 {% extends "base.html" %}
 {% from "_macros.html" import page_head %}
 {% block content %}
-<div id="tab-current-price">
-{{ page_head(None, url_for('home.index', g='SV')) }}
-<div class="tv-section">
+<div id="tab-current-price" data-auto-refresh="30">
+{{ page_head(t('tabCurrentServices') ~ ' · ' ~ branch, url_for('home.index', g='SV')) }}
+<div class="cs-grid">
+<div class="tv-section" id="cs-prices">
   <p class="tv-section-title plain">{{ t('priceBoardTitle') }}</p>
   <table class="price-table">
     <thead><tr><th>{{ t('colProduct') }}</th><th>{{ t('colBuy') }}</th><th>{{ t('colSell') }}</th></tr></thead>
@@ -18,6 +19,23 @@
   <p class="cap-note" id="current-price-branch">{{ t('currentPriceBranchNote', branch=branch) }}</p>
   <p class="cap-note">{% if can('SV_SERVICE') %}<a href="{{ url_for('service_milling.new_order', svc='buy') }}">{{ t('svcBuyLabel') }}</a> &middot; <a href="{{ url_for('service_milling.new_order', svc='sell') }}">{{ t('svcSellLabel') }}</a>{% endif %}
     {% if can('FN_PRICING') %} &middot; <a href="{{ url_for('finance.pricing') }}">{{ t('currentPriceManage') }} &rarr;</a>{% endif %}</p>
+</div>
+<div id="cs-status">
+  {% for s in sections %}
+  <div class="tv-section">
+    <p class="tv-section-title {{ s.css }}">{{ t(s.key) }} ({{ s.rows|length }})</p>
+    <table class="tv-table">
+      <thead><tr><th>{{ t('colOrder') }}</th><th>{{ t('colCustomer') }}</th><th>{{ t('tvReceive') }}</th></tr></thead>
+      <tbody>
+      {% for r in s.rows %}<tr><td><b>#{{ r.no }}</b>{% if r.delivery %} <span class="badge neutral">{{ t('deliveryDelivery') }}</span>{% endif %}</td><td>{{ r.customer }}</td><td class="nowrap">{{ r.time }}</td></tr>
+      {% else %}<tr><td colspan="3" class="hint">&mdash;</td></tr>{% endfor %}
+      </tbody>
+    </table>
+    {% if s.css == 'queue' %}<p class="cap-note">{{ t('capNote') }}</p>{% endif %}
+  </div>
+  {% endfor %}
+  <p class="cap-note">{{ t('tvRefreshNote') }}{% if can('SV_MILLSTATUS') %} &middot; <a href="{{ url_for('service_milling.order_list') }}">{{ t('tabUpdateStatus') }} &rarr;</a>{% endif %}</p>
+</div>
 </div>
 </div>
 {% endblock %}

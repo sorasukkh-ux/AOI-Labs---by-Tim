@@ -22,6 +22,9 @@
       <div><label class="field-label" for="acct-type">{{ t('acctLblType') }}</label>
         <select id="acct-type" name="ACC_TYPE"><option value="IN">{{ t('acctIncome') }}</option><option value="EX">{{ t('acctExpense') }}</option></select></div>
     </div>
+    <div class="field-row"><label class="field-label" for="acct-cat">{{ t('acctLblCat') }}</label>
+      <select id="acct-cat" name="ACC_CAT"><option value="">{{ t('acctCatNone') }}</option>
+        {% for cat, info in budget_cats.items() %}<option value="{{ cat }}" data-type="{{ info[0] }}">{{ t('ivBudget_' ~ info[0]) }}: {{ t('ivBc_' ~ cat) }}</option>{% endfor %}</select></div>
     <div class="field-row"><label class="field-label" for="acct-desc">{{ t('acctLblDesc') }}</label><input type="text" id="acct-desc" name="ACC_DESC" maxlength="200" placeholder="{{ t('acctDescPh') }}" required></div>
     <div class="two-col field-row">
       <div><label class="field-label" for="acct-ref">{{ t('acctLblRef') }}</label><input type="text" id="acct-ref" name="REF_ORD_ID" maxlength="20" placeholder="{{ t('acctRefPh') }}"></div>

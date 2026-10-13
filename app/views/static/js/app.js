@@ -262,3 +262,48 @@
     kg.focus(); kg.select();
   });
 })();
+
+/* Administration: a bar of quick jumps to each section of the page (cards with a title, home sub-groups).
+   It stays at the top while scrolling; the section on screen is highlighted. */
+(function () {
+  var label = document.body.getAttribute("data-quick-jump");
+  if (!label) return;
+  var targets = [];
+  document.querySelectorAll(".home-subgroup, .card").forEach(function (node) {
+    if (node.closest("#app-modal-overlay, template") || (node.parentElement && node.parentElement.closest(".card"))) return;
+    var head = node.querySelector(".home-sub-title, .card-title");
+    if (!head || !head.textContent.trim()) return;
+    if (!node.id) node.id = "qj-" + targets.length;
+    targets.push({ node: node, text: head.textContent.replace(/\s+/g, " ").trim() });
+  });
+  if (targets.length < 3) return;
+  var bar = document.createElement("nav");
+  bar.className = "quick-jump"; bar.setAttribute("aria-label", label);
+  var links = targets.map(function (tg) {
+    var a = document.createElement("a");
+    a.href = "#" + tg.node.id; a.className = "qj-chip";
+    a.textContent = tg.text.length > 28 ? tg.text.slice(0, 27) + "\u2026" : tg.text;
+    a.title = tg.text;
+    a.addEventListener("click", function (e) { e.preventDefault(); tg.node.scrollIntoView({ behavior: "smooth", block: "start" }); history.replaceState(null, "", "#" + tg.node.id); });
+    bar.appendChild(a);
+    return a;
+  });
+  var top = document.createElement("a");
+  top.href = "#"; top.className = "qj-chip qj-top"; top.textContent = "\u2191 " + (document.body.getAttribute("data-quick-top") || "Top");
+  top.addEventListener("click", function (e) { e.preventDefault(); window.scrollTo({ top: 0, behavior: "smooth" }); });
+  bar.appendChild(top);
+  targets[0].node.parentNode.insertBefore(bar, targets[0].node);
+  if ("IntersectionObserver" in window) {
+    var observer = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (!en.isIntersecting) return;
+        var i = targets.findIndex(function (tg) { return tg.node === en.target; });
+        links.forEach(function (l, j) { l.classList.toggle("active", j === i); });
+        if (links[i] && links[i].scrollIntoView && bar.scrollWidth > bar.clientWidth) {
+          bar.scrollLeft = links[i].offsetLeft - 16;
+        }
+      });
+    }, { rootMargin: "-80px 0px -60% 0px" });
+    targets.forEach(function (tg) { observer.observe(tg.node); });
+  }
+})();

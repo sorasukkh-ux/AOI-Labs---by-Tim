@@ -146,6 +146,8 @@ def customer_search():
     exact = None
     if code:                                             # Scan QR field: the exact customer, or the codes that contain the text
         exact = Customer.find(code)
+        if exact and exact.get("CUST_STATUS") == "D":
+            exact = None
         found = [exact] if exact else Customer.search_code(code, limit=8)
     else:
         found = Customer.search(request.args.get("q", ""), limit=8)

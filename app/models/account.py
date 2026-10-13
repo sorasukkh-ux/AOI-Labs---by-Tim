@@ -93,6 +93,10 @@ class Account:
             raise ValidationError("errDate")
         entry = cls._post(branch_id, acc_type, amount, description, clean_text(form.get("REF_ORD_ID"), 20) or None, None, None, ope_user)
         values = {"AUTO_FLG": False, "ACC_DATE": day}
+        from .investment import BUDGET_CATS                  # budget category for Investment & Break-even (optional)
+        cat = form.get("ACC_CAT")
+        if cat in BUDGET_CATS and BUDGET_CATS[cat][0] == acc_type:
+            values["ACC_CAT"] = cat
         col(cls.COL).update_one({"ACC_ID": entry["ACC_ID"]}, {"$set": values})
         col(cls.LOG).update_one({"ACC_ID": entry["ACC_ID"], "LOG_ACTION": "C"}, {"$set": values})
         return dict(entry, **values)

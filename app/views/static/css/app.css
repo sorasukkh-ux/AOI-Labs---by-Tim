@@ -725,3 +725,52 @@ body.line-poster { background: #fff; }
 .mkh-tip div { display: flex; align-items: center; gap: 6px; margin-top: 3px; white-space: nowrap; }
 #mkh-table .pos { color: var(--ok-text); } #mkh-table .neg { color: var(--pink-text); }
 @media (max-width: 640px) { #mkh-table .mkh-src { display: none; } #mkh-table td, #mkh-table th { padding-left: 6px; padding-right: 6px; } }
+/* Current Services: prices and the milling queue on one screen (update 26) */
+.cs-grid { display: grid; grid-template-columns: 1fr; gap: 14px; margin-top: 14px; }
+@media (min-width: 900px) { .cs-grid { grid-template-columns: 1fr 1fr; align-items: start; } }
+#cust-line summary { display: inline-block; list-style: none; cursor: pointer; } #cust-line summary::-webkit-details-marker { display: none; }
+.cust-line-qr { display: flex; flex-direction: column; align-items: center; gap: 4px; margin-top: 6px; } .cust-line-qr svg { width: 220px; height: 220px; }
+.cust-line-qr span { font-size: 11px; color: var(--text-muted); word-break: break-all; text-align: center; }
+/* Administration quick jumps (update 26) */
+.quick-jump { position: sticky; top: 0; z-index: 20; display: flex; gap: 6px; overflow-x: auto; padding: 8px 2px; margin: 10px 0;
+  background: var(--bg); -webkit-overflow-scrolling: touch; scrollbar-width: none; border-bottom: 1px solid var(--border); }
+.quick-jump::-webkit-scrollbar { display: none; }
+.qj-chip { flex: 0 0 auto; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border-strong); background: var(--surface);
+  color: var(--text); font-size: 13px; text-decoration: none; white-space: nowrap; }
+.qj-chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.qj-top { color: var(--text-secondary); }
+[id^="qj-"], .card[id], .home-subgroup { scroll-margin-top: 64px; }
+
+/* ---- Financial > Investment & Break-even (draft, update 27) ---- */
+.three-col { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 520px) { .three-col { grid-template-columns: 1fr; } }
+#tab-invest .neg { color: var(--pink-text); } #tab-invest .pos { color: var(--closed-text); }
+#tab-invest tr.muted td { color: var(--text-muted); }
+#tab-invest tr.iv-group td { background: transparent; color: var(--accent-text); font-size: 13px; padding-top: 12px; }
+#tab-invest tfoot td { border-top: 2px solid var(--border); }
+.iv-budget-input { max-width: 140px; text-align: right; margin-left: auto; display: block; }
+#iv-budget-table select { min-width: 92px; }
+.iv-used { min-width: 120px; }
+.iv-bar { position: relative; height: 8px; border-radius: 4px; background: var(--surface-sunken); margin-top: 4px; }
+.iv-bar-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; background: var(--iv-rev); }
+.iv-bar-fill.over { background: var(--pink-text); }
+.iv-bar-mark { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--text-muted); }
+#tab-invest { --iv-rev: #2a78d6; --iv-cost: #eb6834; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) #tab-invest { --iv-rev: #3987e5; --iv-cost: #d95926; } }
+:root[data-theme="dark"] #tab-invest { --iv-rev: #3987e5; --iv-cost: #d95926; }
+.iv-legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13px; color: var(--text-secondary); margin: 6px 0; }
+.iv-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.iv-sw { display: inline-block; width: 20px; height: 0; border-top: 2px solid; }
+.iv-sw.rev { border-color: var(--iv-rev); } .iv-sw.cost { border-color: var(--iv-cost); } .iv-sw.fixed { border-color: var(--text-muted); border-top-style: dashed; }
+.iv-chart-wrap { position: relative; }
+#iv-be-chart svg { display: block; width: 100%; height: auto; }
+.iv-line-rev { stroke: var(--iv-rev); } .iv-line-cost { stroke: var(--iv-cost); }
+.iv-line-fixed { stroke: var(--text-muted); stroke-dasharray: 5 4; }
+.iv-zone-profit { fill: var(--iv-rev); opacity: 0.10; } .iv-zone-loss { fill: var(--iv-cost); opacity: 0.10; }
+.iv-ref { stroke: var(--text-muted); stroke-width: 1; stroke-dasharray: 2 3; }
+.iv-ref-label { fill: var(--text-secondary); font-size: 11px; }
+.iv-be-dot { fill: var(--surface); stroke: var(--text); stroke-width: 2; }
+.iv-be-label { fill: var(--text); font-size: 12px; font-weight: 700; }
+#iv-years-table tr.pf-rec td { background: var(--surface-sunken); font-weight: 700; }
+#iv-budget-table .iv-budget-input { width: 120px; min-width: 120px; }
+#iv-budget-table small.inv-sub { white-space: nowrap; }

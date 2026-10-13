@@ -21,17 +21,22 @@ def _page(mode, customer=None, values=None):
         for order in MillingOrder.for_customer(customer["CUST_CODE"], operating_branch()):
             order["pay_total"] = MillingOrder.pay_total(order)
             history.append(order)
+    from ..models import line_link
+    line_qr = line_link.ticket_url(customer["CUST_CODE"]) if customer and mode != "new" else None
     return render_template(
-        "admin/customers.html", mode=mode, customer=customer, values=values if values is not None else (customer or {}),
+        "admin/customers.html", mode=mode, line_qr=line_qr, customer=customer, values=values if values is not None else (customer or {}),
         customers=found, query=query, scan=scan, history=history, status_keys=STATUS_KEYS,
-        can_create=can(MENU, "create"), can_edit=can(MENU, "edit"), can_open_orders=can("SV_MILLSTATUS"),
+        can_create=can(MENU, "create"), can_edit=can(MENU, "edit"), can_delete=can(MENU, "delete"), can_open_orders=can("SV_MILLSTATUS"),
         next_url=safe_next(request.args.get("next"), ""))      # never trust a link target from the address bar
 
 
-def _after_save(customer):
+def _after_save(customer, new=False):
     """Shows the saved customer. When the screen was opened from Customer Service (?next=...), the pop-up then
-    asks whether to go back there with this customer chosen."""
+    asks whether to go back there with this customer chosen. A new customer registered here: the pop-up asks
+    whether to queue a milling order for them now."""
     target = safe_next(request.args.get("next"), "")
+    if new and not target and can("SV_SERVICE", "create"):
+        flash(url_for("service_milling.new_order", cust=customer["CUST_CODE"]), "queue")
     if target:
         flash(target + ("&" if "?" in target else "?") + "cust=" + customer["CUST_CODE"], "return")
         return redirect(url_for("admin_customers.customer_view", code=customer["CUST_CODE"], next=target))
@@ -48,6 +53,36 @@ def customer_list():
     return _page("view")
 
 
+@bp.route("/check.json")
+@require(MENU)
+def customer_check():
+    """Checked before the confirmation pop-up: another customer with the same name?"""
+    from flask import jsonify
+    dup = Customer.same_name(request.args.get("name", ""), request.args.get("code") or None)
+    return jsonify({"ok": dup is None, "dup": {"code": dup["CUST_CODE"], "name": dup["CUST_NAME"]} if dup else None})
+
+
+@bp.route("/<code>/delete", methods=["POST"])
+@require(MENU, "delete")
+def customer_delete(code):
+    try:
+        result = Customer.delete(code, current_user()["USER_ID"])
+    except ValidationError as error:
+        flash_error(error)
+        return redirect(url_for("admin_customers.customer_view", code=code))
+    flash_ok("custDeleted" if result == "removed" else "custHidden", code=code.upper())
+    return redirect(url_for("admin_customers.customer_list"))
+
+
+@bp.route("/<code>/line-unlink", methods=["POST"])
+@require(MENU, "edit")
+def customer_line_unlink(code):
+    from ..models import line_link
+    if line_link.unlink(code, current_user()["USER_ID"]):
+        flash_ok("custLineUnlinked", code=code.upper())
+    return redirect(url_for("admin_customers.customer_view", code=code, _anchor="cust-line"))
+
+
 @bp.route("/new", methods=["GET", "POST"])
 @require(MENU, "create")
 def customer_new():
@@ -57,8 +92,8 @@ def customer_new():
         except ValidationError as error:
             flash_error(error)
             return _page("new", None, request.form)
-        flash_ok("custSaved", code=customer["CUST_CODE"])
-        return _after_save(customer)
+        flash_ok("custRegistered", code=customer["CUST_CODE"], name=customer["CUST_NAME"])
+        return _after_save(customer, new=True)
     return _page("new", None, {})
 
 

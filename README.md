@@ -13,9 +13,9 @@ It follows the design prototype (`AOI Labs - by Tim.html`) and **AOI DB Structur
 | Home | Menu groups and sub-groups, filtered by the role's View permission | Built |
 | Administration | Milling Production, Milling Maintenance, User Maintenance, Role Authorization, Customer Registration | Built |
 | Service | Customer Service (milling order registration with label preview; Buy and Sell tables), Milling Order List (editable details, delivery time confirmation, status with hold reason and inventory inbound at Finished, priority and pickup method on each card, details pop-up, cancellation requests, delivery details), Buying/Selling Order List (take-home bran/broken rice orders) | Built |
-| Service | Service Status, Current Price, Dashboard | Built |
+| Service | Current Services (prices and the queue status in one screen, refreshes every 30 s) | Built |
 | Inventory | Inventory List (add, edit, transfer), Historical, Dashboard | Built |
-| Financial | Pricing (market prices from the Thai Rice Millers Association, profit check), Market prices (source and mapping), Margin, Account, Marketing | Built |
+| Financial | Pricing (market prices from the Thai Rice Millers Association, profit check), Market prices (source and mapping), Margin, Account, Marketing, Investment & Break-even (draft) | Built |
 | Automation | AI (forecast, price advice, alerts, ask the system), Hardware Control (machine status, start/stop), Electricity (meter readings, rate, cost, post to Account), Machine Usage Statistics | Built, ready to connect devices |
 
 Every menu opens its screen. A menu added later without a screen appears with a dashed border and opens a "not built yet" page.
@@ -275,6 +275,40 @@ replies) with its message ID, name and {parameters} (queue no, customer, time, d
 address). A preview shows sample values; the order messages can be switched off; "Back to default" restores the text.
 Once a customer is linked, their new queue tickets no longer show the LINE QR, and the customer record keeps the
 LINE display name and how it was linked.
+
+**Link another LINE account** (Administration > Customer Registration > the customer > LINE account): shows a QR
+with `LINK <customer code>-<check>`. The customer scans it with the new LINE and taps Send; the new account replaces
+the old one (`STAFF_QR`). "Remove LINE link" clears it, so the next queue ticket shows the LINE QR again.
+
+## Customer Registration
+
+- The name must not be registered yet (case and extra spaces ignored). The screen checks it before saving and
+  shows a pop-up with the details to confirm; the server checks again.
+- After a new registration the system asks whether to queue the customer for milling now.
+- **Delete**: refused while the customer has an open order. With no orders the record is removed; with past orders
+  it is hidden (`CUST_STATUS` D) so the accounts and the analysis keep it, the LINE link is cleared and the name can
+  be registered again.
+
+Administration pages with three or more sections have a **quick jump** bar at the top (sticky, highlights the
+section on screen, "Top" goes back up).
+
+## Investment & Break-even (draft, update 27)
+
+Financial > **Investment & Break-even** (FN_INVEST, `/finance/investment`), per factory, three tabs:
+
+- **Project investment**: project settings (loan amount, interest %, years; business mix = % of paddy milled as a
+  service, % of the service by-products the mill keeps, variety for the per-kg figures) and the investment items
+  (category, amount, purchase date, useful life, salvage value, own funds or loan). Straight-line depreciation; land
+  and working capital are not depreciated. Loan repayment table (equal yearly payments). "Load sample project" fills
+  a factory that has no items, for review.
+- **Budget**: yearly budget per category (income; expense fixed or variable), "Fill labour & electricity from
+  Milling Maintenance", "Copy from last year", and budget vs actual per category and per month. Actual figures come
+  from Account: milling orders = milling fee, selling orders = sales, buying orders = purchase, `EL-` postings =
+  electricity; manual entries now have an optional budget category (`ACC_CAT`).
+- **Break-even point**: fixed cost per month (depreciation + year-1 loan interest + fixed budget lines / 12),
+  revenue and variable cost per kg paddy (from the profit check on Pricing), contribution per kg, break-even kg per
+  month and per day, capacity needed, margin of safety, profit per month/year, ROI, payback and a 10-year cash flow;
+  chart of revenue against total cost with hover values.
 
 ## Market price history
 

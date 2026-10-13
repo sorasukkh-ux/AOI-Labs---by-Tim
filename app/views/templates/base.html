@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
 <link rel="icon" href="{{ url_for('static', filename='img/favicon.png') }}">
 </head>
-<body>
+<body{% if request.path.startswith('/admin') or (request.endpoint == 'home.index' and request.args.get('g') == 'AD') %} data-quick-jump="{{ t('qjLabel') }}" data-quick-top="{{ t('qjTop') }}"{% endif %}>
 
 <div class="top-row">
   <div class="brand-row">
@@ -34,8 +34,8 @@
 {% endif %}
 {% if db_is_memory %}<p class="notice warn">{{ t('demoBanner') }}</p>{% endif %}
 {% for category, message in get_flashed_messages(with_categories=true) %}
-{% if category == 'return' %}
-<a class="action mb14" href="{{ message }}" data-return-url data-return-text="{{ t('confirmReturnService') }}">&larr; {{ t('tabService') }}</a>
+{% if category in ('return', 'queue') %}
+<a class="action mb14" href="{{ message }}" data-return-url data-return-text="{{ t('confirmReturnService') if category == 'return' else t('confirmQueueNow') }}">&larr; {{ t('tabService') }}</a>
 {% else %}
 <p class="notice {{ 'ok' if category == 'ok' else 'error' }}" role="status" data-flash>{{ message }}</p>
 {% endif %}
