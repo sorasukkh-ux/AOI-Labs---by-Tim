@@ -1,4 +1,4 @@
-"""Every collection of AOI DB Structure 1.33 and its indexes.
+"""Every collection of AOI DB Structure 1.34 and its indexes.
 
 MongoDB creates a collection the first time a record is written, so "creating the tables" means
 creating the indexes below. Unique indexes are the primary keys of the DB structure.

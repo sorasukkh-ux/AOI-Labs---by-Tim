@@ -130,6 +130,8 @@ How one request travels, for example saving the output ratios:
   only inside operating hours; rounded up to the next receiving period.
 - **Status flow**: Queue -> In-process/Hold; In-process -> Hold/Finished; Hold -> Queue/Cancelled;
   Finished -> Ready for Delivery (delivery) / Closed (take-away) / Cancelled; Ready for Delivery -> Closed.
+- **Linked orders (update 28)**: a milling order with take-home bran/broken rice cannot be Closed or Cancelled
+  until its buying/selling orders (SL-...) are Closed or Cancelled; the order card shows which ones are still open.
 - **Numbers**: order ID `ML-YYYYMMDD-NNNN` (queue number `NNNN` restarts each day),
   customer code `C` + `YYMMDD` + 3 digits, QR text `AOI-ML-YYYYMMDD-NNNN`.
 
@@ -317,6 +319,15 @@ Financial > Pricing Maintenance has two tabs: **Price Maintenance** (the profit 
 months, with SKU selection, hover/tap values and a summary table). The NABC API keeps daily prices from January
 2025: "Download price history" (and the daily job, once per product) reads all of them. Association report SKUs use
 the reports kept by the system, plus the older reports its page still lists.
+
+## Main milling motor (update 29)
+
+Hardware Control shows the **main milling motor** first (F1-MOTOR / F2-MOTOR: Mitsubishi SUPER LINE SF-J, 20 HP / 15 kW,
+4 pole, 380 V 50 Hz, 30 A, 1450 rpm) with big **ON / OFF** buttons. The sample machines (husker, whitener, polisher,
+grader) are kept but marked "not in use" (Machine setup > Edit > In use). ON/OFF works once a device has a key
+and reports at least every 5 minutes; try it with `python3 scripts/device_sim.py machine F2-MOTOR <key>`.
+Planned next: an inverter (VFD) on the motor for forward/reverse and speed (Hz), read back the current, frequency
+and faults. The emergency stop and the motor protection stay hard-wired; the app never replaces them.
 
 ## Automation and devices
 

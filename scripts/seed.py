@@ -45,6 +45,11 @@ PRICES = {
                  "HUSK": (None, None, None, None, 0, 14.5, "C")},
 }
 # sample machines of each factory: (id suffix, name, type, rated kW, capacity kg/h) - change them on Hardware Control
+# update 29: the main milling motor (Tim's nameplate: Mitsubishi SUPER LINE SF-J, 20 HP / 15 kW, 4 pole, frame 160L,
+# 380 V 50 Hz 30 A 1450 rpm) is the one machine in use; the sample machines below are kept but not in use
+MAIN_MOTOR = {"MACHINE_NAME": "มอเตอร์หลักเครื่องสีข้าว", "MACHINE_TYPE": "MAIN_MOTOR", "RATED_KW": 15.0, "CAPACITY_KGH": None,
+              "MACHINE_SEQ": 0, "CONTROL_FLG": True, "ACTIVE_FLG": True, "MOTOR_MODEL": "Mitsubishi SUPER LINE SF-J 20HP 4P 160L",
+              "RATED_VOLT": 380.0, "RATED_AMP": 30.0, "RATED_RPM": 1450}
 MACHINES = [("HUSK", "Husker", "HUSKER", 15.0, 1500.0), ("WHITE", "Whitener", "WHITENER", 30.0, 1200.0),
             ("POLISH", "Polisher", "POLISHER", 22.0, 1200.0), ("GRADE", "Grader", "GRADER", 3.0, 2000.0)]
 MENUS = [  # MENU_CODE, MENU_NAME, MENU_GROUP, MENU_SUBGROUP, MENU_SEQ
@@ -176,7 +181,12 @@ def seed(log=print, reset=False):
             add("AOIMS_MACHINE", {"MACHINE_ID": prefix + "-" + suffix}, {
                 "BRANCH_ID": branch_id, "MACHINE_NAME": name, "MACHINE_TYPE": mtype, "RATED_KW": kw, "CAPACITY_KGH": capacity,
                 "MACHINE_SEQ": seq, "CONTROL_FLG": False, "METER_ID": None, "MACHINE_STATUS": "O", "STATUS_TIME": None,
-                "STATUS_SOURCE": "USER", "DEVICE_KEY_HASH": None, "LAST_SEEN": None})
+                "STATUS_SOURCE": "USER", "DEVICE_KEY_HASH": None, "LAST_SEEN": None, "ACTIVE_FLG": False})
+        add("AOIMS_MACHINE", {"MACHINE_ID": prefix + "-MOTOR"}, dict(MAIN_MOTOR, BRANCH_ID=branch_id, METER_ID=None, MACHINE_STATUS="O",
+                                                                   STATUS_TIME=None, STATUS_SOURCE="USER", DEVICE_KEY_HASH=None, LAST_SEEN=None))
+        # update 29: sample machines never set up (no device key, still the seed's record) are not in use
+        db["AOIMS_MACHINE"].update_many({"MACHINE_ID": {"$in": [prefix + "-" + m[0] for m in MACHINES]}, "OPE_USER": SEED_USER,
+                                         "DEVICE_KEY_HASH": None, "ACTIVE_FLG": {"$exists": False}}, {"$set": {"ACTIVE_FLG": False}})
         add("AOIMS_METER", {"METER_ID": prefix + "-MAIN"}, {"BRANCH_ID": branch_id, "METER_NAME": "Main meter",
                                                           "MACHINE_ID": None, "DEVICE_KEY_HASH": None, "LAST_SEEN": None})
     from app.models.market import seed_default_map

@@ -51,6 +51,7 @@
           {% if nxt != 'CC' or can_cancel %}
           <option value="{{ nxt }}"
             {% if nxt == 'F' and order.CANCEL_REQ_FLG == 'P' %}disabled{% endif %}
+            {% if nxt in ('C', 'CC') and order.linked_open %}disabled{% endif %}
             {% if nxt == 'F' %}data-form="inbound-{{ order.ORD_ID }}"
             {% elif nxt == 'I' %}data-form="start-{{ order.ORD_ID }}"
             {% elif nxt == 'D' %}data-form="ready-{{ order.ORD_ID }}"
@@ -84,6 +85,10 @@
       </form>
     </div>
 
+    {% if order.linked_open and ('C' in order.next_statuses or 'CC' in order.next_statuses) %}
+    <p class="linked-open-note" data-linked-open="{{ order.linked_open|map(attribute='ORD_ID')|join(',') }}">&#128274; {{ t('linkedOpenNote', ids=order.linked_open|map(attribute='ORD_ID')|join(', ')) }}
+      {% if can('SV_BSSTATUS') %}<a href="{{ url_for('service_buysell.order_list', type='SL') }}">{{ t('tabUpdateBuySellStatus') }} &rarr;</a>{% endif %}</p>
+    {% endif %}
     {% if order.MILL_STATUS == 'H' and order.HOLD_REASON %}
     <p class="hold-reason-note"><b>{{ t('lblHoldReason') }}:</b> {{ order.HOLD_REASON }}</p>
     {% endif %}

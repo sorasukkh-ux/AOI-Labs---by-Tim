@@ -302,8 +302,14 @@ class BuySellOrder:
         return sorted(linked)
 
     @classmethod
-    def cancel_for_milling(cls, milling_ord_id, ope_user):
-        """The milling order was cancelled: its open take-home orders are cancelled too. Stock is not moved."""
-        for order in cls.for_milling(milling_ord_id):
-            if cls.is_open(order) and order["ORD_STATUS"] != UNPAID:
-                cls._save(order, {"ORD_STATUS": CANCELLED}, ope_user)
+    def open_for_milling(cls, milling_ord_ids):
+        """{milling order ID: [its take-home orders not Closed or Cancelled yet]}. Update 28: while it has any, the
+        milling order cannot be Closed or Cancelled."""
+        ids = list(milling_ord_ids)
+        out = {}
+        if not ids:
+            return out
+        for order in col(cls.COL).find({"REF_ORD_TYPE": "ML", "REF_ORD_ID": {"$in": ids}}, NO_ID).sort([("ORD_ID", 1)]):
+            if cls.is_open(order):
+                out.setdefault(order["REF_ORD_ID"], []).append(order)
+        return out

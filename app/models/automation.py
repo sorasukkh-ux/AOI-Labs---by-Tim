@@ -16,7 +16,7 @@ from .base import col, NO_ID, ValidationError, audit_new, audit_update, clean_te
 from .counter import Counter
 from ..timeutil import local_tz, now_local, now_utc, to_local
 
-MACHINE_TYPES = ("HUSKER", "WHITENER", "POLISHER", "GRADER", "DRYER", "CONVEYOR", "OTHER")
+MACHINE_TYPES = ("MAIN_MOTOR", "HUSKER", "WHITENER", "POLISHER", "GRADER", "DRYER", "CONVEYOR", "OTHER")
 RUNNING, IDLE, FAULT, MAINTENANCE, OFFLINE = "R", "I", "F", "M", "O"
 MACHINE_STATUSES = (RUNNING, IDLE, FAULT, MAINTENANCE, OFFLINE)
 SOURCE_USER, SOURCE_DEVICE = "USER", "DEVICE"
@@ -60,8 +60,11 @@ class Machine:
     LOG = "AOILOG_MACHINE"
 
     @classmethod
-    def for_branch(cls, branch_id):
-        return list(col(cls.COL).find({"BRANCH_ID": branch_id}, NO_ID).sort([("MACHINE_SEQ", 1), ("MACHINE_ID", 1)]))
+    def for_branch(cls, branch_id, active_only=False):
+        """active_only: the machines in use (ACTIVE_FLG not False). Update 29: the main milling motor first; the sample
+        machines (husker, whitener ...) are kept but not in use until they get their own control."""
+        machines = list(col(cls.COL).find({"BRANCH_ID": branch_id}, NO_ID).sort([("MACHINE_SEQ", 1), ("MACHINE_ID", 1)]))
+        return [m for m in machines if m.get("ACTIVE_FLG") is not False] if active_only else machines
 
     @classmethod
     def find(cls, branch_id, machine_id):
@@ -92,12 +95,17 @@ class Machine:
             kw = to_number(form.get("RATED_KW"), None)
             capacity = to_number(form.get("CAPACITY_KGH"), None)
             seq = int(to_number(form.get("MACHINE_SEQ"), 0) or 0)
+            volt, amp, rpm = (to_number(form.get(f), None) for f in ("RATED_VOLT", "RATED_AMP", "RATED_RPM"))
         except ValueError:
             raise ValidationError("errNumber")
-        if (kw is not None and kw < 0) or (capacity is not None and capacity < 0):
+        if any(v is not None and v < 0 for v in (kw, capacity, volt, amp, rpm)):
             raise ValidationError("errNegative")
         values = {"MACHINE_NAME": name, "MACHINE_TYPE": mtype, "RATED_KW": kw, "CAPACITY_KGH": capacity, "MACHINE_SEQ": seq,
-                  "CONTROL_FLG": form.get("CONTROL_FLG") == "1", "METER_ID": (form.get("METER_ID") or "").strip().upper() or None}
+                  "CONTROL_FLG": form.get("CONTROL_FLG") == "1", "METER_ID": (form.get("METER_ID") or "").strip().upper() or None,
+                  # update 29: in use, and the motor nameplate (kept for the inverter / speed control later)
+                  "ACTIVE_FLG": form.get("ACTIVE_FLG") == "1" if "ACTIVE_FLG" in form or not creating else True,
+                  "MOTOR_MODEL": clean_text(form.get("MOTOR_MODEL"), 100) or None, "RATED_VOLT": volt, "RATED_AMP": amp,
+                  "RATED_RPM": int(rpm) if rpm is not None else None}
         existing = cls.find(branch_id, machine_id)
         if creating:
             if col(cls.COL).find_one({"MACHINE_ID": machine_id}, NO_ID):

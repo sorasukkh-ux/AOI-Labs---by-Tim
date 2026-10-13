@@ -256,6 +256,11 @@ class MillingOrder:
             raise ValidationError("errStatusNotAllowed")
         if flow.blocked_by_pending_request(order, new_status):
             raise ValidationError("errPendingRequest")
+        if new_status in (flow.CLOSED, flow.CANCELLED):
+            # update 28 (Tim): the linked buying/selling orders (take-home bran / broken rice) end first
+            still_open = BuySellOrder.open_for_milling([order["ORD_ID"]]).get(order["ORD_ID"])
+            if still_open:
+                raise ValidationError("errLinkedOpen", id=order["QR_ID"], ids=", ".join(o["ORD_ID"] for o in still_open))
         values = {"MILL_STATUS": new_status}
         arrival = None
         if new_status == flow.DELIVERY and form is not None and "DELIVERY_ARRIVAL_TIME" in form:
@@ -288,8 +293,6 @@ class MillingOrder:
         if new_status == flow.CLOSED:
             Inventory.release(branch_id, order["ORD_ID"], "ML", MOVE_MILL_PICKUP, ope_user)
             Account.post_milling_income(updated, descriptions or {"full": "", "fee": ""}, ope_user)
-        elif new_status == flow.CANCELLED:
-            BuySellOrder.cancel_for_milling(order["ORD_ID"], ope_user)
         elif new_status == flow.FINISHED and updated["ORDER_TYPE"] == flow.TAKEAWAY:
             cls._notify(updated, "finished", now_utc())      # LINE: the rice is ready to pick up
         elif arrival is not None:

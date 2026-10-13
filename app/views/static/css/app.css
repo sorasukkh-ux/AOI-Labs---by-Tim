@@ -774,3 +774,8 @@ body.line-poster { background: #fff; }
 #iv-years-table tr.pf-rec td { background: var(--surface-sunken); font-weight: 700; }
 #iv-budget-table .iv-budget-input { width: 120px; min-width: 120px; }
 #iv-budget-table small.inv-sub { white-space: nowrap; }
+.linked-open-note { font-size: 13px; color: var(--text-secondary); background: var(--surface-sunken); border-radius: 8px; padding: 6px 10px; margin: 6px 0; }
+/* update 29: main milling motor ON/OFF */
+.machine-card.main-motor { border: 2px solid var(--accent-text); }
+.motor-onoff .action { font-size: 18px; padding: 14px 10px; }
+#machine-setup tr.muted td { color: var(--text-muted); }

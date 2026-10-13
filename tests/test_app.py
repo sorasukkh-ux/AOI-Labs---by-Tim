@@ -662,25 +662,37 @@ class Update4(Base):
         self.assertEqual((self.bs(bran["ORD_ID"])["ORD_STATUS"], self.bs(bran["ORD_ID"])["REF_INV_LOC"]), ("P", "01-002-005"))
         bran_stock = [s for s in self.onhand() if s["MAT_CODE"] == "BRAN"]
         self.assertEqual((bran_stock[0]["INV_QTY"], bran_stock[0]["SUB_1"], bran_stock[0]["SUB_2"]), (2.0, "LOT-" + ord_id, bran["ORD_ID"]))
-        # the milling order now posts only its fee; the selling order posts the bran when it is closed
+        # update 28: the milling order cannot be closed while its selling orders are open
+        page = self.text("/service/milling/")
+        self.assertIn('data-linked-open="%s,%s"' % (bran["ORD_ID"], broken["ORD_ID"]), page)
         self.set_status(ord_id, "C")
-        self.assertEqual([(a["REF_ORD_ID"], a["ACC_AMOUNT"]) for a in self.db("AOITS_ACCOUNT")], [(ord_id, 12.0)])
-        self.assertIn("The stock kept for it is released (2.00 kg @ 01-002-005)", self.text("/service/buysell/"))
-        self.bs_status(bran["ORD_ID"], "C")
+        self.assertEqual(self.order(ord_id)["MILL_STATUS"], "F")
+        self.bs_status(bran["ORD_ID"], "C")                                      # the selling order posts the bran
         self.assertEqual(self.bs(bran["ORD_ID"])["ORD_STATUS"], "C")
         entries = self.db("AOITS_ACCOUNT")
-        self.assertEqual([(a["REF_ORD_ID"], a["REF_ORD_TYPE"], a["ACC_TYPE"], a["ACC_AMOUNT"], a["ACC_DESC"]) for a in entries][-1],
-                         (bran["ORD_ID"], "SL", "IN", 21.6, "Sold Rice bran"))
-        self.assertEqual([s["MAT_CODE"] for s in self.onhand()], [])
+        self.assertEqual([(a["REF_ORD_ID"], a["REF_ORD_TYPE"], a["ACC_TYPE"], a["ACC_AMOUNT"], a["ACC_DESC"]) for a in entries],
+                         [(bran["ORD_ID"], "SL", "IN", 21.6, "Sold Rice bran")])
         self.bs_status(broken["ORD_ID"], "U")                                    # not allowed from Open
         self.assertEqual(self.bs(broken["ORD_ID"])["ORD_STATUS"], "O")
+        self.set_status(ord_id, "C")
+        self.assertEqual(self.order(ord_id)["MILL_STATUS"], "F")                 # broken rice order still open
+        self.bs_status(broken["ORD_ID"], "CC")
+        self.set_status(ord_id, "C")                                             # now it closes: only its fee is posted
+        self.assertEqual(self.order(ord_id)["MILL_STATUS"], "C")
+        self.assertEqual([(a["REF_ORD_ID"], a["ACC_AMOUNT"]) for a in self.db("AOITS_ACCOUNT")][-1], (ord_id, 12.0))
+        self.assertEqual([s["MAT_CODE"] for s in self.onhand()], [])
         detail = self.text("/service/milling/%s?popup=1" % ord_id)
         self.assertIn('data-linked="%s"' % bran["ORD_ID"], detail)
 
-    def test_cancelling_the_milling_order_cancels_its_open_selling_orders(self):
+    def test_milling_order_is_cancelled_after_its_selling_orders(self):
         order = self.new_order(BRAN_ORDER="2")
+        response = self.set_status(order["ORD_ID"], "CC")                        # update 28: refused, SL still open
+        self.assertEqual(self.order(order["ORD_ID"])["MILL_STATUS"], "Q")
+        self.assertIn("cannot be closed or cancelled yet", self.client.get(response.headers["Location"]).get_data(as_text=True))
+        self.assertEqual(self.bs()[0]["ORD_STATUS"], "O")
+        self.bs_status(self.bs()[0]["ORD_ID"], "CC")
         self.set_status(order["ORD_ID"], "CC")
-        self.assertEqual(self.bs()[0]["ORD_STATUS"], "CC")
+        self.assertEqual(self.order(order["ORD_ID"])["MILL_STATUS"], "CC")
         self.assertEqual(self.db("AOITS_ACCOUNT"), [])
 
     def test_order_without_take_home_creates_no_selling_order(self):
@@ -692,6 +704,7 @@ class Update4(Base):
         order = self.new_order(BRAN_ORDER="2")
         with self.app.app_context():                                             # as registered before update 4
             col("AOITS_ORDMILLING").update_one({"ORD_ID": order["ORD_ID"]}, {"$set": {"REF_BUYING_ORDER": None}})
+            col("AOITS_ORDBUYSELL").delete_many({"REF_ORD_ID": order["ORD_ID"]})
         for status in ("I", "F", "C"):
             self.set_status(order["ORD_ID"], status)
         self.assertEqual([a["ACC_AMOUNT"] for a in self.db("AOITS_ACCOUNT")], [33.6])
@@ -2537,6 +2550,51 @@ class Update27(Base):
         self.assertIn("investment.js", page)
         self.inv({"action": "sample"})                                    # only once
         self.assertEqual(len(self.db("AOIMS_CAPEX")), 6)
+
+
+class Update29(Base):
+    """Hardware Control: the main milling motor ON/OFF first; the sample machines are not in use."""
+    machine, issue_key, api = Update9.machine, Update9.issue_key, Update9.api
+
+    def setUp(self):
+        super().setUp()
+        self.login("admin")
+        self.client.get("/lang/en")
+
+    def test_main_motor_on_off(self):
+        motor = self.machine("F2-MOTOR")
+        self.assertEqual((motor["MACHINE_TYPE"], motor["RATED_KW"], motor["RATED_AMP"], motor["RATED_RPM"], motor["CONTROL_FLG"]),
+                         ("MAIN_MOTOR", 15.0, 30.0, 1450, True))
+        self.assertFalse(self.machine("F2-HUSK")["ACTIVE_FLG"])
+        page = self.text("/automation/hardware")
+        cards = re.findall(r'class="card machine-card[^"]*" data-machine="([^"]+)"', page)
+        self.assertEqual(cards, ["F2-MOTOR"])
+        self.assertIn("Mitsubishi SUPER LINE SF-J", page)
+        self.assertIn('id="mc-not-used"', page)
+        self.assertIn('disabled>&#9654; ON', page)                               # no device connected yet
+        key = self.issue_key("/automation/hardware", "MACHINE_ID", "F2-MOTOR")
+        self.api("post", "/api/v1/machines/F2-MOTOR/status", key, {"status": "I"})
+        self.post("/automation/hardware", {"action": "command", "MACHINE_ID": "F2-MOTOR", "CMD": "START"})
+        work = self.api("get", "/api/v1/machines/F2-MOTOR/commands", key).get_json()["commands"]
+        self.assertEqual([c["command"] for c in work], ["START"])
+        self.api("post", "/api/v1/commands/%s/ack" % work[0]["id"], key, {"ok": True, "result": "contactor on"})
+        self.assertEqual(self.machine("F2-MOTOR")["MACHINE_STATUS"], "R")
+        self.assertIn("ON &middot; Running", self.text("/automation/hardware"))
+        self.post("/automation/hardware", {"action": "command", "MACHINE_ID": "F2-MOTOR", "CMD": "STOP"})
+        work = self.api("get", "/api/v1/machines/F2-MOTOR/commands", key).get_json()["commands"]
+        self.api("post", "/api/v1/commands/%s/ack" % work[0]["id"], key, {"ok": True})
+        self.assertEqual(self.machine("F2-MOTOR")["MACHINE_STATUS"], "I")
+
+    def test_only_machines_in_use_count_for_the_estimate(self):
+        with self.app.app_context():
+            from app.models import profit
+            kwh, source = profit.energy_per_kg("factory2")
+        self.assertEqual(source, "estimate")
+        self.assertAlmostEqual(kwh, 15.0 * 0.273 / 60, places=6)                # the 15 kW motor only
+        self.post("/automation/hardware", {"action": "save", "mode": "edit", "MACHINE_ID": "F2-HUSK", "MACHINE_NAME": "Husker",
+                                           "MACHINE_TYPE": "HUSKER", "RATED_KW": "15", "ACTIVE_FLG": "1"}, "/automation/hardware")
+        self.assertTrue(self.machine("F2-HUSK")["ACTIVE_FLG"])
+        self.assertIn('data-machine="F2-HUSK"', self.text("/automation/hardware"))
 
 
 if __name__ == "__main__":

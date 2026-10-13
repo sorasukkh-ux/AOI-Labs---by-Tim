@@ -54,7 +54,7 @@ def energy_per_kg(branch_id):
         return kwh / paddy, "meter"
     branch = col("AOIMS_SYSPARAM").find_one({"BRANCH_ID": branch_id}, NO_ID) or {}
     minutes = float(branch.get("SYSP_MILLTIMEKG") or 0)
-    kw = sum(m.get("RATED_KW") or 0 for m in Machine.for_branch(branch_id))
+    kw = sum(m.get("RATED_KW") or 0 for m in Machine.for_branch(branch_id, active_only=True))
     if kw > 0 and minutes > 0:
         return kw * minutes / 60.0, "estimate"
     return 0.0, None

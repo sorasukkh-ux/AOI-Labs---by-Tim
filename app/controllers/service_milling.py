@@ -185,6 +185,7 @@ def _decorate(orders, details=False):
     customers = {}
     suggest_loc = None
     messages = notify.last_for(o["ORD_ID"] for o in orders)
+    linked_open = BuySellOrder.open_for_milling(o["ORD_ID"] for o in orders if flow.is_open(o))
     for order in orders:
         order["notify"] = messages.get(order["ORD_ID"])
         code = order["CUST_CODE"]
@@ -193,6 +194,7 @@ def _decorate(orders, details=False):
         order["customer"] = customers[code]
         order["pay_total"] = MillingOrder.pay_total(order)
         order["next_statuses"] = flow.allowed_next(order)
+        order["linked_open"] = linked_open.get(order["ORD_ID"], [])       # Close / Cancel wait for these (update 28)
         order["is_open"] = flow.is_open(order)
         order["can_request_cancel"] = flow.can_request_cancel(order)
         registered = to_local(order["REGIST_DATE"])

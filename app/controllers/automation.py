@@ -98,13 +98,14 @@ def hardware():
         abort(400)
     machines = Machine.for_branch(branch)
     for m in machines:
+        m["active"] = m.get("ACTIVE_FLG") is not False
         m["online"] = Machine.is_online(m)
         m["since"] = fmt_datetime(m.get("STATUS_TIME"))
         m["can_command"] = bool(m.get("CONTROL_FLG") and m.get("DEVICE_KEY_HASH") and m["online"])
     events = Machine.events(branch, now_utc() - timedelta(days=7), limit=20)
     names = {m["MACHINE_ID"]: m["MACHINE_NAME"] for m in machines}
     edit = Machine.find(branch, request.args.get("edit")) if request.args.get("edit") else None
-    return render_template("automation/hardware.html", machines=machines, events=events, names=names,
+    return render_template("automation/hardware.html", machines=machines, in_use=[m for m in machines if m["active"]], events=events, names=names,
                            commands=MachineCommand.for_branch(branch, 10), edit=edit, setup=bool(request.args.get("setup") or edit),
                            new_key=session.pop("device_key", None), meters=Meter.for_branch(branch),
                            status_keys=STATUS_KEYS, status_badge=STATUS_BADGE, type_keys=TYPE_KEYS, types=MACHINE_TYPES,
