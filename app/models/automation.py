@@ -22,7 +22,10 @@ from .base import col, NO_ID, ValidationError, audit_new, audit_update, clean_te
 from .counter import Counter
 from ..timeutil import local_tz, now_local, now_utc, to_local
 
-MACHINE_TYPES = ("MAIN_MOTOR", "HUSKER", "WHITENER", "POLISHER", "GRADER", "DRYER", "CONVEYOR", "OTHER")
+MACHINE_TYPES = ("MAIN_MOTOR", "SILO", "CONVEYOR", "INBOUND", "SORTER", "PACKER", "AMR", "HUSKER", "WHITENER", "POLISHER",
+                 "GRADER", "DRYER", "OTHER")
+SHIFTS = ("DAY", "NIGHT")
+DAY_SHIFT_HOURS = (6, 18)            # day shift 06:00-18:00, night shift 18:00-06:00 (SCADA highlight)
 RUNNING, IDLE, FAULT, MAINTENANCE, OFFLINE = "R", "I", "F", "M", "O"
 MACHINE_STATUSES = (RUNNING, IDLE, FAULT, MAINTENANCE, OFFLINE)
 SOURCE_USER, SOURCE_DEVICE = "USER", "DEVICE"
@@ -44,6 +47,23 @@ def _clean_id(text, key):
     if not ID_PATTERN.match(value):
         raise ValidationError(key)
     return value
+
+
+def _small_int(text, low, high):
+    try:
+        value = to_number(text, None)
+    except ValueError:
+        raise ValidationError("errNumber")
+    if value is None:
+        return None
+    if value < low or value > high:
+        raise ValidationError("errScadaPlace")
+    return int(value)
+
+
+def current_shift(moment=None):
+    hour = to_local(moment or now_utc()).hour
+    return "DAY" if DAY_SHIFT_HOURS[0] <= hour < DAY_SHIFT_HOURS[1] else "NIGHT"
 
 
 def _hash(key):
@@ -120,7 +140,11 @@ class Machine:
                   "ACTIVE_FLG": form.get("ACTIVE_FLG") == "1" if "ACTIVE_FLG" in form or not creating else True,
                   "MOTOR_MODEL": clean_text(form.get("MOTOR_MODEL"), 100) or None, "RATED_VOLT": volt, "RATED_AMP": amp,
                   "RATED_RPM": int(rpm) if rpm is not None else None,
-                  "SPEED_MIN_HZ": min_hz, "SPEED_MAX_HZ": max_hz}
+                  "SPEED_MIN_HZ": min_hz, "SPEED_MAX_HZ": max_hz,
+                  # update 31: place on the SCADA (column 0-5, row 0-3), the machines it feeds, shift
+                  "SCADA_COL": _small_int(form.get("SCADA_COL"), 0, 5), "SCADA_ROW": _small_int(form.get("SCADA_ROW"), 0, 3),
+                  "FEEDS_TO": ",".join(x for x in (clean_text(i, 20).upper() for i in (form.get("FEEDS_TO") or "").replace(" ", ",").split(",")) if x) or None,
+                  "SHIFT": form.get("SHIFT") if form.get("SHIFT") in SHIFTS else None}
         existing = cls.find(branch_id, machine_id)
         if creating:
             if col(cls.COL).find_one({"MACHINE_ID": machine_id}, NO_ID):
@@ -517,3 +541,46 @@ def post_month_to_account(branch_id, year, month, description, ope_user):
     col(Account.COL).update_one({"ACC_ID": entry["ACC_ID"]}, {"$set": values})
     col(Account.LOG).update_one({"ACC_ID": entry["ACC_ID"], "LOG_ACTION": "C"}, {"$set": values})
     return dict(entry, **values), kwh
+
+
+# ---------- SCADA (update 31) ----------
+def scada(branch_id):
+    """The plant on one screen: every machine of the branch with its place, link and state, plus the plant figures.
+    Machines not in use (ACTIVE_FLG false) are shown as planned / disabled."""
+    machines = Machine.for_branch(branch_id)
+    ids = {m["MACHINE_ID"] for m in machines}
+    shift = current_shift()
+    nodes, placed = [], set()
+    for m in machines:
+        active = m.get("ACTIVE_FLG") is not False
+        live = Machine.live(m, minutes=10) if active and m.get("DEVICE_KEY_HASH") else None
+        place = (m.get("SCADA_COL"), m.get("SCADA_ROW"))
+        if place[0] is None or place[1] is None or place in placed:
+            place = (None, None)                                  # shown in the list under the diagram
+        else:
+            placed.add(place)
+        nodes.append({
+            "id": m["MACHINE_ID"], "name": m["MACHINE_NAME"], "type": m.get("MACHINE_TYPE") or "OTHER", "active": active,
+            "status": m.get("MACHINE_STATUS") or OFFLINE if active else "DIS", "online": Machine.is_online(m) if active else False,
+            "col": place[0], "row": place[1], "shift": m.get("SHIFT"), "on_shift": bool(m.get("SHIFT")) and m.get("SHIFT") == shift,
+            "feeds": [f for f in (m.get("FEEDS_TO") or "").split(",") if f in ids], "kw": m.get("RATED_KW"),
+            "control": bool(active and m.get("CONTROL_FLG") and m.get("DEVICE_KEY_HASH") and Machine.is_online(m)),
+            "live": {k: live[k] for k in ("running", "fresh", "set_hz", "out_hz", "amp", "rpm", "fault", "rated_amp",
+                                          "min_hz", "max_hz", "busy", "samples")} if live else None,
+        })
+    in_use = [n for n in nodes if n["active"]]
+    start = day_start_utc(now_local().date())
+    since = now_utc() - timedelta(hours=24)
+    alarms = [{"time": e["LOG_DATE"].isoformat(), "id": e["MACHINE_ID"], "note": e.get("NOTE") or ""}
+              for e in col(Machine.LOG).find({"BRANCH_ID": branch_id, "NEW_STATUS": FAULT, "LOG_DATE": {"$gte": since}}, NO_ID)
+              .sort([("LOG_DATE", -1)]).limit(8)]
+    queue = [o for o in col("AOITS_ORDMILLING").find({"BRANCH_ID": branch_id, "MILL_STATUS": {"$in": ["Q", "I"]}}, NO_ID)]
+    return {
+        "time": now_utc().isoformat(), "shift": shift, "nodes": nodes,
+        "kpi": {"running": sum(1 for n in in_use if n["status"] == RUNNING), "in_use": len(in_use), "planned": len(nodes) - len(in_use),
+                "faults": sum(1 for n in in_use if n["status"] == FAULT), "paddy_today": paddy_milled(branch_id, start, now_utc()),
+                "queue": sum(1 for o in queue if o["MILL_STATUS"] == "Q"), "in_process": sum(1 for o in queue if o["MILL_STATUS"] == "I"),
+                "queue_kg": round_half_up(sum(o.get("REGIST_PADDY") or 0 for o in queue if o["MILL_STATUS"] == "Q"), 0),
+                "kwh_today": Meter.used_between(branch_id, start, now_utc())},
+        "alarms": alarms,
+    }

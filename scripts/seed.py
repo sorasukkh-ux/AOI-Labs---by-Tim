@@ -44,15 +44,26 @@ PRICES = {
                  "BRAN": (8, 11.6, 7.68, 12, 7.68, 12, "A"), "BROKEN": (11.5, 11.9, 11.04, 12.3, 11.04, 12.3, "A"),
                  "HUSK": (None, None, None, None, 0, 14.5, "C")},
 }
-# sample machines of each factory: (id suffix, name, type, rated kW, capacity kg/h) - change them on Hardware Control
 # update 29: the main milling motor (Tim's nameplate: Mitsubishi SUPER LINE SF-J, 20 HP / 15 kW, 4 pole, frame 160L,
-# 380 V 50 Hz 30 A 1450 rpm) is the one machine in use; the sample machines below are kept but not in use
-MAIN_MOTOR = {"MACHINE_NAME": "มอเตอร์หลักเครื่องสีข้าว", "MACHINE_TYPE": "MAIN_MOTOR", "RATED_KW": 15.0, "CAPACITY_KGH": None,
-              "MACHINE_SEQ": 0, "CONTROL_FLG": True, "ACTIVE_FLG": True, "MOTOR_MODEL": "Mitsubishi SUPER LINE SF-J 20HP 4P 160L",
+# 380 V 50 Hz 30 A 1450 rpm) is the one machine in use (update 31: main motor 1, day shift)
+MAIN_MOTOR = {"MACHINE_NAME": "มอเตอร์หลัก 1 (กะกลางวัน)", "MACHINE_TYPE": "MAIN_MOTOR", "RATED_KW": 15.0, "CAPACITY_KGH": None,
+              "MACHINE_SEQ": 7, "SCADA_COL": 3, "SCADA_ROW": 0, "SHIFT": "DAY", "CONTROL_FLG": True, "ACTIVE_FLG": True, "MOTOR_MODEL": "Mitsubishi SUPER LINE SF-J 20HP 4P 160L",
               "RATED_VOLT": 380.0, "RATED_AMP": 30.0, "RATED_RPM": 1450,
               "SPEED_MIN_HZ": 30.0, "SPEED_MAX_HZ": 50.0, "SPEED_SET_HZ": 50.0}      # update 30: speed by the inverter
-MACHINES = [("HUSK", "Husker", "HUSKER", 15.0, 1500.0), ("WHITE", "Whitener", "WHITENER", 30.0, 1200.0),
-            ("POLISH", "Polisher", "POLISHER", 22.0, 1200.0), ("GRADE", "Grader", "GRADER", 3.0, 2000.0)]
+# update 31: Tim's plant plan (SCADA). (id suffix, name, type, rated kW, capacity kg/h, seq, SCADA column, row, feeds to, shift)
+# rated kW / capacity of the planned machines are first estimates - change them on Hardware Control > Machine setup.
+PLANT = [
+    ("SILO1", "ไซโล 1", "SILO", 0.0, None, 1, 0, 0, "CONV1", None),
+    ("SILO2", "ไซโล 2", "SILO", 0.0, None, 2, 0, 1, "CONV2", None),
+    ("CONV1", "สายพานลำเลียงเข้า 1", "CONVEYOR", 2.2, 3000.0, 3, 1, 0, "INBOUND", None),
+    ("CONV2", "สายพานลำเลียงเข้า 2", "CONVEYOR", 2.2, 3000.0, 4, 1, 1, "INBOUND", None),
+    ("INBOUND", "ถังพักรอสี (คิวเข้าเครื่องสี)", "INBOUND", 0.75, None, 5, 2, 0, "MOTOR,MOTOR2", None),
+    ("SORT", "เครื่องคัดแยก", "SORTER", 1.5, None, 6, 2, 2, "INBOUND", None),
+    ("MOTOR2", "มอเตอร์หลัก 2 (กะกลางคืน)", "MAIN_MOTOR", 15.0, None, 8, 3, 1, "PACK", "NIGHT"),
+    ("PACK", "เครื่องบรรจุ", "PACKER", 3.0, None, 9, 4, 0, None, None),
+    ("AMR", "หุ่นยนต์จัดเก็บ/เบิกสินค้า (AMR)", "AMR", 0.5, None, 10, 4, 2, None, None),
+]
+OLD_SAMPLES = ("HUSK", "WHITE", "POLISH", "GRADE")
 MENUS = [  # MENU_CODE, MENU_NAME, MENU_GROUP, MENU_SUBGROUP, MENU_SEQ
     ("SV_SERVICE", "Customer Service", "SV", "", 1),
     ("SV_PRICE", "Current Services", "SV", "", 3), ("SV_MILLSTATUS", "Milling Order List", "SV", "", 4),
@@ -67,6 +78,7 @@ MENUS = [  # MENU_CODE, MENU_NAME, MENU_GROUP, MENU_SUBGROUP, MENU_SEQ
     ("AD_USER", "User Maintenance", "AD", "USER", 3), ("AD_ROLE", "Role Authorization", "AD", "USER", 4),
     ("AT_AI", "AI", "AT", "", 1), ("AT_HARDWARE", "Hardware Control", "AT", "", 2),
     ("AT_ELECTRIC", "Electricity", "AT", "", 3), ("AT_MACHINE", "Machine Usage Statistics", "AT", "", 4),
+    ("AT_SCADA", "SCADA", "AT", "", 0),
     ("AD_CUSTOMER", "Customer Registration", "AD", "CUST", 5),
     ("AD_LINEMSG", "LINE Message Maintenance", "AD", "CUST", 6),
 ]
@@ -80,10 +92,10 @@ ROLE_AUTH = {
                 "AD_MILLANALYSIS": "v", "AD_LINEMSG": "ve", "IV_LIST": "vced", "IV_HISTORY": "v", "IV_DASHBOARD": "v", "FN_PRICING": "vea",
                 "FN_MARGIN": "ve", "FN_ACCOUNT": "v", "FN_MARKETING": "ve", "FN_INVEST": "vce", "AD_CUSTOMER": "vced", "AD_MILLTIME": "ve",
                 "AD_MILLPROD": "ve", "AD_USER": "v", "AT_AI": "vc", "AT_HARDWARE": "vcea", "AT_ELECTRIC": "vcea",
-                "AT_MACHINE": "v"},
+                "AT_MACHINE": "v", "AT_SCADA": "v"},
     "OPERATOR": {"SV_SERVICE": "vce", "SV_PRICE": "v", "SV_MILLSTATUS": "ve", "SV_BSSTATUS": "ve",
                  "IV_LIST": "vce", "IV_HISTORY": "v", "AD_CUSTOMER": "vce", "AT_HARDWARE": "ve", "AT_ELECTRIC": "vc",
-                 "AT_MACHINE": "v"},
+                 "AT_MACHINE": "v", "AT_SCADA": "v"},
     "ACCOUNT": {"SV_PRICE": "v", "SV_BSSTATUS": "ve", "AD_MILLANALYSIS": "v", "IV_DASHBOARD": "v", "FN_PRICING": "v",
                 "FN_MARGIN": "v", "FN_ACCOUNT": "vced", "FN_MARKETING": "v", "FN_INVEST": "vced", "AT_AI": "v", "AT_ELECTRIC": "va",
                 "AT_MACHINE": "v"},
@@ -178,19 +190,33 @@ def seed(log=print, reset=False):
             from app.models.mill_test import MillTest
             MillTest.apply(branch_id, SEED_USER)
         prefix = "F1" if branch_id == "factory1" else "F2"
-        for seq, (suffix, name, mtype, kw, capacity) in enumerate(MACHINES, start=1):
+        # update 31: the plant as Tim planned it (SCADA). Only main motor 1 is in use; the others are planned (disabled).
+        for suffix, name, mtype, kw, cap, seq, col_, row_, feeds, shift in PLANT:
+            ids = lambda text: ",".join(prefix + "-" + x for x in text.split(",")) if text else None
             add("AOIMS_MACHINE", {"MACHINE_ID": prefix + "-" + suffix}, {
-                "BRANCH_ID": branch_id, "MACHINE_NAME": name, "MACHINE_TYPE": mtype, "RATED_KW": kw, "CAPACITY_KGH": capacity,
-                "MACHINE_SEQ": seq, "CONTROL_FLG": False, "METER_ID": None, "MACHINE_STATUS": "O", "STATUS_TIME": None,
-                "STATUS_SOURCE": "USER", "DEVICE_KEY_HASH": None, "LAST_SEEN": None, "ACTIVE_FLG": False})
+                "BRANCH_ID": branch_id, "MACHINE_NAME": name, "MACHINE_TYPE": mtype, "RATED_KW": kw, "CAPACITY_KGH": cap,
+                "MACHINE_SEQ": seq, "CONTROL_FLG": suffix == "MOTOR2", "METER_ID": None, "MACHINE_STATUS": "O", "STATUS_TIME": None,
+                "STATUS_SOURCE": "USER", "DEVICE_KEY_HASH": None, "LAST_SEEN": None, "ACTIVE_FLG": False,
+                "SCADA_COL": col_, "SCADA_ROW": row_, "FEEDS_TO": ids(feeds), "SHIFT": shift,
+                **({k: MAIN_MOTOR[k] for k in ("MOTOR_MODEL", "RATED_VOLT", "RATED_AMP", "RATED_RPM", "SPEED_MIN_HZ", "SPEED_MAX_HZ",
+                                               "SPEED_SET_HZ")} if mtype == "MAIN_MOTOR" else {})})
         add("AOIMS_MACHINE", {"MACHINE_ID": prefix + "-MOTOR"}, dict(MAIN_MOTOR, BRANCH_ID=branch_id, METER_ID=None, MACHINE_STATUS="O",
                                                                    STATUS_TIME=None, STATUS_SOURCE="USER", DEVICE_KEY_HASH=None, LAST_SEEN=None))
         # update 30: the main motor's speed range (30-50 Hz, never above the 50 Hz it was made for)
         db["AOIMS_MACHINE"].update_many({"MACHINE_ID": prefix + "-MOTOR", "SPEED_MIN_HZ": {"$exists": False}},
                                         {"$set": {"SPEED_MIN_HZ": 30.0, "SPEED_MAX_HZ": 50.0, "SPEED_SET_HZ": 50.0}})
-        # update 29: sample machines never set up (no device key, still the seed's record) are not in use
-        db["AOIMS_MACHINE"].update_many({"MACHINE_ID": {"$in": [prefix + "-" + m[0] for m in MACHINES]}, "OPE_USER": SEED_USER,
-                                         "DEVICE_KEY_HASH": None, "ACTIVE_FLG": {"$exists": False}}, {"$set": {"ACTIVE_FLG": False}})
+        # update 31: main motor 1 (day shift) on the SCADA; its old default name is renamed
+        db["AOIMS_MACHINE"].update_many({"MACHINE_ID": prefix + "-MOTOR", "FEEDS_TO": {"$exists": False}},
+                                        {"$set": {"SCADA_COL": 3, "SCADA_ROW": 0, "FEEDS_TO": prefix + "-PACK", "SHIFT": "DAY"}})
+        db["AOIMS_MACHINE"].update_many({"MACHINE_ID": prefix + "-MOTOR", "MACHINE_NAME": "มอเตอร์หลักเครื่องสีข้าว"},
+                                        {"$set": {"MACHINE_NAME": MAIN_MOTOR["MACHINE_NAME"]}})
+        # update 31: the sample machines of update 9 (husker, whitener, polisher, grader) are not in Tim's plan: removed
+        # when nobody set them up (still the seed's record, no device key, no status history)
+        for old in OLD_SAMPLES:
+            mid = prefix + "-" + old
+            if db["AOIMS_MACHINE"].find_one({"MACHINE_ID": mid, "OPE_USER": SEED_USER, "DEVICE_KEY_HASH": None}, {"_id": 0}) \
+                    and db["AOILOG_MACHINE"].find_one({"MACHINE_ID": mid}, {"_id": 0}) is None:
+                db["AOIMS_MACHINE"].delete_one({"MACHINE_ID": mid})
         add("AOIMS_METER", {"METER_ID": prefix + "-MAIN"}, {"BRANCH_ID": branch_id, "METER_NAME": "Main meter",
                                                           "MACHINE_ID": None, "DEVICE_KEY_HASH": None, "LAST_SEEN": None})
     from app.models.market import seed_default_map

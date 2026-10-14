@@ -4,7 +4,7 @@
 {% block content %}
 <div id="tab-hardware" class="auto-page">
 {{ page_head(t('tabHardware'), url_for('home.index', g='AT')) }}
-<div class="card gap"><p class="desc-text">{{ t('hwDesc') }}</p></div>
+<div class="card gap"><p class="desc-text">{{ t('hwDesc') }}{% if can('AT_SCADA') %} <a href="{{ url_for('automation.scada') }}">{{ t('tabScada') }} &rarr;</a>{% endif %}</p></div>
 {{ key_box(new_key) }}
 
 <div class="mc-list" id="machine-list" data-live-url="{{ url_for('automation.hardware_live') }}"
@@ -138,6 +138,17 @@
     <div class="two-col field-row">
       <div><label class="field-label" for="mf-minhz">{{ t('mcMinHz') }}</label><input type="number" id="mf-minhz" name="SPEED_MIN_HZ" value="{{ edit.SPEED_MIN_HZ|plain if edit and edit.SPEED_MIN_HZ is not none else '' }}" min="0" max="60" step="0.5" placeholder="30"></div>
       <div><label class="field-label" for="mf-maxhz">{{ t('mcMaxHz') }}</label><input type="number" id="mf-maxhz" name="SPEED_MAX_HZ" value="{{ edit.SPEED_MAX_HZ|plain if edit and edit.SPEED_MAX_HZ is not none else '' }}" min="0" max="60" step="0.5" placeholder="50"></div>
+    </div>
+    <div class="two-col field-row">
+      <div class="two-col">
+        <div><label class="field-label" for="mf-scol">{{ t('mcScadaCol') }}</label><input type="number" id="mf-scol" name="SCADA_COL" min="0" max="5" step="1" value="{{ edit.SCADA_COL if edit and edit.SCADA_COL is not none else '' }}"></div>
+        <div><label class="field-label" for="mf-srow">{{ t('mcScadaRow') }}</label><input type="number" id="mf-srow" name="SCADA_ROW" min="0" max="3" step="1" value="{{ edit.SCADA_ROW if edit and edit.SCADA_ROW is not none else '' }}"></div>
+      </div>
+      <div class="two-col">
+        <div><label class="field-label" for="mf-feeds">{{ t('mcFeedsTo') }}</label><input type="text" id="mf-feeds" name="FEEDS_TO" maxlength="100" value="{{ edit.FEEDS_TO or '' if edit else '' }}" placeholder="F2-PACK" autocapitalize="characters"></div>
+        <div><label class="field-label" for="mf-shift">{{ t('mcShift') }}</label><select id="mf-shift" name="SHIFT"><option value="">{{ t('mcShiftNone') }}</option>
+          {% for sh in ('DAY', 'NIGHT') %}<option value="{{ sh }}"{% if edit and edit.SHIFT == sh %} selected{% endif %}>{{ t('scShift' ~ sh|capitalize) }}</option>{% endfor %}</select></div>
+      </div>
     </div>
     <div class="field-row"><label class="field-label" for="mf-meter">{{ t('mcMeter') }}</label><select id="mf-meter" name="METER_ID">
       <option value="">-</option>{% for mt in meters %}<option value="{{ mt.METER_ID }}"{% if edit and edit.METER_ID == mt.METER_ID %} selected{% endif %}>{{ mt.METER_ID }} · {{ mt.METER_NAME }}</option>{% endfor %}</select></div>

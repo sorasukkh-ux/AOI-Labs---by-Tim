@@ -24,6 +24,7 @@ MENU_ENDPOINTS = {
     "AT_HARDWARE": "automation.hardware",
     "AT_ELECTRIC": "automation.electricity",
     "AT_MACHINE": "automation.usage",
+    "AT_SCADA": "automation.scada",
     "AD_MILLPROD": "admin_milling.production",
     "AD_MILLTIME": "admin_milling.maintenance",
     "AD_USER": "admin_users.user_list",

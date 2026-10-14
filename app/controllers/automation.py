@@ -5,6 +5,7 @@ from flask import Blueprint, abort, jsonify, redirect, render_template, request,
 
 from ..i18n import t
 from ..models import ai, supply
+from ..models.automation import scada as scada_data, SHIFTS
 from ..models.automation import (COMMANDS, MACHINE_STATUSES, MACHINE_TYPES, RUNNING, SOURCE_USER, Machine, MachineCommand,
                                  Meter, elec_rate, paddy_milled, period_bounds, post_month_to_account, set_elec_rate)
 from ..models.base import ValidationError
@@ -14,7 +15,7 @@ from .common import flash_error, flash_ok
 from ..models.variety import mat_name
 
 bp = Blueprint("automation", __name__, url_prefix="/automation")
-AI_MENU, HARDWARE, ELECTRIC, USAGE = "AT_AI", "AT_HARDWARE", "AT_ELECTRIC", "AT_MACHINE"
+AI_MENU, HARDWARE, ELECTRIC, USAGE, SCADA = "AT_AI", "AT_HARDWARE", "AT_ELECTRIC", "AT_MACHINE", "AT_SCADA"
 STATUS_KEYS = {"R": "mcRunning", "I": "mcIdle", "F": "mcFault", "M": "mcMaintenance", "O": "mcOffline"}
 STATUS_BADGE = {"R": "approved", "I": "manual", "F": "blocked", "M": "pending", "O": "neutral"}
 TYPE_KEYS = {m: "mcType" + m.capitalize() for m in MACHINE_TYPES}
@@ -87,7 +88,7 @@ def hardware():
                 if cmd.get("CMD_VALUE") is not None:
                     label += " %g Hz " % cmd["CMD_VALUE"]
                 return {"cmd": label, "name": machine["MACHINE_NAME"]}
-            return _run(send, "msgCommandSent", "automation.hardware")
+            return _run(send, "msgCommandSent", "automation.scada" if request.form.get("back") == "scada" else "automation.hardware")
         if action in ("save", "key"):
             if not can(HARDWARE, "create"):
                 abort(403)
@@ -126,6 +127,24 @@ def hardware_live():
     return jsonify({"ok": True, "machines": out, "can_command": can(HARDWARE, "approve")})
 
 
+# ---------- SCADA (update 31) ----------
+@bp.route("/scada")
+@require(SCADA)
+def scada():
+    """The plant diagram with live states (js/scada.js reads /automation/scada.json every 2 seconds)."""
+    branch = operating_branch()
+    data = scada_data(branch)
+    return render_template("automation/scada.html", data=data, branch=branch, type_keys=TYPE_KEYS, status_keys=STATUS_KEYS,
+                           type_keys_text={k: t(v) for k, v in TYPE_KEYS.items()},
+                           can_command=can(HARDWARE, "approve"), can_hardware=can(HARDWARE))
+
+
+@bp.route("/scada.json")
+@require(SCADA)
+def scada_json():
+    return jsonify(dict(scada_data(operating_branch()), ok=True, can_command=can(HARDWARE, "approve")))
+
+
 # ---------- Machine Usage Statistics ----------
 @bp.route("/usage")
 @require(USAGE)
@@ -135,8 +154,11 @@ def usage():
     start, end = period_bounds(days)
     machines = Machine.for_branch(branch)
     rows = []
-    for m in machines:
+    for m in list(machines):
         u = Machine.usage(m, start, end)
+        if m.get("ACTIVE_FLG") is False and not any(u["hours"][s] for s in (RUNNING, "I", "F", "M")):
+            machines.remove(m)                      # planned machine without any history: not listed (update 31)
+            continue
         metered = Meter.used_between(branch, start, end, m["METER_ID"]) if m.get("METER_ID") else None
         rows.append({"m": m, "u": u, "metered": metered})
     paddy = paddy_milled(branch, start, end)

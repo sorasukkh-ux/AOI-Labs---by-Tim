@@ -348,6 +348,20 @@ inverter for Modbus RTU, its station number, reverse rotation prevention (Pr.78 
 The emergency stop, the motor overload relay and the local/remote switch stay hard-wired; the app never replaces them.
 Device API for any other device: `POST /api/v1/machines/<id>/telemetry` (see `app/controllers/device_api.py`).
 
+## SCADA and the plant plan (update 31)
+
+Automation > **SCADA** (`/automation/scada`, Admin / Manager / Operator) draws the plant as Tim planned it, per factory:
+Silo 1-2 -> Conveyor in 1-2 -> Milling inbound (queue) <- Sorting; Milling inbound -> Main motor 1 (day shift) and
+Main motor 2 (night shift) -> Packing; Inventory storage/retrieval (AMR). Only **main motor 1 is in use**; the others are
+planned and drawn dashed ("Disabled"). It refreshes every 2 seconds: state of each machine (colour only for state:
+green running, red fault blinking, grey idle / no data), arrows that move where material flows, the main motor's Hz,
+A and rpm with a speed bar, the current shift (day 06:00-18:00), plant figures (machines running, main motor, queue,
+paddy today, energy today, alarms) and the alarms of the last 24 hours. Tap a machine for details; machines in use
+can be switched ON/OFF, set to a speed or reset there. "Full screen" for the TV in the control room.
+Each machine's place (SCADA column 0-5, row 0-3), the machines it feeds and its shift are set in Hardware Control >
+Machine setup; turning on "In use" there adds it to Hardware Control. The sample machines of update 9 (husker,
+whitener, polisher, grader) are removed when nobody set them up.
+
 ## Automation and devices
 
 The Automation screens work without any hardware: operators set a machine's status by hand and type

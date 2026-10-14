@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% from "_macros.html" import page_head %}
+{% block content %}
+<div id="tab-scada" class="auto-page">
+{{ page_head(t('tabScada'), url_for('home.index', g='AT')) }}
+
+<section class="scada" id="scada" data-url="{{ url_for('automation.scada_json') }}" data-command-url="{{ url_for('automation.hardware') }}"
+  data-hardware-url="{{ url_for('automation.hardware') }}" data-csrf="{{ csrf_token() }}"
+  data-initial='{{ data|tojson }}' data-can-command="{{ '1' if can_command else '' }}"
+  data-text='{{ {
+    "types": type_keys_text, "status": {"R": t("mcRunning"), "I": t("mcIdle"), "F": t("mcFault"), "M": t("mcMaintenance"), "O": t("mcOffline"), "DIS": t("scDisabled")},
+    "stages": [t("scStage0"), t("scStage1"), t("scStage2"), t("scStage3"), t("scStage4"), t("scStage5")],
+    "shift": {"DAY": t("scShiftDay"), "NIGHT": t("scShiftNight")}, "onShift": t("scOnShift"), "noData": t("scNoData"),
+    "planned": t("scPlannedNote"), "noDevice": t("scNoDevice"), "on": t("cmdOn"), "off": t("cmdOff"), "speed": t("cmdSpeed"),
+    "reset": t("cmdReset"), "openHw": t("scOpenHardware"), "confirmOn": t("scConfirmOn"), "confirmOff": t("scConfirmOff"),
+    "kw": t("scRatedKw"), "feeds": t("scFeeds"), "outHz": t("mcLiveOutHz"), "amp": t("mcLiveAmp"), "rpm": t("mcLiveRpm"),
+    "setHz": t("mcLiveSetHz"), "fault": t("mcLiveFault"), "busy": t("mcLiveBusy"), "select": t("scSelectHint"),
+    "updated": t("scUpdated"), "lost": t("scConnectionLost"), "noAlarms": t("scNoAlarms"), "overload": t("mcLiveOverload")
+  }|tojson }}'>
+
+  <div class="scada-top">
+    <div class="scada-title">
+      <span class="scada-dot" id="scada-link-dot" aria-hidden="true"></span>
+      <div><b>{{ t('scTitle') }}</b> &middot; {{ branch_label(branch) }}<small id="scada-clock" class="scada-sub"></small></div>
+    </div>
+    <div class="scada-top-actions">
+      <span class="scada-shift" id="scada-shift"></span>
+      <button type="button" class="action scada-btn" id="scada-full" aria-label="{{ t('scFullScreen') }}">&#x26F6; {{ t('scFullScreen') }}</button>
+    </div>
+  </div>
+
+  <div class="scada-kpis" id="scada-kpis">
+    <div class="scada-kpi"><span>{{ t('scKpiRunning') }}</span><b data-k="running">-</b></div>
+    <div class="scada-kpi"><span>{{ t('scKpiMotor') }}</span><b data-k="motor">-</b></div>
+    <div class="scada-kpi"><span>{{ t('scKpiQueue') }}</span><b data-k="queue">-</b></div>
+    <div class="scada-kpi"><span>{{ t('scKpiPaddy') }}</span><b data-k="paddy">-</b></div>
+    <div class="scada-kpi"><span>{{ t('scKpiEnergy') }}</span><b data-k="energy">-</b></div>
+    <div class="scada-kpi"><span>{{ t('scKpiAlarms') }}</span><b data-k="alarms">-</b></div>
+  </div>
+
+  <div class="scada-body">
+    <div class="scada-canvas-wrap"><div class="scada-canvas" id="scada-canvas" role="img" aria-label="{{ t('scTitle') }}"></div></div>
+    <aside class="scada-panel" id="scada-panel" aria-live="polite"><p class="scada-hint">{{ t('scSelectHint') }}</p></aside>
+  </div>
+
+  <div class="scada-legend" aria-hidden="true">
+    <span><i class="lg run"></i>{{ t('mcRunning') }}</span><span><i class="lg idle"></i>{{ t('mcIdle') }}</span>
+    <span><i class="lg fault"></i>{{ t('mcFault') }}</span><span><i class="lg off"></i>{{ t('scNoData') }}</span>
+    <span><i class="lg dis"></i>{{ t('scDisabled') }}</span><span><i class="lg flow"></i>{{ t('scFlow') }}</span>
+  </div>
+
+  <div class="scada-alarms">
+    <p class="scada-h">&#9888; {{ t('scAlarms') }}</p>
+    <ul id="scada-alarm-list"></ul>
+  </div>
+</section>
+
+<div class="card mt14" id="scada-list-card">
+  <p class="card-title sub">{{ t('scMachineList') }}</p>
+  <div class="inv-table-wrap"><table class="tv-table" id="scada-table">
+    <thead><tr><th>{{ t('mcMachine') }}</th><th>{{ t('mcType') }}</th><th>{{ t('colStatus') }}</th><th class="num">kW</th></tr></thead>
+    <tbody>{% for n in data.nodes %}<tr data-row="{{ n.id }}"{% if not n.active %} class="muted"{% endif %}><td>{{ n.name }}<small class="inv-sub">{{ n.id }}{% if n.shift %} &middot; {{ t('scShift' ~ n.shift|capitalize) }}{% endif %}</small></td>
+      <td>{{ t(type_keys.get(n.type, 'mcTypeOther')) }}</td><td data-cell="status">{{ t(status_keys[n.status]) if n.active else t('scDisabled') }}</td><td class="num">{{ n.kw|plain if n.kw else '-' }}</td></tr>{% endfor %}</tbody>
+  </table></div>
+  <p class="cap-note">{{ t('scListNote') }}{% if can_hardware %} <a href="{{ url_for('automation.hardware', setup=1) }}">{{ t('mcSetup') }} &rarr;</a>{% endif %}</p>
+</div>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/scada.js') }}" defer></script>{% endblock %}

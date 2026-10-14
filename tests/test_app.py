@@ -300,7 +300,7 @@ class Administration(Base):
         rows = {r["MENU_CODE"]: r for r in self.db("AOIMS_ROLEAUTH") if r["ROLE_CODE"] == "SUPERVISOR"}
         self.assertTrue(rows["SV_SERVICE"]["CAN_VIEW"] and rows["SV_SERVICE"]["CAN_CREATE"])
         self.assertFalse(rows["AD_USER"]["CAN_EDIT"])                    # dropped: the screen cannot be viewed
-        self.assertEqual(len(rows), 23)                                  # one row per menu (update 27: Investment & Break-even)
+        self.assertEqual(len(rows), 24)                                  # one row per menu (update 31: SCADA)
         self.assertIn("already exists", self.post("/admin/roles/save", data, "/admin/roles/").get_data(as_text=True))
 
     def test_role_in_use_cannot_be_made_inactive_and_admin_stays_full(self):
@@ -1194,7 +1194,7 @@ class Update9(Base):
         self.login("admin")
         self.client.get("/lang/en")
 
-    def machine(self, machine_id="F2-HUSK"):
+    def machine(self, machine_id="F2-SORT"):
         return next(m for m in self.db("AOIMS_MACHINE") if m["MACHINE_ID"] == machine_id)
 
     def issue_key(self, path, field, ident):
@@ -1234,13 +1234,13 @@ class Update9(Base):
         self.assertEqual(self.machine("F2-DRY")["MACHINE_STATUS"], "R")
         log = self.db("AOILOG_MACHINE")[-1]
         self.assertEqual((log["OLD_STATUS"], log["NEW_STATUS"], log["SOURCE"], log["NOTE"]), ("O", "R", "USER", "morning"))
-        self.assertEqual(self.post("/automation/hardware", {"action": "status", "MACHINE_ID": "F1-HUSK", "MACHINE_STATUS": "R"}).status_code, 404)  # other branch
+        self.assertEqual(self.post("/automation/hardware", {"action": "status", "MACHINE_ID": "F1-SORT", "MACHINE_STATUS": "R"}).status_code, 404)  # other branch
 
     def test_usage_hours_from_the_status_history(self):
-        self.post("/automation/hardware", {"action": "status", "MACHINE_ID": "F2-HUSK", "MACHINE_STATUS": "R"})
-        self.shift("AOILOG_MACHINE", {"MACHINE_ID": "F2-HUSK"}, "LOG_DATE", timedelta(hours=3))
-        self.post("/automation/hardware", {"action": "status", "MACHINE_ID": "F2-HUSK", "MACHINE_STATUS": "F"})
-        self.shift("AOILOG_MACHINE", {"MACHINE_ID": "F2-HUSK", "NEW_STATUS": "F"}, "LOG_DATE", timedelta(hours=1))
+        self.post("/automation/hardware", {"action": "status", "MACHINE_ID": "F2-SORT", "MACHINE_STATUS": "R"})
+        self.shift("AOILOG_MACHINE", {"MACHINE_ID": "F2-SORT"}, "LOG_DATE", timedelta(hours=3))
+        self.post("/automation/hardware", {"action": "status", "MACHINE_ID": "F2-SORT", "MACHINE_STATUS": "F"})
+        self.shift("AOILOG_MACHINE", {"MACHINE_ID": "F2-SORT", "NEW_STATUS": "F"}, "LOG_DATE", timedelta(hours=1))
         from app.models.automation import Machine
         from app.timeutil import now_utc
         with self.app.app_context():                                    # the last 4 hours (not "today": the test may run after midnight)
@@ -1248,40 +1248,40 @@ class Update9(Base):
         self.assertAlmostEqual(u["hours"]["R"], 2.0, delta=0.05)
         self.assertAlmostEqual(u["hours"]["F"], 1.0, delta=0.05)
         self.assertEqual(u["faults"], 1)
-        self.assertAlmostEqual(u["energy_est"], 30.0, delta=1)                  # 2 h x 15 kW
+        self.assertAlmostEqual(u["energy_est"], 3.0, delta=0.2)                 # 2 h x 1.5 kW (the sorter)
         page = self.text("/automation/usage?days=7")
         self.assertIn('<td class="num">2.0</td>', page)
         self.assertIn('id="chart-run-machines"', page)
 
     def test_commands_need_a_connected_device_and_expire(self):
-        self.post("/automation/hardware", {"action": "command", "MACHINE_ID": "F2-HUSK", "CMD": "START"})
+        self.post("/automation/hardware", {"action": "command", "MACHINE_ID": "F2-SORT", "CMD": "START"})
         self.assertEqual(self.db("AOITS_MACHINE_CMD"), [])                       # no remote control yet
-        self.post("/automation/hardware", {"action": "save", "MACHINE_ID": "F2-HUSK", "MACHINE_NAME": "Husker", "MACHINE_TYPE": "HUSKER",
+        self.post("/automation/hardware", {"action": "save", "MACHINE_ID": "F2-SORT", "MACHINE_NAME": "Husker", "MACHINE_TYPE": "HUSKER",
                                            "RATED_KW": "15", "CONTROL_FLG": "1"})
-        key = self.issue_key("/automation/hardware", "MACHINE_ID", "F2-HUSK")
-        self.post("/automation/hardware", {"action": "command", "MACHINE_ID": "F2-HUSK", "CMD": "START"})
+        key = self.issue_key("/automation/hardware", "MACHINE_ID", "F2-SORT")
+        self.post("/automation/hardware", {"action": "command", "MACHINE_ID": "F2-SORT", "CMD": "START"})
         self.assertEqual(self.db("AOITS_MACHINE_CMD"), [])                       # device never reported: offline
-        self.assertEqual(self.api("get", "/api/v1/machines/F2-HUSK/commands", "wrong").status_code, 401)
-        self.assertEqual(self.api("post", "/api/v1/machines/F2-HUSK/status", key, {"status": "I"}).get_json()["status"], "I")
-        self.post("/automation/hardware", {"action": "command", "MACHINE_ID": "F2-HUSK", "CMD": "START"})
-        self.post("/automation/hardware", {"action": "command", "MACHINE_ID": "F2-HUSK", "CMD": "STOP"})   # busy: refused
+        self.assertEqual(self.api("get", "/api/v1/machines/F2-SORT/commands", "wrong").status_code, 401)
+        self.assertEqual(self.api("post", "/api/v1/machines/F2-SORT/status", key, {"status": "I"}).get_json()["status"], "I")
+        self.post("/automation/hardware", {"action": "command", "MACHINE_ID": "F2-SORT", "CMD": "START"})
+        self.post("/automation/hardware", {"action": "command", "MACHINE_ID": "F2-SORT", "CMD": "STOP"})   # busy: refused
         cmds = self.db("AOITS_MACHINE_CMD")
         self.assertEqual([(c["CMD"], c["CMD_STATUS"]) for c in cmds], [("START", "P")])
-        work = self.api("get", "/api/v1/machines/F2-HUSK/commands", key).get_json()["commands"]
+        work = self.api("get", "/api/v1/machines/F2-SORT/commands", key).get_json()["commands"]
         self.assertEqual([w["command"] for w in work], ["START"])
         self.assertEqual(self.api("post", "/api/v1/commands/%s/ack" % work[0]["id"], "wrong", {"ok": True}).status_code, 401)
         self.assertEqual(self.api("post", "/api/v1/commands/%s/ack" % work[0]["id"], key, {"ok": True}).get_json()["status"], "D")
         self.assertEqual(self.machine()["MACHINE_STATUS"], "R")
         self.assertEqual(self.api("post", "/api/v1/commands/%s/ack" % work[0]["id"], key, {"ok": True}).status_code, 422)   # only once
-        self.post("/automation/hardware", {"action": "command", "MACHINE_ID": "F2-HUSK", "CMD": "STOP"})
+        self.post("/automation/hardware", {"action": "command", "MACHINE_ID": "F2-SORT", "CMD": "STOP"})
         self.shift("AOITS_MACHINE_CMD", {"CMD": "STOP"}, "REQ_DATE", timedelta(minutes=5))
-        self.assertEqual(self.api("get", "/api/v1/machines/F2-HUSK/commands", key).get_json()["commands"], [])  # expired, never runs late
+        self.assertEqual(self.api("get", "/api/v1/machines/F2-SORT/commands", key).get_json()["commands"], [])  # expired, never runs late
         self.assertEqual(next(c for c in self.db("AOITS_MACHINE_CMD") if c["CMD"] == "STOP")["CMD_STATUS"], "X")
         self.assertEqual(self.machine()["MACHINE_STATUS"], "R")
         old = key
-        key = self.issue_key("/automation/hardware", "MACHINE_ID", "F2-HUSK")
-        self.assertEqual(self.api("post", "/api/v1/machines/F2-HUSK/status", old, {"status": "I"}).status_code, 401)
-        self.assertEqual(self.api("post", "/api/v1/machines/F2-HUSK/status", key, {"status": "Z"}).status_code, 422)
+        key = self.issue_key("/automation/hardware", "MACHINE_ID", "F2-SORT")
+        self.assertEqual(self.api("post", "/api/v1/machines/F2-SORT/status", old, {"status": "I"}).status_code, 401)
+        self.assertEqual(self.api("post", "/api/v1/machines/F2-SORT/status", key, {"status": "Z"}).status_code, 422)
         self.assertNotIn(key, str(self.machine()))                               # only the hash is stored
 
     def test_command_rights(self):
@@ -1289,10 +1289,10 @@ class Update9(Base):
         self.login("somchai.k", "factory1")                                       # operator: status yes, start/stop no
         self.client.get("/lang/en")
         self.assertEqual(self.client.get("/automation/hardware").status_code, 200)
-        self.assertEqual(self.post("/automation/hardware", {"action": "command", "MACHINE_ID": "F1-HUSK", "CMD": "START"}).status_code, 403)
-        self.assertEqual(self.post("/automation/hardware", {"action": "key", "MACHINE_ID": "F1-HUSK"}).status_code, 403)
-        self.post("/automation/hardware", {"action": "status", "MACHINE_ID": "F1-HUSK", "MACHINE_STATUS": "M"})
-        self.assertEqual(self.machine("F1-HUSK")["MACHINE_STATUS"], "M")
+        self.assertEqual(self.post("/automation/hardware", {"action": "command", "MACHINE_ID": "F1-SORT", "CMD": "START"}).status_code, 403)
+        self.assertEqual(self.post("/automation/hardware", {"action": "key", "MACHINE_ID": "F1-SORT"}).status_code, 403)
+        self.post("/automation/hardware", {"action": "status", "MACHINE_ID": "F1-SORT", "MACHINE_STATUS": "M"})
+        self.assertEqual(self.machine("F1-SORT")["MACHINE_STATUS"], "M")
         self.assertEqual(self.client.get("/automation/ai").status_code, 403)
         self.logout()
         self.login("wanida.s")
@@ -1356,7 +1356,7 @@ class Update9(Base):
             self.assertTrue(all(a["advice"] in ("keep", "raise_buy", "lower_buy", "manual") for a in ai.price_advice("factory2")))
             snap = ai.snapshot("factory2")
             self.assertNotIn("C261001001", str(snap))                             # no customer data is sent
-        self.post("/automation/hardware", {"action": "status", "MACHINE_ID": "F2-HUSK", "MACHINE_STATUS": "F"})
+        self.post("/automation/hardware", {"action": "status", "MACHINE_ID": "F2-SORT", "MACHINE_STATUS": "F"})
         page = self.text("/automation/ai")
         self.assertIn("is in fault now", page)
         self.assertIn("1 fault(s)", page)
@@ -2566,7 +2566,7 @@ class Update29(Base):
         motor = self.machine("F2-MOTOR")
         self.assertEqual((motor["MACHINE_TYPE"], motor["RATED_KW"], motor["RATED_AMP"], motor["RATED_RPM"], motor["CONTROL_FLG"]),
                          ("MAIN_MOTOR", 15.0, 30.0, 1450, True))
-        self.assertFalse(self.machine("F2-HUSK")["ACTIVE_FLG"])
+        self.assertFalse(self.machine("F2-SORT")["ACTIVE_FLG"])
         page = self.text("/automation/hardware")
         cards = re.findall(r'class="card machine-card[^"]*" data-machine="([^"]+)"', page)
         self.assertEqual(cards, ["F2-MOTOR"])
@@ -2592,10 +2592,10 @@ class Update29(Base):
             kwh, source = profit.energy_per_kg("factory2")
         self.assertEqual(source, "estimate")
         self.assertAlmostEqual(kwh, 15.0 * 0.273 / 60, places=6)                # the 15 kW motor only
-        self.post("/automation/hardware", {"action": "save", "mode": "edit", "MACHINE_ID": "F2-HUSK", "MACHINE_NAME": "Husker",
+        self.post("/automation/hardware", {"action": "save", "mode": "edit", "MACHINE_ID": "F2-SORT", "MACHINE_NAME": "Husker",
                                            "MACHINE_TYPE": "HUSKER", "RATED_KW": "15", "ACTIVE_FLG": "1"}, "/automation/hardware")
-        self.assertTrue(self.machine("F2-HUSK")["ACTIVE_FLG"])
-        self.assertIn('data-machine="F2-HUSK"', self.text("/automation/hardware"))
+        self.assertTrue(self.machine("F2-SORT")["ACTIVE_FLG"])
+        self.assertIn('data-machine="F2-SORT"', self.text("/automation/hardware"))
 
 
 class Update30(Base):
@@ -2682,6 +2682,54 @@ class Update30(Base):
         self.assertEqual((values["running"], values["fault"]), (False, "E.OC2"))
         aoi_gateway.carry_out(inverter, {"command": "RESET"})
         self.assertEqual(inverter.read()["fault"], "")
+
+
+class Update31(Base):
+    """Tim's plant plan on the SCADA: all machines, only main motor 1 in use."""
+    machine = Update9.machine
+
+    def setUp(self):
+        super().setUp()
+        self.login("admin")
+        self.client.get("/lang/en")
+
+    def test_plant_machines(self):
+        mine = {m["MACHINE_ID"]: m for m in self.db("AOIMS_MACHINE") if m["BRANCH_ID"] == "factory2"}
+        self.assertEqual(set(mine), {"F2-" + x for x in ("SILO1", "SILO2", "CONV1", "CONV2", "INBOUND", "SORT", "MOTOR", "MOTOR2", "PACK", "AMR")})
+        self.assertEqual([k for k, m in mine.items() if m.get("ACTIVE_FLG") is not False], ["F2-MOTOR"])
+        self.assertEqual((mine["F2-MOTOR"]["SHIFT"], mine["F2-MOTOR2"]["SHIFT"]), ("DAY", "NIGHT"))
+        self.assertEqual(mine["F2-INBOUND"]["FEEDS_TO"], "F2-MOTOR,F2-MOTOR2")
+        self.assertEqual(mine["F2-SORT"]["FEEDS_TO"], "F2-INBOUND")
+        self.assertEqual(mine["F2-MOTOR2"]["RATED_AMP"], 30.0)
+        self.assertNotIn("F2-HUSK", mine)                                       # the update 9 samples are gone
+        self.assertEqual(re.findall(r'data-machine="([^"]+)"', self.text("/automation/hardware")), ["F2-MOTOR"])
+
+    def test_scada_screen_and_data(self):
+        self.assertIn('data-menu="AT_SCADA"', self.text("/?g=AT"))
+        page = self.text("/automation/scada")
+        self.assertIn('id="scada-canvas"', page)
+        self.assertIn("scada.js", page)
+        data = self.client.get("/automation/scada.json").get_json()
+        nodes = {n["id"]: n for n in data["nodes"]}
+        self.assertEqual((nodes["F2-MOTOR"]["status"], nodes["F2-MOTOR"]["active"]), ("O", True))
+        self.assertEqual((nodes["F2-SILO1"]["status"], nodes["F2-SILO1"]["col"], nodes["F2-SILO1"]["feeds"]), ("DIS", 0, ["F2-CONV1"]))
+        self.assertEqual((data["kpi"]["in_use"], data["kpi"]["planned"]), (1, 9))
+        self.assertIn(data["shift"], ("DAY", "NIGHT"))
+        self.logout()
+        self.login("wanida.s")                                                  # accountant: no SCADA
+        self.assertEqual(self.client.get("/automation/scada").status_code, 403)
+
+    def test_scada_place_and_command_back_to_scada(self):
+        self.post("/automation/hardware", {"action": "save", "mode": "edit", "MACHINE_ID": "F2-PACK", "MACHINE_NAME": "Packing",
+                                           "MACHINE_TYPE": "PACKER", "SCADA_COL": "4", "SCADA_ROW": "1", "FEEDS_TO": "f2-amr",
+                                           "SHIFT": "DAY"}, "/automation/hardware")
+        pack = self.machine("F2-PACK")
+        self.assertEqual((pack["SCADA_COL"], pack["SCADA_ROW"], pack["FEEDS_TO"], pack["SHIFT"], pack["ACTIVE_FLG"]), (4, 1, "F2-AMR", "DAY", False))
+        self.post("/automation/hardware", {"action": "save", "mode": "edit", "MACHINE_ID": "F2-PACK", "MACHINE_NAME": "Packing",
+                                           "MACHINE_TYPE": "PACKER", "SCADA_COL": "9"}, "/automation/hardware")
+        self.assertEqual(self.machine("F2-PACK")["SCADA_COL"], 4)                # out of range: refused
+        reply = self.post("/automation/hardware", {"action": "command", "MACHINE_ID": "F2-MOTOR", "CMD": "START", "back": "scada"})
+        self.assertTrue(reply.headers["Location"].endswith("/automation/scada"))
 
 
 if __name__ == "__main__":

@@ -11,7 +11,7 @@ LABEL_KEYS = {
     "FN_PRICING": "tabPricing", "FN_MARGIN": "tabMargin", "FN_ACCOUNT": "tabAccount", "FN_MARKETING": "tabMarketing", "FN_INVEST": "tabInvest",
     "AD_MILLPROD": "tabMillingProduction", "AD_MILLTIME": "tabMillingTime", "AD_USER": "tabUser", "AD_ROLE": "tabRole",
     "AD_CUSTOMER": "tabCustomer",
-    "AT_AI": "tabAi", "AT_HARDWARE": "tabHardware", "AT_ELECTRIC": "tabElectric", "AT_MACHINE": "tabMachineUsage",
+    "AT_AI": "tabAi", "AT_HARDWARE": "tabHardware", "AT_ELECTRIC": "tabElectric", "AT_MACHINE": "tabMachineUsage", "AT_SCADA": "tabScada",
 }
 ICONS = {
     "SV_SERVICE": "\U0001F9FE", "SV_PRICE": "\U0001F4FA", "SV_MILLSTATUS": "\U0001F504",
@@ -19,7 +19,7 @@ ICONS = {
     "IV_DASHBOARD": "\U0001F4C8", "FN_PRICING": "\U0001F3F7", "FN_MARGIN": "\U0001F4D0", "FN_ACCOUNT": "\U0001F4D2",
     "FN_MARKETING": "\U0001F4E3", "FN_INVEST": "\U0001F4B0", "AD_MILLPROD": "\U0001F3ED", "AD_MILLTIME": "⏱", "AD_USER": "\U0001F465",
     "AD_ROLE": "\U0001F510", "AD_CUSTOMER": "\U0001F464",
-    "AT_AI": "\U0001F916", "AT_HARDWARE": "\U0001F39B\uFE0F", "AT_ELECTRIC": "⚡", "AT_MACHINE": "⚙\uFE0F",
+    "AT_AI": "\U0001F916", "AT_HARDWARE": "\U0001F39B\uFE0F", "AT_ELECTRIC": "⚡", "AT_MACHINE": "⚙\uFE0F", "AT_SCADA": "\U0001F5A5\uFE0F",
 }
 
 
