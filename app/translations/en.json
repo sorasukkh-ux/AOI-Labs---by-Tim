@@ -1272,6 +1272,8 @@
  "scNoAlarms": "No alarms in the last 24 hours.",
  "scNoData": "No data",
  "scNoDevice": "No device connected",
+ "scNoRight": "Your role cannot start or stop machines (Hardware Control needs the Approve right).",
+ "scOffline": "The device (gateway) is not connected, so the machine cannot be controlled. Start the gateway, then wait a few seconds.",
  "scOnShift": "on shift now",
  "scOpenHardware": "Hardware Control",
  "scPlannedNote": "Planned machine, not installed yet. Enable it in Hardware Control > Machine setup > In use when it is connected.",

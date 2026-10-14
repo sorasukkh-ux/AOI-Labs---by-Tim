@@ -102,6 +102,7 @@
     askAll(button, form).then(function (ok) {
       if (!ok) return;
       if (button.name) setHidden(form, button.name, button.value);
+      if (!form.isConnected) { form.hidden = true; document.body.appendChild(form); }   // redrawn meanwhile: still sent
       form.submit();
     });
   });

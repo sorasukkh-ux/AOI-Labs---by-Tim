@@ -179,29 +179,47 @@
     dl.appendChild(dt); dl.appendChild(dd);
   }
   function select(id) { selected = id; draw(); details(); }
-  function details() {
-    var n = data.nodes.filter(function (x) { return x.id === selected; })[0];
-    if (!n) return;
-    panel.textContent = "";
-    var h = document.createElement("p"); h.className = "scada-h"; h.textContent = n.name; panel.appendChild(h);
-    var sub = document.createElement("p"); sub.className = "scada-sub";
-    sub.textContent = n.id + " · " + (text.types[n.type] || n.type) + (n.shift ? " · " + text.shift[n.shift] + (n.on_shift ? " (" + text.onShift + ")" : "") : "");
-    panel.appendChild(sub);
+  // The buttons are only rebuilt when the machine's control state changes, never while a confirm pop-up is open:
+  // a form taken out of the page cannot be sent (the cause of "ON does nothing" in update 31).
+  var panelSig = null;
+  function signature(n) {
+    var lv = n.live || {};
+    return [n.id, n.status, n.active, n.control, canCommand, lv.busy, lv.fresh ? lv.running : "", lv.fault, lv.min_hz, lv.max_hz].join("|");
+  }
+  function fillInfo(box, n) {
+    box.textContent = "";
     var pill = document.createElement("span"); pill.className = "scada-pill st-" + state(n);
-    pill.textContent = n.active ? (text.status[n.status] || n.status) : text.status.DIS; panel.appendChild(pill);
-    var dl = document.createElement("dl"); dl.className = "scada-dl"; panel.appendChild(dl);
+    pill.textContent = n.active ? (text.status[n.status] || n.status) : text.status.DIS; box.appendChild(pill);
+    var dl = document.createElement("dl"); dl.className = "scada-dl"; box.appendChild(dl);
     if (n.kw) row(dl, text.kw, n.kw + " kW");
     if (n.feeds.length) row(dl, text.feeds, n.feeds.join(", "));
     if (!n.active) {
-      var note = document.createElement("p"); note.className = "scada-note"; note.textContent = text.planned; panel.appendChild(note);
+      var note = document.createElement("p"); note.className = "scada-note"; note.textContent = text.planned; box.appendChild(note);
     } else if (n.live) {
       var lv = n.live;
       if (!lv.fresh) row(dl, "", text.noData);
       row(dl, text.outHz, fmt(lv.out_hz, 1) + " Hz"); row(dl, text.amp, fmt(lv.amp, 1) + " A" + (lv.rated_amp ? " / " + lv.rated_amp + " A" : ""));
       row(dl, text.rpm, fmt(lv.rpm, 0)); row(dl, text.setHz, fmt(lv.set_hz, 1) + " Hz");
       if (lv.fault) row(dl, text.fault, lv.fault);
-      if (lv.amp && lv.rated_amp && lv.amp > lv.rated_amp) { var w = document.createElement("p"); w.className = "scada-warn"; w.textContent = "⚠ " + text.overload; panel.appendChild(w); }
-      if (lv.busy) { var b = document.createElement("p"); b.className = "scada-note"; b.textContent = text.busy.replace("{cmd}", lv.busy); panel.appendChild(b); }
+      if (lv.amp && lv.rated_amp && lv.amp > lv.rated_amp) { var w = document.createElement("p"); w.className = "scada-warn"; w.textContent = "⚠ " + text.overload; box.appendChild(w); }
+      if (lv.busy) { var b = document.createElement("p"); b.className = "scada-note"; b.textContent = text.busy.replace("{cmd}", lv.busy); box.appendChild(b); }
+    } else {
+      var nd = document.createElement("p"); nd.className = "scada-note"; nd.textContent = text.noDevice; box.appendChild(nd);
+    }
+  }
+  function details() {
+    var n = data.nodes.filter(function (x) { return x.id === selected; })[0];
+    if (!n) return;
+    panel.textContent = "";
+    panelSig = signature(n);
+    var h = document.createElement("p"); h.className = "scada-h"; h.textContent = n.name; panel.appendChild(h);
+    var sub = document.createElement("p"); sub.className = "scada-sub";
+    sub.textContent = n.id + " · " + (text.types[n.type] || n.type) + (n.shift ? " · " + text.shift[n.shift] + (n.on_shift ? " (" + text.onShift + ")" : "") : "");
+    panel.appendChild(sub);
+    var info = document.createElement("div"); info.id = "scada-info"; panel.appendChild(info);
+    fillInfo(info, n);
+    if (n.active && n.live) {
+      var lv = n.live;
       var pair = document.createElement("div"); pair.className = "scada-pair";
       var running = lv.fresh ? lv.running : n.status === "R";
       var on = commandForm(n, "START", "▶ " + text.on, "primary", text.confirmOn), off = commandForm(n, "STOP", "■ " + text.off, "danger", text.confirmOff);
@@ -213,11 +231,25 @@
         i.value = lv.set_hz; i.required = true; i.setAttribute("aria-label", "Hz"); f.appendChild(i);
       }));
       if (n.status === "F") panel.appendChild(commandForm(n, "RESET", "↻ " + text.reset, "", null));
-    } else {
-      var nd = document.createElement("p"); nd.className = "scada-note"; nd.textContent = text.noDevice; panel.appendChild(nd);
+      if (!canCommand || !n.control) {
+        var why = document.createElement("p"); why.className = "scada-note";
+        why.textContent = !canCommand ? text.noRight : text.offline; panel.appendChild(why);
+      }
     }
     var a = document.createElement("a"); a.href = root.getAttribute("data-hardware-url"); a.className = "scada-link"; a.textContent = text.openHw + " →";
     panel.appendChild(a);
+  }
+  function refreshPanel() {
+    var n = data.nodes.filter(function (x) { return x.id === selected; })[0];
+    if (!n) return;
+    var overlay = document.getElementById("app-modal-overlay");
+    if ((overlay && overlay.classList.contains("show")) || panel.contains(document.activeElement)) {
+      var box = document.getElementById("scada-info");
+      if (box) fillInfo(box, n);                          // numbers only; the buttons stay as they are
+      return;
+    }
+    if (signature(n) !== panelSig) details();
+    else fillInfo(document.getElementById("scada-info"), n);
   }
 
   // ---------- figures, alarms, list ----------
@@ -258,8 +290,7 @@
       if (!d.ok) return;
       data = d; canCommand = !!d.can_command; lastOk = Date.now();
       draw(); figures();
-      var focused = panel.contains(document.activeElement);
-      if (selected && !focused) details();
+      if (selected) refreshPanel();
     }).catch(function () {}).then(function () { setTimeout(refresh, 2000); });
   }
 
