@@ -1872,6 +1872,10 @@ class Update16(Base):
         self.assertEqual(tv.get("/tv/factory2/data?key=wrong").status_code, 403)
         body = tv.get(link2.replace("/tv/factory2?", "/tv/factory2/data?")).get_json()
         self.assertEqual((body["branch"], body["branch_name"]), ("factory2", "โรงงาน 2"))
+        self.assertEqual((body["motor"]["status"], body["motor"]["running"]), ("O", False))    # update 36: main motor
+        page = tv.get(link2).get_data(as_text=True)
+        self.assertIn('id="tvb-motor"', page)
+        self.assertIn("tvb-circuit", page)
         new2 = self.issue("factory2")
         self.assertNotEqual(new2, link2)
         self.assertEqual(tv.get(link2).status_code, 403)                # the old link stops at once

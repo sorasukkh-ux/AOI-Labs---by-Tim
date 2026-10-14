@@ -5,21 +5,28 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>{{ data.branch_name }} · AOI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&amp;family=IBM+Plex+Sans+Thai:wght@400;500;600;700&amp;display=swap">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/tv.css') }}">
 <link rel="icon" href="{{ url_for('static', filename='img/favicon.png') }}">
 </head>
 <body class="tvb">
+<svg class="tvb-circuit" aria-hidden="true" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice"><g fill="none" stroke="#1d4f9c" stroke-width="1.4">
+<path d="M0 170H140l36 36h130M0 760H110l36-36h110M1920 160H1780l-36 36h-90M1920 740H1800l-36 36h-90M60 0v70l36 36v60M1860 0v80l-36 36v60M260 1080v-50l36-36h100M1660 1080v-55l-36-36h-96"/></g>
+<g fill="#38bdf8"><circle cx="306" cy="206" r="4"/><circle cx="256" cy="724" r="4"/><circle cx="1654" cy="196" r="4"/><circle cx="1654" cy="776" r="4"/><circle cx="96" cy="166" r="4"/><circle cx="1824" cy="176" r="4"/><circle cx="396" cy="994" r="4"/><circle cx="1528" cy="989" r="4"/></g></svg>
 <div id="tvb" data-url="{{ data_url }}" data-board='{{ data|tojson }}' data-text='{{ text|tojson }}'>
   <header class="tvb-head">
     <img src="{{ url_for('static', filename='img/logo.png') }}" alt="AOI">
     <div class="tvb-brand"><h1><span id="tvb-branch">{{ data.branch_name }}</span> · {{ text.tvbStatus.th }}</h1>
       <p>{{ data.branch_name_en }} · {{ text.tvbStatus.en }} &nbsp;·&nbsp; {{ text.tvbScan.th }}</p></div>
+    <div class="tvb-motor" id="tvb-motor" hidden><i></i><span class="l">{{ text.tvbMotor.th }}</span><b id="tvb-motor-v"></b></div>
+    <div class="tvb-live" id="tvb-live"><i></i>LIVE</div>
     <div class="tvb-clock"><div class="t" id="tvb-time">--:--</div><div class="d" id="tvb-date"></div></div>
   </header>
   <main class="tvb-main">
     {% for key, css in (('ready', 'ready'), ('milling', 'mill'), ('queue', 'queue')) %}
     <section class="tvb-col {{ css }}" data-col="{{ key }}">
-      <h2>{{ text['tvb' ~ {'ready': 'Ready', 'milling': 'Milling', 'queue': 'Queue'}[key]].th }}
+      <h2><span class="ico">{% if key == 'ready' %}<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l5 5L20 6"/></svg>{% elif key == 'milling' %}<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 4v16M4 12h16"/></svg>{% else %}<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>{% endif %}</span>{{ text['tvb' ~ {'ready': 'Ready', 'milling': 'Milling', 'queue': 'Queue'}[key]].th }}
         <small>{{ text['tvb' ~ {'ready': 'Ready', 'milling': 'Milling', 'queue': 'Queue'}[key]].en }}</small><span class="n">0</span></h2>
       <div class="rows"></div>
       <div class="more" hidden></div>

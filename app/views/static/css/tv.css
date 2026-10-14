@@ -1,56 +1,94 @@
-/* TV display (/tv/<branch>): drawn on a 1920 x 1080 stage that tv.js scales to the screen (50" full HD or 4K). */
-:root { --bg:#0B1220; --panel:#121C2E; --line:#22304A; --text:#F1F5FB; --sub:#9FB0C9;
-  --ready:#22C55E; --ready-bg:#0F2A1C; --mill:#3B9EFF; --mill-bg:#0E2340; --queue:#F5B13D; --queue-bg:#2E2410;
-  --buy:#FF8A8A; --sell:#6EE7A0; }
+/* TV display (/tv/<branch>), update 36: the SCADA "control room" look - deep navy circuit board, glass panels,
+   glowing accents. Drawn on a 1920 x 1080 stage that tv.js scales to the screen (50" full HD or 4K).
+   Colours carry the meaning and every column also has its title and icon: green ready, cyan milling, amber queue. */
+:root { --bg:#030817; --text:#eef5ff; --sub:#93b4e6; --dim:#6f93cc; --line:rgba(96,165,250,.32);
+  --ready:#34d399; --mill:#38bdf8; --queue:#fbbf24; --buy:#fca5a5; --sell:#6ee7b7;
+  --head:"Chakra Petch","IBM Plex Sans Thai","Noto Sans Thai","Sarabun",sans-serif;
+  --body:"IBM Plex Sans Thai","Noto Sans Thai","Sarabun","Loma",-apple-system,"Segoe UI",sans-serif; }
 * { box-sizing: border-box; }
-html, body { margin: 0; height: 100%; background: var(--bg); overflow: hidden; }
-body.tvb { color: var(--text); font-family: "Noto Sans Thai", "Sarabun", "Loma", -apple-system, "Segoe UI", Roboto, sans-serif; cursor: none; }
+html, body { margin: 0; height: 100%; overflow: hidden;
+  background: radial-gradient(1400px 800px at 50% 40%, #0b2350 0%, #061334 45%, #030817 100%) fixed, var(--bg); }
+body.tvb { color: var(--text); font-family: var(--body); cursor: none; }
+.tvb-circuit { position: fixed; inset: 0; width: 100%; height: 100%; opacity: .55; pointer-events: none; }
 #tvb { width: 1920px; height: 1080px; position: absolute; left: 0; top: 0; transform-origin: 0 0; }
-.tvb-head { height: 120px; display: flex; align-items: center; padding: 0 48px; gap: 28px; border-bottom: 2px solid var(--line); }
-.tvb-head img { height: 84px; }
-.tvb-brand h1 { margin: 0; font-size: 46px; font-weight: 800; letter-spacing: .5px; }
-.tvb-brand p { margin: 2px 0 0; font-size: 24px; color: var(--sub); }
-.tvb-clock { margin-left: auto; text-align: right; }
-.tvb-clock .t { font-size: 64px; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1; }
-.tvb-clock .d { font-size: 24px; color: var(--sub); margin-top: 6px; }
-.tvb-main { display: grid; grid-template-columns: 1.15fr 1fr 1fr; gap: 28px; padding: 28px 48px; height: 820px; }
-.tvb-col { background: var(--panel); border-radius: 24px; overflow: hidden; display: flex; flex-direction: column; border: 2px solid var(--line); }
-.tvb-col h2 { margin: 0; padding: 20px 28px; font-size: 40px; font-weight: 800; display: flex; align-items: baseline; gap: 16px; }
-.tvb-col h2 small { font-size: 24px; font-weight: 600; opacity: .85; }
-.tvb-col h2 .n { margin-left: auto; font-size: 30px; padding: 4px 18px; border-radius: 999px; background: rgba(255,255,255,.12); }
-.tvb-col.ready h2 { background: var(--ready-bg); color: var(--ready); }
-.tvb-col.mill h2 { background: var(--mill-bg); color: var(--mill); }
-.tvb-col.queue h2 { background: var(--queue-bg); color: var(--queue); }
-.tvb-col .rows { padding: 8px 28px; flex: 1; overflow: hidden; }
-.tvb-row { display: flex; align-items: center; gap: 22px; padding: 14px 0; border-bottom: 2px solid var(--line); }
-.tvb-row:last-child { border-bottom: none; }
-.tvb-row .no { font-size: 62px; font-weight: 800; font-variant-numeric: tabular-nums; min-width: 190px; }
-.ready .no { color: var(--ready); } .mill .no { color: var(--mill); } .queue .no { color: var(--queue); }
-.tvb-row .who { font-size: 32px; font-weight: 600; line-height: 1.15; min-width: 0; overflow: hidden; }
-.tvb-row .who small { display: block; font-size: 22px; color: var(--sub); font-weight: 500; margin-top: 4px; white-space: nowrap; }
-.tvb-row .tag { margin-left: auto; font-size: 24px; color: var(--sub); text-align: right; white-space: nowrap; }
-.tvb-row .tag b { display: block; font-size: 34px; color: var(--text); }
-.tvb-row.new { box-shadow: inset 6px 0 0 var(--ready); padding-left: 16px; margin-left: -22px; animation: tvb-blink 1.6s ease-in-out 3; }
-@keyframes tvb-blink { 50% { background: rgba(34,197,94,.18); } }
-.mill .tvb-row { flex-direction: column; align-items: stretch; padding: 22px 0 26px; }
-.mill .tvb-row .top { display: flex; align-items: center; gap: 22px; }
-.tvb-bar { height: 16px; background: #1D2A44; border-radius: 99px; margin-top: 12px; overflow: hidden; }
-.tvb-bar i { display: block; height: 100%; width: 0; background: var(--mill); border-radius: 99px; transition: width 1s; }
-.tvb-none { font-size: 30px; color: var(--sub); text-align: center; padding: 60px 0; }
-.tvb-col .more { text-align: center; font-size: 24px; color: var(--sub); padding: 10px 0 8px; }
-.tvb-col .dots { display: flex; gap: 10px; justify-content: center; padding-bottom: 16px; min-height: 30px; }
-.tvb-col .dots i { width: 14px; height: 14px; border-radius: 50%; background: #33435F; }
-.tvb-col.ready .dots i.on { background: var(--ready); } .tvb-col.mill .dots i.on { background: var(--mill); } .tvb-col.queue .dots i.on { background: var(--queue); }
-.tvb-foot { height: 140px; display: flex; align-items: center; border-top: 2px solid var(--line); padding: 0 48px; }
-.tvb-foot .prices { display: flex; gap: 20px; flex: 1; overflow: hidden; }
-.tvb-foot .p { background: var(--panel); border: 2px solid var(--line); border-radius: 18px; padding: 12px 22px; min-width: 300px; }
-.tvb-foot .p .k { font-size: 22px; color: var(--sub); white-space: nowrap; }
-.tvb-foot .p .v { font-size: 34px; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.tvb-foot .p .v span { font-size: 20px; color: var(--sub); font-weight: 600; }
-.tvb-foot .buy { color: var(--buy); } .tvb-foot .sell { color: var(--sell); }
-.tvb-foot .upd { text-align: right; font-size: 22px; color: var(--sub); line-height: 1.5; margin-left: 24px; white-space: nowrap; }
-.tvb-offline { position: absolute; right: 48px; top: 132px; background: #7F1D1D; color: #fff; font-size: 24px; padding: 8px 18px; border-radius: 12px; }
-.tvb-denied { max-width: 900px; margin: 15vh auto; text-align: center; color: var(--text); padding: 0 24px; }
-.tvb-denied img { height: 90px; } .tvb-denied h1 { font-size: 40px; } .tvb-denied p { font-size: 22px; color: var(--sub); }
-.tvb-row .who { flex: 1; }
+
+/* header */
+.tvb-head { height: 124px; display: flex; align-items: center; padding: 0 48px; gap: 26px; }
+.tvb-head img { height: 78px; border-radius: 14px; background: #fff; padding: 4px 8px; box-shadow: 0 0 28px rgba(56,189,248,.35); }
+.tvb-brand h1 { margin: 0; font-family: var(--head); font-size: 46px; font-weight: 700; letter-spacing: .02em; color: #f4f8ff; }
+.tvb-brand p { margin: 4px 0 0; font-size: 22px; color: var(--sub); }
+.tvb-motor { margin-left: auto; display: flex; align-items: center; gap: 14px; padding: 12px 22px; border-radius: 999px;
+  background: rgba(14,40,90,.55); border: 1.5px solid var(--line); font-size: 22px; color: var(--sub); }
+.tvb-motor i { width: 16px; height: 16px; border-radius: 50%; background: #64748b; }
+.tvb-motor b { font-family: var(--head); font-size: 30px; color: var(--text); font-variant-numeric: tabular-nums; }
+.tvb-motor.run { border-color: rgba(52,211,153,.7); box-shadow: 0 0 26px rgba(52,211,153,.3); }
+.tvb-motor.run i { background: var(--ready); box-shadow: 0 0 0 6px rgba(52,211,153,.2), 0 0 16px var(--ready); }
+.tvb-motor.run b { color: #a7f3d0; }
+.tvb-motor.fault { border-color: #f87171; box-shadow: 0 0 26px rgba(248,113,113,.45); animation: tvb-alarm 1s steps(2) infinite; }
+.tvb-motor.fault i { background: #f87171; } .tvb-motor.fault b { color: #fecaca; }
+@keyframes tvb-alarm { 50% { box-shadow: none; } }
+.tvb-motor[hidden] + .tvb-live { margin-left: auto; }
+.tvb-live { display: flex; align-items: center; gap: 10px; font-family: var(--head); font-size: 20px; font-weight: 700; letter-spacing: .14em; color: #a7f3d0; }
+.tvb-live i { width: 12px; height: 12px; border-radius: 50%; background: var(--ready); box-shadow: 0 0 0 5px rgba(52,211,153,.2), 0 0 14px var(--ready); animation: tvb-pulse 2s ease-in-out infinite; }
+.tvb-live.lost { color: #fecaca; } .tvb-live.lost i { background: #f87171; box-shadow: 0 0 14px #f87171; animation: none; }
+@keyframes tvb-pulse { 50% { opacity: .35; } }
+.tvb-clock { text-align: right; padding-left: 26px; border-left: 1.5px solid var(--line); }
+.tvb-clock .t { font-family: var(--head); font-size: 66px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1; text-shadow: 0 0 22px rgba(56,189,248,.45); }
+.tvb-clock .d { font-size: 22px; color: var(--sub); margin-top: 6px; }
+
+/* the three columns */
+.tvb-main { display: grid; grid-template-columns: 1.15fr 1fr 1fr; gap: 26px; padding: 18px 48px 22px; height: 806px; }
+.tvb-col { --c: var(--mill); position: relative; border-radius: 26px; overflow: hidden; display: flex; flex-direction: column;
+  background: linear-gradient(180deg, rgba(20,52,112,.62), rgba(6,18,46,.92)); border: 1.5px solid var(--line);
+  box-shadow: 0 0 40px rgba(56,189,248,.12), inset 0 1px 0 rgba(255,255,255,.06); }
+.tvb-col.ready { --c: var(--ready); } .tvb-col.queue { --c: var(--queue); }
+.tvb-col::before { content: ""; position: absolute; left: 24px; right: 24px; top: 0; height: 3px; border-radius: 0 0 4px 4px;
+  background: var(--c); box-shadow: 0 0 18px var(--c); }
+.tvb-col h2 { margin: 0; padding: 26px 28px 18px; font-family: var(--head); font-size: 40px; font-weight: 700; display: flex; align-items: center; gap: 16px; color: var(--c); }
+.tvb-col h2 .ico { width: 50px; height: 50px; flex: 0 0 50px; border-radius: 14px; display: flex; align-items: center; justify-content: center;
+  border: 1.5px solid var(--c); background: rgba(255,255,255,.04); box-shadow: 0 0 18px rgba(56,189,248,.18); }
+.tvb-col h2 .ico svg { width: 30px; height: 30px; }
+.tvb-col.mill h2 .ico svg { animation: tvb-spin 3s linear infinite; }
+@keyframes tvb-spin { to { transform: rotate(360deg); } }
+.tvb-col h2 small { font-family: var(--body); font-size: 22px; font-weight: 500; color: var(--sub); }
+.tvb-col h2 .n { margin-left: auto; min-width: 66px; text-align: center; font-size: 32px; padding: 2px 18px; border-radius: 999px; color: var(--text);
+  border: 1.5px solid var(--c); background: rgba(255,255,255,.06); }
+.tvb-col .rows { padding: 4px 22px; flex: 1; overflow: hidden; display: flex; flex-direction: column; gap: 12px; }
+.tvb-row { display: flex; align-items: center; gap: 20px; padding: 14px 18px; border-radius: 18px;
+  background: rgba(10,30,70,.55); border: 1px solid rgba(96,165,250,.18); }
+.tvb-row .no { font-family: var(--head); font-size: 58px; font-weight: 700; font-variant-numeric: tabular-nums; min-width: 176px; color: var(--c); text-shadow: 0 0 18px rgba(56,189,248,.25); }
+.ready .tvb-row .no { color: var(--ready); } .mill .tvb-row .no { color: var(--mill); } .queue .tvb-row .no { color: var(--queue); }
+.tvb-row .who { flex: 1; font-size: 32px; font-weight: 600; line-height: 1.15; min-width: 0; overflow: hidden; }
+.tvb-row .who small { display: block; font-size: 21px; color: var(--sub); font-weight: 500; margin-top: 4px; white-space: nowrap; }
 .mill .tvb-row .who small, .queue .tvb-row .who small { white-space: normal; }
+.tvb-row .tag { margin-left: auto; font-size: 22px; color: var(--sub); text-align: right; white-space: nowrap; }
+.tvb-row .tag b { display: block; font-family: var(--head); font-size: 36px; color: var(--text); font-variant-numeric: tabular-nums; }
+.tvb-row.new { border-color: var(--ready); box-shadow: 0 0 0 3px rgba(52,211,153,.18), 0 0 30px rgba(52,211,153,.35); animation: tvb-new 1.6s ease-in-out 3; }
+@keyframes tvb-new { 50% { background: rgba(52,211,153,.18); } }
+.mill .tvb-row { flex-direction: column; align-items: stretch; padding: 18px 20px 20px; }
+.mill .tvb-row .top { display: flex; align-items: center; gap: 20px; }
+.tvb-bar { height: 14px; background: rgba(23,56,104,.9); border-radius: 99px; margin-top: 14px; overflow: hidden; }
+.tvb-bar i { display: block; height: 100%; width: 0; border-radius: 99px; transition: width 1s;
+  background: linear-gradient(90deg, #0ea5e9, #7dd3fc); box-shadow: 0 0 16px var(--mill); }
+.tvb-none { font-size: 30px; color: var(--dim); text-align: center; padding: 80px 0; }
+.tvb-col .more { text-align: center; font-size: 22px; color: var(--sub); padding: 10px 0 6px; }
+.tvb-col .dots { display: flex; gap: 10px; justify-content: center; padding-bottom: 18px; min-height: 32px; }
+.tvb-col .dots i { width: 14px; height: 14px; border-radius: 50%; background: #23406e; }
+.tvb-col .dots i.on { background: var(--c); box-shadow: 0 0 10px var(--c); }
+
+/* prices */
+.tvb-foot { height: 150px; display: flex; align-items: center; padding: 0 48px 18px; gap: 24px; }
+.tvb-foot .prices { display: flex; gap: 18px; flex: 1; overflow: hidden; }
+.tvb-foot .p { padding: 14px 24px; min-width: 300px; border-radius: 20px; background: linear-gradient(180deg, rgba(23,56,120,.55), rgba(8,22,56,.8));
+  border: 1.5px solid var(--line); box-shadow: 0 0 22px rgba(56,189,248,.1); }
+.tvb-foot .p .k { font-size: 22px; color: var(--sub); white-space: nowrap; }
+.tvb-foot .p .v { font-family: var(--head); font-size: 36px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tvb-foot .p .v span { font-family: var(--body); font-size: 20px; color: var(--sub); font-weight: 500; }
+.tvb-foot .buy { color: var(--buy); } .tvb-foot .sell { color: var(--sell); }
+.tvb-foot .upd { text-align: right; font-size: 21px; color: var(--sub); line-height: 1.5; white-space: nowrap; }
+.tvb-offline { position: absolute; right: 48px; top: 130px; background: rgba(127,29,29,.9); border: 1.5px solid #f87171; color: #fff; font-size: 24px;
+  padding: 8px 18px; border-radius: 12px; box-shadow: 0 0 22px rgba(248,113,113,.5); }
+.tvb-denied { position: relative; max-width: 900px; margin: 15vh auto; text-align: center; color: var(--text); padding: 0 24px; }
+.tvb-denied img { height: 90px; background: #fff; border-radius: 14px; padding: 4px 8px; }
+.tvb-denied h1 { font-family: var(--head); font-size: 40px; } .tvb-denied p { font-size: 22px; color: var(--sub); }
+@media (prefers-reduced-motion: reduce) { .tvb-col.mill h2 .ico svg, .tvb-live i, .tvb-motor.fault, .tvb-row.new { animation: none; } }

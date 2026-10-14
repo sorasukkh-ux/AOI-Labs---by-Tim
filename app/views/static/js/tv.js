@@ -105,7 +105,16 @@
     document.getElementById("tvb-updated").textContent = th("tvbUpdated").replace("{time}", data.updated);
   }
 
-  function draw() { column("ready"); column("milling"); column("queue"); prices(); }
+  function motor() {                                   // update 36: the main motor on the header
+    var box = document.getElementById("tvb-motor"), m = data.motor;
+    if (!box) return;
+    box.hidden = !m;
+    if (!m) return;
+    box.className = "tvb-motor " + (m.fault || m.status === "F" ? "fault" : (m.running ? "run" : "stop"));
+    document.getElementById("tvb-motor-v").textContent = m.fault ? m.fault : (m.running ? (m.hz !== null && m.hz !== undefined ? Number(m.hz).toFixed(1) + " Hz" : th("tvbMotorOn")) : th("tvbMotorOff"));
+  }
+
+  function draw() { column("ready"); column("milling"); column("queue"); prices(); motor(); }
 
   function refresh() {
     var req = new XMLHttpRequest();
@@ -113,11 +122,12 @@
     req.timeout = 10000;
     req.onload = function () {
       if (req.status === 200) {
-        try { data = JSON.parse(req.responseText); syncClock(); draw(); document.getElementById("tvb-offline").hidden = true; return; } catch (e) { /* keep the last data */ }
+        try { data = JSON.parse(req.responseText); syncClock(); draw(); document.getElementById("tvb-offline").hidden = true; document.getElementById("tvb-live").className = "tvb-live"; return; } catch (e) { /* keep the last data */ }
       }
       document.getElementById("tvb-offline").hidden = false;
+      document.getElementById("tvb-live").className = "tvb-live lost";
     };
-    req.onerror = req.ontimeout = function () { document.getElementById("tvb-offline").hidden = false; };
+    req.onerror = req.ontimeout = function () { document.getElementById("tvb-offline").hidden = false; document.getElementById("tvb-live").className = "tvb-live lost"; };
     req.send();
   }
 

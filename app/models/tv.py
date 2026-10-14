@@ -132,7 +132,19 @@ def board(branch_id):
     key = "branch" + branch_id.capitalize()
     th_name, en_name = t_in("th", key), t_in("en", key)
     local_now = now_local()
-    return {"branch": branch_id, "branch_name": th_name if th_name != key else (branch.get("BRANCH_NAME") or branch_id),
+    # update 36: the main motor on the header (the one on shift first), like the SCADA
+    motor = None
+    try:
+        from .automation import Machine, current_shift
+        shift = current_shift()
+        motors = [m for m in Machine.for_branch(branch_id, active_only=True) if m.get("MACHINE_TYPE") == "MAIN_MOTOR"]
+        motors.sort(key=lambda m: 0 if m.get("SHIFT") == shift else 1)
+        if motors:
+            live = Machine.live(motors[0], minutes=0)
+            motor = {"status": live["status"], "running": bool(live["running"]), "hz": live["out_hz"], "fault": live["fault"]}
+    except Exception:                                    # noqa: BLE001 - the TV never fails because of the motor
+        motor = None
+    return {"motor": motor, "branch": branch_id, "branch_name": th_name if th_name != key else (branch.get("BRANCH_NAME") or branch_id),
             "branch_name_en": en_name if en_name != key else (branch.get("BRANCH_NAME") or branch_id),
             "now_ms": int(now.timestamp() * 1000), "tz_min": int(local_now.utcoffset().total_seconds() // 60), "ready": ready, "milling": milling,
             "queue": queue, "prices": prices, "updated": now_local().strftime("%H:%M:%S")}
