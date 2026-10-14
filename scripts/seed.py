@@ -49,7 +49,8 @@ PRICES = {
 # 380 V 50 Hz 30 A 1450 rpm) is the one machine in use; the sample machines below are kept but not in use
 MAIN_MOTOR = {"MACHINE_NAME": "มอเตอร์หลักเครื่องสีข้าว", "MACHINE_TYPE": "MAIN_MOTOR", "RATED_KW": 15.0, "CAPACITY_KGH": None,
               "MACHINE_SEQ": 0, "CONTROL_FLG": True, "ACTIVE_FLG": True, "MOTOR_MODEL": "Mitsubishi SUPER LINE SF-J 20HP 4P 160L",
-              "RATED_VOLT": 380.0, "RATED_AMP": 30.0, "RATED_RPM": 1450}
+              "RATED_VOLT": 380.0, "RATED_AMP": 30.0, "RATED_RPM": 1450,
+              "SPEED_MIN_HZ": 30.0, "SPEED_MAX_HZ": 50.0, "SPEED_SET_HZ": 50.0}      # update 30: speed by the inverter
 MACHINES = [("HUSK", "Husker", "HUSKER", 15.0, 1500.0), ("WHITE", "Whitener", "WHITENER", 30.0, 1200.0),
             ("POLISH", "Polisher", "POLISHER", 22.0, 1200.0), ("GRADE", "Grader", "GRADER", 3.0, 2000.0)]
 MENUS = [  # MENU_CODE, MENU_NAME, MENU_GROUP, MENU_SUBGROUP, MENU_SEQ
@@ -184,6 +185,9 @@ def seed(log=print, reset=False):
                 "STATUS_SOURCE": "USER", "DEVICE_KEY_HASH": None, "LAST_SEEN": None, "ACTIVE_FLG": False})
         add("AOIMS_MACHINE", {"MACHINE_ID": prefix + "-MOTOR"}, dict(MAIN_MOTOR, BRANCH_ID=branch_id, METER_ID=None, MACHINE_STATUS="O",
                                                                    STATUS_TIME=None, STATUS_SOURCE="USER", DEVICE_KEY_HASH=None, LAST_SEEN=None))
+        # update 30: the main motor's speed range (30-50 Hz, never above the 50 Hz it was made for)
+        db["AOIMS_MACHINE"].update_many({"MACHINE_ID": prefix + "-MOTOR", "SPEED_MIN_HZ": {"$exists": False}},
+                                        {"$set": {"SPEED_MIN_HZ": 30.0, "SPEED_MAX_HZ": 50.0, "SPEED_SET_HZ": 50.0}})
         # update 29: sample machines never set up (no device key, still the seed's record) are not in use
         db["AOIMS_MACHINE"].update_many({"MACHINE_ID": {"$in": [prefix + "-" + m[0] for m in MACHINES]}, "OPE_USER": SEED_USER,
                                          "DEVICE_KEY_HASH": None, "ACTIVE_FLG": {"$exists": False}}, {"$set": {"ACTIVE_FLG": False}})

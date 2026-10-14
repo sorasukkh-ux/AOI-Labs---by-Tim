@@ -320,14 +320,33 @@ months, with SKU selection, hover/tap values and a summary table). The NABC API 
 2025: "Download price history" (and the daily job, once per product) reads all of them. Association report SKUs use
 the reports kept by the system, plus the older reports its page still lists.
 
-## Main milling motor (update 29)
+## Main milling motor: ON/OFF, speed and live values (updates 29-30)
 
 Hardware Control shows the **main milling motor** first (F1-MOTOR / F2-MOTOR: Mitsubishi SUPER LINE SF-J, 20 HP / 15 kW,
-4 pole, 380 V 50 Hz, 30 A, 1450 rpm) with big **ON / OFF** buttons. The sample machines (husker, whitener, polisher,
-grader) are kept but marked "not in use" (Machine setup > Edit > In use). ON/OFF works once a device has a key
-and reports at least every 5 minutes; try it with `python3 scripts/device_sim.py machine F2-MOTOR <key>`.
-Planned next: an inverter (VFD) on the motor for forward/reverse and speed (Hz), read back the current, frequency
-and faults. The emergency stop and the motor protection stay hard-wired; the app never replaces them.
+4 pole, 380 V 50 Hz, 30 A, 1450 rpm): **ON / OFF**, **speed** (30-50 Hz, slider + number; ON starts at the last speed
+set), **Reset fault**, and the inverter's live values every 2 seconds (output Hz, current A, rpm, speed set, fault,
+current above the rated 30 A) with two small charts of the last 10 minutes. The mill never runs in reverse: there is
+no reverse command, and the gateway never writes the reverse-run signal. The sample machines (husker, whitener ...)
+are kept but "not in use".
+
+**Test without hardware (virtual inverter):**
+1. Start the app (`bash start.sh`), open Hardware Control > Machine setup > **New key** for F2-MOTOR and copy the key.
+2. In a second terminal:
+   `python3 scripts/aoi_gateway.py --machine F2-MOTOR --key <key> --simulate`
+   (the gateway starts the virtual inverter `scripts/vfd_sim.py` and links it to the app; in Codespaces the app is
+   at http://127.0.0.1:5000, the default).
+3. On Hardware Control: ON, change the speed, OFF. The motor ramps up and down in 5 seconds.
+4. Type in the gateway terminal to test the alarms: `load 120` (motor overload, E.THM after a while), `jam`
+   (overcurrent trip E.OC2), `clear`, `fault`, `status`. Then **Reset fault** on the screen.
+5. Safety checks: stop the app while the motor runs - the gateway stops the motor after 30 seconds; stop the
+   gateway - the virtual inverter stops by itself after 10 seconds without communication (E.SER).
+
+**Later, the real inverter:** the same gateway on a Raspberry Pi with a USB-RS485 adapter:
+`pip install pyserial` then `--modbus rtu:/dev/ttyUSB0:19200:E:1` instead of `--simulate`. The register map (REG in
+`scripts/aoi_gateway.py`) follows the Mitsubishi Modbus map: check it against the inverter's manual, and set the
+inverter for Modbus RTU, its station number, reverse rotation prevention (Pr.78 = 1) and a communication check time.
+The emergency stop, the motor overload relay and the local/remote switch stay hard-wired; the app never replaces them.
+Device API for any other device: `POST /api/v1/machines/<id>/telemetry` (see `app/controllers/device_api.py`).
 
 ## Automation and devices
 

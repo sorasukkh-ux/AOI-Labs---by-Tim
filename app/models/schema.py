@@ -1,4 +1,4 @@
-"""Every collection of AOI DB Structure 1.34 and its indexes.
+"""Every collection of AOI DB Structure 1.35 and its indexes.
 
 MongoDB creates a collection the first time a record is written, so "creating the tables" means
 creating the indexes below. Unique indexes are the primary keys of the DB structure.
@@ -46,6 +46,7 @@ COLLECTIONS = {
     "AOIMS_METER": [(["METER_ID"], True), (["BRANCH_ID"], False)],
     "AOITS_MACHINE_CMD": [(["CMD_ID"], True), (["MACHINE_ID", "CMD_STATUS"], False), (["BRANCH_ID", "REQ_DATE"], False)],
     "AOITS_METER_READ": [(["READ_ID"], True), (["METER_ID", "READ_DATE"], False), (["BRANCH_ID", "READ_DATE"], False)],
+    "AOITS_MACHINE_TELE": [(["MACHINE_ID", "TEL_DATE"], False)],
     "AOILOG_MACHINE": [(["MACHINE_ID", "LOG_DATE"], False), (["BRANCH_ID", "LOG_DATE"], False)],
     "AOIMS_MKMAP": [(["MAT_CODE"], True)],
     "AOITS_MKREPORT": [(["REPORT_ID"], True), (["FETCH_DATE"], False)],

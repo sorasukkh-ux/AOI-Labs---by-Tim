@@ -6,6 +6,12 @@ hand. Once a device (PLC, smart meter, ESP32 ...) is connected, it sends the sam
 (controllers/device_api.py) with its own device key, and picks up start/stop commands.
 
 Machine usage statistics are worked out from the status history in AOILOG_MACHINE.
+
+Update 30 (speed control, inverter read-back): a SPEED command carries the frequency in Hz (CMD_VALUE, within the
+machine's SPEED_MIN_HZ..SPEED_MAX_HZ); START runs at the last speed set (SPEED_SET_HZ). The device (scripts/aoi_gateway.py,
+with the virtual inverter scripts/vfd_sim.py for tests) posts the inverter's live values to /telemetry: they are kept
+on the machine (TEL_*) and, every TELE_EVERY_SECONDS, in AOITS_MACHINE_TELE for the live chart (kept TELE_KEEP_DAYS).
+The mill never runs in reverse: there is no reverse command.
 """
 import hashlib
 import re
@@ -20,8 +26,13 @@ MACHINE_TYPES = ("MAIN_MOTOR", "HUSKER", "WHITENER", "POLISHER", "GRADER", "DRYE
 RUNNING, IDLE, FAULT, MAINTENANCE, OFFLINE = "R", "I", "F", "M", "O"
 MACHINE_STATUSES = (RUNNING, IDLE, FAULT, MAINTENANCE, OFFLINE)
 SOURCE_USER, SOURCE_DEVICE = "USER", "DEVICE"
-CMD_START, CMD_STOP, CMD_RESET = "START", "STOP", "RESET"
-COMMANDS = (CMD_START, CMD_STOP, CMD_RESET)
+CMD_START, CMD_STOP, CMD_RESET, CMD_SPEED = "START", "STOP", "RESET", "SPEED"
+COMMANDS = (CMD_START, CMD_STOP, CMD_RESET, CMD_SPEED)
+TELE_COL = "AOITS_MACHINE_TELE"
+TELE_EVERY_SECONDS = 5             # one stored sample per 5 seconds (the machine record always has the latest)
+TELE_KEEP_DAYS = 7
+TELE_FRESH_SECONDS = 15            # live values older than this are shown as "no data"
+DEFAULT_MIN_HZ, DEFAULT_MAX_HZ = 30.0, 50.0
 CMD_PENDING, CMD_SENT, CMD_DONE, CMD_FAILED, CMD_EXPIRED = "P", "S", "D", "F", "X"
 CMD_TIMEOUT_SECONDS = 120          # a command nobody picked up in time is dropped (never runs late)
 ONLINE_SECONDS = 300               # a device that reported within 5 minutes is shown as connected
@@ -96,16 +107,20 @@ class Machine:
             capacity = to_number(form.get("CAPACITY_KGH"), None)
             seq = int(to_number(form.get("MACHINE_SEQ"), 0) or 0)
             volt, amp, rpm = (to_number(form.get(f), None) for f in ("RATED_VOLT", "RATED_AMP", "RATED_RPM"))
+            min_hz, max_hz = (to_number(form.get(f), None) for f in ("SPEED_MIN_HZ", "SPEED_MAX_HZ"))
         except ValueError:
             raise ValidationError("errNumber")
-        if any(v is not None and v < 0 for v in (kw, capacity, volt, amp, rpm)):
+        if any(v is not None and v < 0 for v in (kw, capacity, volt, amp, rpm, min_hz, max_hz)):
             raise ValidationError("errNegative")
+        if min_hz is not None and max_hz is not None and (min_hz >= max_hz or max_hz > 60):
+            raise ValidationError("errSpeedRange")
         values = {"MACHINE_NAME": name, "MACHINE_TYPE": mtype, "RATED_KW": kw, "CAPACITY_KGH": capacity, "MACHINE_SEQ": seq,
                   "CONTROL_FLG": form.get("CONTROL_FLG") == "1", "METER_ID": (form.get("METER_ID") or "").strip().upper() or None,
                   # update 29: in use, and the motor nameplate (kept for the inverter / speed control later)
                   "ACTIVE_FLG": form.get("ACTIVE_FLG") == "1" if "ACTIVE_FLG" in form or not creating else True,
                   "MOTOR_MODEL": clean_text(form.get("MOTOR_MODEL"), 100) or None, "RATED_VOLT": volt, "RATED_AMP": amp,
-                  "RATED_RPM": int(rpm) if rpm is not None else None}
+                  "RATED_RPM": int(rpm) if rpm is not None else None,
+                  "SPEED_MIN_HZ": min_hz, "SPEED_MAX_HZ": max_hz}
         existing = cls.find(branch_id, machine_id)
         if creating:
             if col(cls.COL).find_one({"MACHINE_ID": machine_id}, NO_ID):
@@ -166,6 +181,66 @@ class Machine:
         last = col(cls.LOG).find_one({"MACHINE_ID": machine_id, "LOG_DATE": {"$lt": moment}}, NO_ID, sort=[("LOG_DATE", -1)])
         return last["NEW_STATUS"] if last else OFFLINE
 
+    # ---------- speed and live values (update 30) ----------
+    @staticmethod
+    def speed_range(machine):
+        low = machine.get("SPEED_MIN_HZ")
+        high = machine.get("SPEED_MAX_HZ")
+        return (float(low) if low is not None else DEFAULT_MIN_HZ, float(high) if high is not None else DEFAULT_MAX_HZ)
+
+    @classmethod
+    def telemetry(cls, machine, body):
+        """The device's live values: {"running": bool, "set_hz", "out_hz", "amp", "volt", "rpm", "fault": "" | "E.OC1" ...}.
+        Running / fault also set the machine status, so a start or stop at the inverter panel shows too."""
+        def num(name, low=0.0, high=100000.0):
+            value = body.get(name)
+            if value is None or value == "":
+                return None
+            try:
+                value = float(value)
+            except (TypeError, ValueError):
+                raise ValidationError("errNumber")
+            if value != value or value < low or value > high:
+                raise ValidationError("errNumber")
+            return round_half_up(value, 2)
+        now = now_utc()
+        fault = clean_text(body.get("fault"), 20) or None
+        running = bool(body.get("running")) and not fault
+        values = {"TEL_RUN": running, "TEL_SET_HZ": num("set_hz", 0, 400), "TEL_OUT_HZ": num("out_hz", 0, 400),
+                  "TEL_AMP": num("amp", 0, 5000), "TEL_VOLT": num("volt", 0, 1000), "TEL_RPM": num("rpm", 0, 30000),
+                  "TEL_FAULT": fault, "TEL_TIME": now, "LAST_SEEN": now}
+        col(cls.COL).update_one({"MACHINE_ID": machine["MACHINE_ID"]}, {"$set": values})
+        status = FAULT if fault else (RUNNING if running else IDLE)
+        if status != machine.get("MACHINE_STATUS") and machine.get("MACHINE_STATUS") != MAINTENANCE:
+            machine = cls.set_status(machine, status, SOURCE_DEVICE, "device:" + machine["MACHINE_ID"],
+                                     note=fault or ("RUN %.1f Hz" % (values["TEL_OUT_HZ"] or 0) if running else None))
+        last = col(TELE_COL).find_one({"MACHINE_ID": machine["MACHINE_ID"]}, NO_ID, sort=[("TEL_DATE", -1)])
+        if not last or (now - last["TEL_DATE"]).total_seconds() >= TELE_EVERY_SECONDS or bool(last.get("TEL_FAULT")) != bool(fault) \
+                or bool(last.get("RUN")) != running:
+            col(TELE_COL).insert_one({"MACHINE_ID": machine["MACHINE_ID"], "BRANCH_ID": machine["BRANCH_ID"], "TEL_DATE": now,
+                                      "RUN": running, "SET_HZ": values["TEL_SET_HZ"], "OUT_HZ": values["TEL_OUT_HZ"],
+                                      "AMP": values["TEL_AMP"], "RPM": values["TEL_RPM"], "TEL_FAULT": fault})
+            col(TELE_COL).delete_many({"MACHINE_ID": machine["MACHINE_ID"], "TEL_DATE": {"$lt": now - timedelta(days=TELE_KEEP_DAYS)}})
+        return dict(machine, **values)
+
+    @classmethod
+    def live(cls, machine, minutes=10):
+        """Live panel: latest values (None when older than TELE_FRESH_SECONDS) and the samples of the last minutes."""
+        fresh = bool(machine.get("TEL_TIME")) and (now_utc() - machine["TEL_TIME"]).total_seconds() <= TELE_FRESH_SECONDS
+        since = now_utc() - timedelta(minutes=minutes)
+        samples = [{"t": s["TEL_DATE"].isoformat(), "hz": s.get("OUT_HZ"), "amp": s.get("AMP")}
+                   for s in col(TELE_COL).find({"MACHINE_ID": machine["MACHINE_ID"], "TEL_DATE": {"$gte": since}}, NO_ID).sort([("TEL_DATE", 1)])]
+        low, high = cls.speed_range(machine)
+        busy = col(MachineCommand.COL).find_one({"MACHINE_ID": machine["MACHINE_ID"], "CMD_STATUS": {"$in": [CMD_PENDING, CMD_SENT]}}, NO_ID)
+        return {"id": machine["MACHINE_ID"], "status": machine.get("MACHINE_STATUS"), "online": cls.is_online(machine), "fresh": fresh,
+                "running": bool(machine.get("TEL_RUN")) if fresh else machine.get("MACHINE_STATUS") == RUNNING,
+                "set_hz": machine.get("SPEED_SET_HZ") or high, "out_hz": machine.get("TEL_OUT_HZ") if fresh else None,
+                "amp": machine.get("TEL_AMP") if fresh else None, "rpm": machine.get("TEL_RPM") if fresh else None,
+                "volt": machine.get("TEL_VOLT") if fresh else None, "fault": machine.get("TEL_FAULT") if fresh else None,
+                "rated_amp": machine.get("RATED_AMP"), "min_hz": low, "max_hz": high,
+                "updated": machine["TEL_TIME"].isoformat() if machine.get("TEL_TIME") else None,
+                "busy": busy["CMD"] if busy else None, "samples": samples}
+
     # ---------- usage statistics ----------
     @classmethod
     def usage(cls, machine, start, end):
@@ -209,10 +284,24 @@ class MachineCommand:
         col(cls.COL).update_many(flt, {"$set": {"CMD_STATUS": CMD_EXPIRED, "ACK_DATE": now_utc(), "RESULT": "Not picked up in time"}})
 
     @classmethod
-    def request(cls, machine, command, ope_user):
-        """Start/stop/reset from Hardware Control. Only for machines with remote control and a device connected."""
+    def request(cls, machine, command, ope_user, value=None):
+        """Start/stop/reset/speed from Hardware Control. Only for machines with remote control and a device connected.
+        SPEED: `value` = Hz within the machine's range. START carries the last speed set."""
         if command not in COMMANDS:
             raise ValidationError("errMachineCommand")
+        hz = None
+        if command == CMD_SPEED:
+            low, high = Machine.speed_range(machine)
+            try:
+                hz = to_number(value, None)
+            except ValueError:
+                raise ValidationError("errNumber")
+            if hz is None or hz < low or hz > high:
+                raise ValidationError("errSpeedOutOfRange", low="%g" % low, high="%g" % high)
+            hz = round_half_up(hz, 1)
+        elif command == CMD_START:
+            low, high = Machine.speed_range(machine)
+            hz = min(high, max(low, float(machine.get("SPEED_SET_HZ") or high)))
         if not machine.get("CONTROL_FLG") or not machine.get("DEVICE_KEY_HASH"):
             raise ValidationError("errMachineNoControl")
         if not Machine.is_online(machine):
@@ -223,7 +312,7 @@ class MachineCommand:
         today = now_local()
         day = "%04d%02d%02d" % (today.year, today.month, today.day)
         cmd = {"CMD_ID": "MC-%s-%04d" % (day, Counter.next("MC-" + day)), "BRANCH_ID": machine["BRANCH_ID"],
-               "MACHINE_ID": machine["MACHINE_ID"], "CMD": command, "CMD_STATUS": CMD_PENDING, "REQ_USER": ope_user,
+               "MACHINE_ID": machine["MACHINE_ID"], "CMD": command, "CMD_VALUE": hz, "CMD_STATUS": CMD_PENDING, "REQ_USER": ope_user,
                "REQ_DATE": now_utc(), "SENT_DATE": None, "ACK_DATE": None, "RESULT": None}
         col(cls.COL).insert_one(dict(cmd))
         return cmd
@@ -253,9 +342,13 @@ class MachineCommand:
             raise ValidationError("errMachineCommand")
         col(cls.COL).update_one({"CMD_ID": cmd_id}, {"$set": {"CMD_STATUS": CMD_DONE if ok else CMD_FAILED, "ACK_DATE": now_utc(),
                                                              "RESULT": clean_text(result, 200) or None}})
+        if ok and cmd["CMD"] == CMD_SPEED:
+            col(Machine.COL).update_one({"MACHINE_ID": machine["MACHINE_ID"]}, {"$set": {"SPEED_SET_HZ": cmd.get("CMD_VALUE")}})
         if ok and cmd["CMD"] in (CMD_START, CMD_STOP):
             Machine.set_status(machine, RUNNING if cmd["CMD"] == CMD_START else IDLE, SOURCE_DEVICE, cmd["REQ_USER"],
                                note="%s %s" % (cmd["CMD"], cmd_id))
+        if ok and cmd["CMD"] == CMD_RESET and machine.get("MACHINE_STATUS") == FAULT:
+            Machine.set_status(machine, IDLE, SOURCE_DEVICE, cmd["REQ_USER"], note="RESET %s" % cmd_id)
         return col(cls.COL).find_one({"CMD_ID": cmd_id}, NO_ID)
 
 

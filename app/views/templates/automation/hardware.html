@@ -7,7 +7,9 @@
 <div class="card gap"><p class="desc-text">{{ t('hwDesc') }}</p></div>
 {{ key_box(new_key) }}
 
-<div class="mc-list" id="machine-list">
+<div class="mc-list" id="machine-list" data-live-url="{{ url_for('automation.hardware_live') }}"
+     data-text='{{ {"status": {"R": t("mcRunning"), "I": t("mcIdle"), "F": t("mcFault"), "M": t("mcMaintenance"), "O": t("mcOffline")},
+                   "badge": status_badge, "noData": t("mcLiveNoData"), "updated": t("mcLiveUpdated"), "busy": t("mcLiveBusy")}|tojson }}'>
   {% for m in in_use %}
   <div class="card machine-card{% if m.MACHINE_TYPE == 'MAIN_MOTOR' %} main-motor{% endif %}" data-machine="{{ m.MACHINE_ID }}">
     <div class="card-head">
@@ -19,6 +21,23 @@
     <p class="cap-note tight">{% if m.since %}{{ t('mcSince', time=m.since) }} &middot; {% endif %}
       {% if m.DEVICE_KEY_HASH %}{{ t('mcConnected') if m.online else t('mcNotConnected') }}{% else %}{{ t('mcNoDevice') }}{% endif %}
       {% if m.CONTROL_FLG %} &middot; {{ t('mcRemoteOn') }}{% endif %}</p>
+    {% if m.live %}{% set lv = m.live %}
+    <div class="mc-live" data-live="{{ m.MACHINE_ID }}" data-rated-amp="{{ lv.rated_amp or '' }}">
+      <div class="mc-live-grid">
+        <div class="mc-live-cell"><span class="mc-live-label">{{ t('mcLiveOutHz') }}</span><b class="mc-live-val" data-f="out_hz">{{ '%.1f'|format(lv.out_hz) if lv.out_hz is not none else '-' }}</b><small>Hz</small></div>
+        <div class="mc-live-cell"><span class="mc-live-label">{{ t('mcLiveAmp') }}</span><b class="mc-live-val" data-f="amp">{{ '%.1f'|format(lv.amp) if lv.amp is not none else '-' }}</b><small>A</small></div>
+        <div class="mc-live-cell"><span class="mc-live-label">{{ t('mcLiveRpm') }}</span><b class="mc-live-val" data-f="rpm">{{ '%.0f'|format(lv.rpm) if lv.rpm is not none else '-' }}</b><small>rpm</small></div>
+        <div class="mc-live-cell"><span class="mc-live-label">{{ t('mcLiveSetHz') }}</span><b class="mc-live-val" data-f="set_hz">{{ '%.1f'|format(lv.set_hz) }}</b><small>Hz</small></div>
+      </div>
+      <p class="mc-live-fault" data-f="fault"{% if not lv.fault %} hidden{% endif %}>&#9888; {{ t('mcLiveFault') }}: <b>{{ lv.fault or '' }}</b></p>
+      <p class="mc-live-warn" data-f="overload" hidden>&#9888; {{ t('mcLiveOverload') }}</p>
+      <p class="cap-note tight" data-f="updated">{{ t('mcLiveNoData') if not lv.fresh else '' }}</p>
+      <div class="mc-spark-row">
+        <div><span class="mc-live-label">{{ t('mcLiveOutHz') }} (Hz) &middot; {{ t('mcLive10min') }}</span><div class="mc-spark" data-spark="hz"></div></div>
+        <div><span class="mc-live-label">{{ t('mcLiveAmp') }} (A) &middot; {{ t('mcLive10min') }}</span><div class="mc-spark" data-spark="amp"></div></div>
+      </div>
+    </div>
+    {% endif %}
     {% if can_command and m.CONTROL_FLG %}
     <form method="post" class="btn-pair mt6{% if m.MACHINE_TYPE == 'MAIN_MOTOR' %} motor-onoff{% endif %}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="command">
@@ -26,7 +45,23 @@
       <button class="action primary" type="submit" name="CMD" value="START" id="cmd-on-{{ m.MACHINE_ID }}" data-confirm="{{ t('confirmMcStart', name=m.MACHINE_NAME) }}" {% if not m.can_command or m.MACHINE_STATUS == 'R' %}disabled{% endif %}>&#9654; {{ t('cmdOn') if m.MACHINE_TYPE == 'MAIN_MOTOR' else t('cmdStart') }}</button>
       <button class="action danger" type="submit" name="CMD" value="STOP" id="cmd-off-{{ m.MACHINE_ID }}" data-confirm="{{ t('confirmMcStop', name=m.MACHINE_NAME) }}" {% if not m.can_command or m.MACHINE_STATUS != 'R' %}disabled{% endif %}>&#9632; {{ t('cmdOff') if m.MACHINE_TYPE == 'MAIN_MOTOR' else t('cmdStop') }}</button>
     </form>
-    {% if m.MACHINE_TYPE == 'MAIN_MOTOR' %}<p class="cap-note tight">{{ t('mcMotorNext') }}</p>{% endif %}
+    {% if m.MACHINE_TYPE == 'MAIN_MOTOR' %}{% set rng = (m.live.min_hz, m.live.max_hz) if m.live else (m.SPEED_MIN_HZ or 30, m.SPEED_MAX_HZ or 50) %}
+    <form method="post" class="mc-speed mt6" id="speed-{{ m.MACHINE_ID }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="command">
+      <input type="hidden" name="MACHINE_ID" value="{{ m.MACHINE_ID }}"><input type="hidden" name="CMD" value="SPEED">
+      <label class="field-label" for="hz-{{ m.MACHINE_ID }}">{{ t('mcSpeedLabel', low=rng[0]|plain, high=rng[1]|plain) }}</label>
+      <div class="od-inline">
+        <input type="range" class="mc-speed-range" min="{{ rng[0]|plain }}" max="{{ rng[1]|plain }}" step="0.5" value="{{ (m.SPEED_SET_HZ or rng[1])|plain }}" aria-label="Hz" data-pair="hz-{{ m.MACHINE_ID }}" {% if not m.can_command %}disabled{% endif %}>
+        <input type="number" id="hz-{{ m.MACHINE_ID }}" name="CMD_VALUE" min="{{ rng[0]|plain }}" max="{{ rng[1]|plain }}" step="0.5" value="{{ (m.SPEED_SET_HZ or rng[1])|plain }}" required {% if not m.can_command %}disabled{% endif %}>
+        <button class="action" type="submit" id="cmd-speed-{{ m.MACHINE_ID }}" {% if not m.can_command %}disabled{% endif %}>{{ t('cmdSpeed') }}</button>
+      </div>
+      <p class="cap-note tight">{{ t('mcSpeedNote') }}</p>
+    </form>
+    <form method="post" class="mt6" data-f="reset-form"{% if m.MACHINE_STATUS != 'F' %} hidden{% endif %}>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="command">
+      <input type="hidden" name="MACHINE_ID" value="{{ m.MACHINE_ID }}">
+      <button class="action full" type="submit" name="CMD" value="RESET" id="cmd-reset-{{ m.MACHINE_ID }}" data-confirm="{{ t('confirmMcReset', name=m.MACHINE_NAME) }}" {% if not m.can_command %}disabled{% endif %}>&#8635; {{ t('cmdReset') }}</button>
+    </form>{% endif %}
     {% if not m.can_command %}<p class="cap-note">{{ t('mcCommandOff') }}</p>{% endif %}
     {% endif %}
     {% if can_edit %}
@@ -55,7 +90,7 @@
   <div class="inv-table-wrap"><table class="tv-table" id="cmd-table">
     <thead><tr><th>{{ t('colTime') }}</th><th>{{ t('mcMachine') }}</th><th>{{ t('mcCommand') }}</th><th>{{ t('colStatus') }}</th></tr></thead>
     <tbody>{% for c in commands %}<tr><td class="nowrap">{{ fmt_datetime(c.REQ_DATE) }}</td><td>{{ names.get(c.MACHINE_ID, c.MACHINE_ID) }}</td>
-      <td>{{ t('cmd' + c.CMD|capitalize) }}<small class="inv-sub">{{ c.REQ_USER }}</small></td><td>{{ t(cmd_status_keys[c.CMD_STATUS]) }}{% if c.RESULT %}<small class="inv-sub">{{ c.RESULT }}</small>{% endif %}</td></tr>
+      <td>{{ t('cmd' + c.CMD|capitalize) }}{% if c.CMD_VALUE is not none %} {{ c.CMD_VALUE|plain }} Hz{% endif %}<small class="inv-sub">{{ c.REQ_USER }}</small></td><td>{{ t(cmd_status_keys[c.CMD_STATUS]) }}{% if c.RESULT %}<small class="inv-sub">{{ c.RESULT }}</small>{% endif %}</td></tr>
     {% else %}<tr><td colspan="4" class="hint center">{{ t('autoNoData') }}</td></tr>{% endfor %}</tbody>
   </table></div>
 </div>
@@ -100,6 +135,10 @@
         <div><label class="field-label" for="mf-rpm">rpm</label><input type="number" id="mf-rpm" name="RATED_RPM" value="{{ edit.RATED_RPM if edit and edit.RATED_RPM is not none else '' }}" min="0" step="1"></div>
       </div>
     </div>
+    <div class="two-col field-row">
+      <div><label class="field-label" for="mf-minhz">{{ t('mcMinHz') }}</label><input type="number" id="mf-minhz" name="SPEED_MIN_HZ" value="{{ edit.SPEED_MIN_HZ|plain if edit and edit.SPEED_MIN_HZ is not none else '' }}" min="0" max="60" step="0.5" placeholder="30"></div>
+      <div><label class="field-label" for="mf-maxhz">{{ t('mcMaxHz') }}</label><input type="number" id="mf-maxhz" name="SPEED_MAX_HZ" value="{{ edit.SPEED_MAX_HZ|plain if edit and edit.SPEED_MAX_HZ is not none else '' }}" min="0" max="60" step="0.5" placeholder="50"></div>
+    </div>
     <div class="field-row"><label class="field-label" for="mf-meter">{{ t('mcMeter') }}</label><select id="mf-meter" name="METER_ID">
       <option value="">-</option>{% for mt in meters %}<option value="{{ mt.METER_ID }}"{% if edit and edit.METER_ID == mt.METER_ID %} selected{% endif %}>{{ mt.METER_ID }} · {{ mt.METER_NAME }}</option>{% endfor %}</select></div>
     <div class="field-row"><label class="checkline" for="mf-control"><input type="checkbox" id="mf-control" name="CONTROL_FLG" value="1"{% if edit and edit.CONTROL_FLG %} checked{% endif %}><span>{{ t('mcControlFlag') }}</span></label></div>
@@ -121,3 +160,4 @@
 {% endif %}
 </div>
 {% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/hardware_live.js') }}" defer></script>{% endblock %}

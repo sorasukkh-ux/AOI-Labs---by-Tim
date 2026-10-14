@@ -1,7 +1,7 @@
 """Automation: AI, Hardware Control, Electricity, Machine Usage Statistics (branch signed in to)."""
 from datetime import timedelta
 
-from flask import Blueprint, abort, redirect, render_template, request, session, url_for
+from flask import Blueprint, abort, jsonify, redirect, render_template, request, session, url_for
 
 from ..i18n import t
 from ..models import ai, supply
@@ -82,8 +82,11 @@ def hardware():
                 abort(403)
 
             def send():
-                cmd = MachineCommand.request(machine, request.form.get("CMD"), _user_id())
-                return {"cmd": t("cmd" + cmd["CMD"].capitalize()), "name": machine["MACHINE_NAME"]}
+                cmd = MachineCommand.request(machine, request.form.get("CMD"), _user_id(), request.form.get("CMD_VALUE"))
+                label = t("cmd" + cmd["CMD"].capitalize())
+                if cmd.get("CMD_VALUE") is not None:
+                    label += " %g Hz " % cmd["CMD_VALUE"]
+                return {"cmd": label, "name": machine["MACHINE_NAME"]}
             return _run(send, "msgCommandSent", "automation.hardware")
         if action in ("save", "key"):
             if not can(HARDWARE, "create"):
@@ -102,6 +105,7 @@ def hardware():
         m["online"] = Machine.is_online(m)
         m["since"] = fmt_datetime(m.get("STATUS_TIME"))
         m["can_command"] = bool(m.get("CONTROL_FLG") and m.get("DEVICE_KEY_HASH") and m["online"])
+        m["live"] = Machine.live(m) if m.get("DEVICE_KEY_HASH") and m["active"] else None
     events = Machine.events(branch, now_utc() - timedelta(days=7), limit=20)
     names = {m["MACHINE_ID"]: m["MACHINE_NAME"] for m in machines}
     edit = Machine.find(branch, request.args.get("edit")) if request.args.get("edit") else None
@@ -111,6 +115,15 @@ def hardware():
                            status_keys=STATUS_KEYS, status_badge=STATUS_BADGE, type_keys=TYPE_KEYS, types=MACHINE_TYPES,
                            statuses=MACHINE_STATUSES, commands_all=COMMANDS, cmd_status_keys=CMD_STATUS_KEYS,
                            can_edit=can(HARDWARE, "edit"), can_command=can(HARDWARE, "approve"), can_setup=can(HARDWARE, "create"))
+
+
+@bp.route("/hardware/live.json")
+@require(HARDWARE)
+def hardware_live():
+    """Live values of the machines in use with a device (update 30), polled by js/hardware_live.js every 2 seconds."""
+    branch = operating_branch()
+    out = [Machine.live(m) for m in Machine.for_branch(branch, active_only=True) if m.get("DEVICE_KEY_HASH")]
+    return jsonify({"ok": True, "machines": out, "can_command": can(HARDWARE, "approve")})
 
 
 # ---------- Machine Usage Statistics ----------

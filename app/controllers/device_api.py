@@ -4,11 +4,15 @@ Every call sends the device key in the header  X-Device-Key: <key>  (issued on H
 it is shown once). No browser session or CSRF token is used here.
 
     POST /api/v1/machines/<MACHINE_ID>/status      {"status": "R|I|F|M|O", "note": "..."}   report the status
-    GET  /api/v1/machines/<MACHINE_ID>/commands                                           start/stop work to do
+    GET  /api/v1/machines/<MACHINE_ID>/commands                                           work to do:
+         [{"id", "command": START|STOP|RESET|SPEED, "value": Hz (SPEED, START) or null, "requested"}]
+    POST /api/v1/machines/<MACHINE_ID>/telemetry   {"running": true, "set_hz": 45, "out_hz": 44.8, "amp": 21.3,
+                                                    "volt": 372, "rpm": 1300, "fault": ""}            inverter live values
     POST /api/v1/commands/<CMD_ID>/ack              {"ok": true, "result": "..."}         command carried out
     POST /api/v1/meters/<METER_ID>/readings         {"kwh": 12345.6, "time": "2026-10-12T09:00:00+07:00"}
 
-See scripts/device_sim.py for a working example.
+See scripts/aoi_gateway.py (inverter by Modbus; --simulate starts the virtual inverter scripts/vfd_sim.py) and
+scripts/device_sim.py (simple start/stop machine) for working examples.
 """
 from datetime import datetime, timezone
 
@@ -53,8 +57,21 @@ def machine_commands(machine_id):
     if not machine:
         return _denied()
     Machine.seen(machine)
-    return jsonify({"ok": True, "commands": [{"id": c["CMD_ID"], "command": c["CMD"], "requested": c["REQ_DATE"].isoformat()}
-                                             for c in MachineCommand.take_pending(machine)]})
+    return jsonify({"ok": True, "commands": [{"id": c["CMD_ID"], "command": c["CMD"], "value": c.get("CMD_VALUE"),
+                                              "requested": c["REQ_DATE"].isoformat()} for c in MachineCommand.take_pending(machine)]})
+
+
+@bp.route("/machines/<machine_id>/telemetry", methods=["POST"])
+def machine_telemetry(machine_id):
+    machine = Machine.by_key(machine_id, _key())
+    if not machine:
+        return _denied()
+    try:
+        updated = Machine.telemetry(machine, request.get_json(silent=True) or {})
+    except ValidationError as error:
+        return _error(error)
+    low, high = Machine.speed_range(updated)
+    return jsonify({"ok": True, "status": updated["MACHINE_STATUS"], "min_hz": low, "max_hz": high})
 
 
 @bp.route("/commands/<cmd_id>/ack", methods=["POST"])

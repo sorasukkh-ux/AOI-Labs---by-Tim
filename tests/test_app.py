@@ -8,6 +8,7 @@ and dropped at the end. Creating and dropping a database per test opened so many
 MongoDB server ran out of file handles and aborted.
 """
 import os
+import sys
 import re
 import unittest
 import uuid
@@ -2595,6 +2596,92 @@ class Update29(Base):
                                            "MACHINE_TYPE": "HUSKER", "RATED_KW": "15", "ACTIVE_FLG": "1"}, "/automation/hardware")
         self.assertTrue(self.machine("F2-HUSK")["ACTIVE_FLG"])
         self.assertIn('data-machine="F2-HUSK"', self.text("/automation/hardware"))
+
+
+class Update30(Base):
+    """Speed control and live values of the main motor; the gateway and the virtual inverter."""
+    machine, issue_key, api = Update9.machine, Update9.issue_key, Update9.api
+
+    def setUp(self):
+        super().setUp()
+        self.login("admin")
+        self.client.get("/lang/en")
+
+    def connected(self):
+        key = self.issue_key("/automation/hardware", "MACHINE_ID", "F2-MOTOR")
+        self.api("post", "/api/v1/machines/F2-MOTOR/telemetry", key, {"running": False, "set_hz": 50, "out_hz": 0, "amp": 0})
+        return key
+
+    def work(self, key):
+        return self.api("get", "/api/v1/machines/F2-MOTOR/commands", key).get_json()["commands"]
+
+    def test_speed_command_range_and_start_value(self):
+        key = self.connected()
+        self.post("/automation/hardware", {"action": "command", "MACHINE_ID": "F2-MOTOR", "CMD": "SPEED", "CMD_VALUE": "55"})
+        self.assertEqual(self.work(key), [])                                     # above 50 Hz: refused
+        self.post("/automation/hardware", {"action": "command", "MACHINE_ID": "F2-MOTOR", "CMD": "SPEED", "CMD_VALUE": "42.5"})
+        cmd = self.work(key)[0]
+        self.assertEqual((cmd["command"], cmd["value"]), ("SPEED", 42.5))
+        self.api("post", "/api/v1/commands/%s/ack" % cmd["id"], key, {"ok": True, "result": "speed 42.5 Hz"})
+        self.assertEqual(self.machine("F2-MOTOR")["SPEED_SET_HZ"], 42.5)
+        self.post("/automation/hardware", {"action": "command", "MACHINE_ID": "F2-MOTOR", "CMD": "START"})
+        cmd = self.work(key)[0]
+        self.assertEqual((cmd["command"], cmd["value"]), ("START", 42.5))          # starts at the last speed set
+        self.assertIn("42.5 Hz", self.text("/automation/hardware"))
+
+    def test_telemetry_sets_live_values_and_status(self):
+        key = self.connected()
+        body = {"running": True, "set_hz": 45, "out_hz": 44.8, "amp": 21.3, "volt": 340, "rpm": 1300, "fault": ""}
+        reply = self.api("post", "/api/v1/machines/F2-MOTOR/telemetry", key, body).get_json()
+        self.assertEqual((reply["status"], reply["min_hz"], reply["max_hz"]), ("R", 30.0, 50.0))
+        live = self.client.get("/automation/hardware/live.json").get_json()["machines"][0]
+        self.assertEqual((live["id"], live["out_hz"], live["amp"], live["rpm"], live["running"], live["fault"]),
+                         ("F2-MOTOR", 44.8, 21.3, 1300.0, True, None))
+        self.assertTrue(live["samples"])
+        self.api("post", "/api/v1/machines/F2-MOTOR/telemetry", key, dict(body, running=False, out_hz=0, amp=0, fault="E.THM"))
+        self.assertEqual(self.machine("F2-MOTOR")["MACHINE_STATUS"], "F")
+        self.assertIn('data-f="reset-form"', self.text("/automation/hardware"))
+        self.post("/automation/hardware", {"action": "command", "MACHINE_ID": "F2-MOTOR", "CMD": "RESET"})
+        cmd = self.work(key)[0]
+        self.api("post", "/api/v1/commands/%s/ack" % cmd["id"], key, {"ok": True})
+        self.assertEqual(self.machine("F2-MOTOR")["MACHINE_STATUS"], "I")
+        self.assertEqual(self.api("post", "/api/v1/machines/F2-MOTOR/telemetry", "wrong", body).status_code, 401)
+        self.assertEqual(self.api("post", "/api/v1/machines/F2-MOTOR/telemetry", key, dict(body, amp="x")).status_code, 422)
+        self.assertEqual(len(self.db("AOITS_MACHINE_TELE")), 3)
+
+    def test_gateway_with_the_virtual_inverter(self):
+        import socket
+        import time as _time
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts"))
+        import vfd_sim
+        import aoi_gateway
+        with socket.socket() as probe:                                           # a free port
+            probe.bind(("127.0.0.1", 0))
+            port = probe.getsockname()[1]
+        vfd = vfd_sim.start("127.0.0.1", port, 1, console=False, accel=0.5, decel=0.5)
+        inverter = aoi_gateway.Inverter(aoi_gateway.ModbusTCP("127.0.0.1", port), 30, 50)
+        self.assertEqual(aoi_gateway.carry_out(inverter, {"command": "START", "value": 60}), "run forward 50.0 Hz")  # kept at 50
+        _time.sleep(1.0)
+        values = inverter.read()
+        self.assertTrue(values["running"])
+        self.assertEqual((values["set_hz"], values["out_hz"], values["fault"]), (50.0, 50.0, ""))
+        self.assertGreater(values["amp"], 10)
+        self.assertGreater(values["rpm"], 1400)
+        aoi_gateway.carry_out(inverter, {"command": "SPEED", "value": 40})
+        _time.sleep(0.6)
+        self.assertEqual(inverter.read()["out_hz"], 40.0)
+        inverter.bus.write(aoi_gateway.REG["control"], 0x04)                     # reverse: refused by the inverter
+        _time.sleep(0.6)
+        self.assertEqual(inverter.read()["out_hz"], 0.0)
+        aoi_gateway.carry_out(inverter, {"command": "START", "value": 45})
+        _time.sleep(0.7)
+        with vfd.lock:
+            vfd.load = 250.0                                                     # jam -> overcurrent trip
+        _time.sleep(0.4)
+        values = inverter.read()
+        self.assertEqual((values["running"], values["fault"]), (False, "E.OC2"))
+        aoi_gateway.carry_out(inverter, {"command": "RESET"})
+        self.assertEqual(inverter.read()["fault"], "")
 
 
 if __name__ == "__main__":
