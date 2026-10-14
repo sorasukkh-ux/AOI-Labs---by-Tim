@@ -107,7 +107,7 @@ def reason_key(error):
     return "lnApiError"
 
 
-MSG_IDS = {"finished": "ML_FINISHED", "delivery": "ML_DELIVERY"}
+MSG_IDS = {"finished": "ML_FINISHED", "finished_delivery": "ML_FINISHED_DELIVERY", "delivery": "ML_DELIVERY"}
 
 
 def order_params(order, when):
@@ -156,7 +156,7 @@ def send(doc):
 
 
 def queue(order, kind, when):
-    """Writes the message of `kind` ('finished' | 'delivery') for a milling order and tries to send it.
+    """Writes the message of `kind` ('finished' | 'finished_delivery' | 'delivery') for a milling order and tries to send it.
     Nothing is written when the message is switched off on LINE Message Maintenance."""
     from . import line_msg
     if not line_msg.active(MSG_IDS.get(kind, "ML_FINISHED")):

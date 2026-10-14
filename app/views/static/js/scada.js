@@ -1,9 +1,12 @@
-/* SCADA (update 31): the plant diagram with live machine states, refreshed every 2 seconds.
+/* SCADA (update 34: the "control room" design Tim approved): glowing machine tiles on lit platforms over a circuit
+   board, glowing links where material flows, a details panel with a speed gauge and ON / OFF / speed / reset, and
+   three monitors (output Hz and motor current of the last 10 minutes, alarms). Refreshed every 2 seconds from
+   /automation/scada.json.
 
-   Drawn from /automation/scada.json: every machine has a place (SCADA_COL, SCADA_ROW) and the machines it feeds
-   (FEEDS_TO). Design follows "high-performance HMI" ideas: grey equipment, colour only for state (green running,
-   red fault), flow arrows move only where material moves, planned (disabled) machines drawn dashed and dimmed.
-   Click / tap a machine for its details and, when it can be controlled, ON / OFF / speed / reset. */
+   Layout from the data: every machine has a column and row (SCADA_COL, SCADA_ROW) and the machines it feeds
+   (FEEDS_TO). A machine fed from / feeding several rows of the next columns grows to cover them (milling inbound,
+   packing); links inside one column are vertical (sorting -> inbound, packing -> AMR).
+   The page's security policy allows no inline style attributes: positions are set through element.style only. */
 (function () {
   "use strict";
   var root = document.getElementById("scada");
@@ -11,24 +14,30 @@
   var NS = "http://www.w3.org/2000/svg";
   var text = JSON.parse(root.getAttribute("data-text"));
   var canCommand = !!root.getAttribute("data-can-command");
-  var canvas = document.getElementById("scada-canvas"), panel = document.getElementById("scada-panel");
+  var wrap = document.getElementById("scada-wrap"), canvas = document.getElementById("scada-canvas");
+  var panel = document.getElementById("scada-panel");
   var data = JSON.parse(root.getAttribute("data-initial"));
-  var selected = null, lastOk = Date.now();
+  var selected = null, lastOk = Date.now(), panelSig = null;
 
-  var COLW = 236, ROWH = 150, NODEW = 184, NODEH = 108, PADX = 26, PADY = 56;
+  var PADX = 24, TOP = 64, ROWH = 160, GAP = 72, CARD_H = 112, SLIM_H = 72;
+  var SLIM = { CONVEYOR: 1, SORTER: 1 };
 
-  function el(name, attrs, parent) {
-    var n = document.createElementNS(NS, name);
-    for (var k in attrs) n.setAttribute(k, attrs[k]);
-    if (parent) parent.appendChild(n);
-    return n;
+  // ---------- small helpers ----------
+  function h(tag, cls, parent, txt) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (txt !== undefined && txt !== null) e.textContent = txt;
+    if (parent) parent.appendChild(e);
+    return e;
   }
-  function txt(parent, x, y, value, cls, anchor) {
-    var t = el("text", { x: x, y: y, "class": cls || "", "text-anchor": anchor || "start" }, parent);
-    t.textContent = value;
-    return t;
+  function s(tag, attrs, parent) {
+    var e = document.createElementNS(NS, tag);
+    for (var k in attrs) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
   }
-  function fmt(v, d) { return v === null || v === undefined ? "-" : Number(v).toFixed(d); }
+  function place(e, x, y, w, ht) { e.style.left = x + "px"; e.style.top = y + "px"; if (w) e.style.width = w + "px"; if (ht) e.style.height = ht + "px"; }
+  function fmt(v, d) { return v === null || v === undefined ? "-" : Number(v).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d }); }
   function state(n) {
     if (!n.active) return "dis";
     if (n.status === "F" || (n.live && n.live.fault)) return "fault";
@@ -37,259 +46,319 @@
     if (n.status === "O" || (n.live && !n.live.fresh)) return "off";
     return "idle";
   }
+  function statusText(n) { return n.active ? (text.status[n.status] || n.status) : text.status.DIS; }
 
-  // ---------- equipment icons (40 x 40, drawn at x, y) ----------
-  var ICONS = {
-    SILO: function (g) { el("path", { d: "M8 6h24v20l-8 10h-8l-8-10z", "class": "ic" }, g); el("path", { d: "M8 14h24", "class": "ic-l" }, g); },
-    CONVEYOR: function (g) {
-      el("rect", { x: 2, y: 16, width: 36, height: 10, rx: 5, "class": "ic" }, g);
-      el("circle", { cx: 8, cy: 21, r: 3, "class": "ic-l roll" }, g); el("circle", { cx: 32, cy: 21, r: 3, "class": "ic-l roll" }, g);
-      el("path", { d: "M10 12h6M20 12h6", "class": "ic-l" }, g);
-    },
-    INBOUND: function (g) { el("path", { d: "M4 6h32l-10 16v12h-12v-12z", "class": "ic" }, g); el("path", { d: "M12 14h16", "class": "ic-l" }, g); },
-    SORTER: function (g) {
-      el("rect", { x: 4, y: 8, width: 32, height: 16, rx: 3, "class": "ic" }, g);
-      el("path", { d: "M10 24l-4 10M20 24v10M30 24l4 10", "class": "ic-l" }, g);
-    },
-    MAIN_MOTOR: function (g) {
-      el("rect", { x: 4, y: 10, width: 26, height: 22, rx: 4, "class": "ic" }, g);
-      el("rect", { x: 30, y: 18, width: 8, height: 6, rx: 1, "class": "ic" }, g);
-      var fan = el("g", { "class": "fan" }, el("g", { transform: "translate(17 21)" }, g));
-      el("path", { d: "M0 -7 L2 0 L0 7 L-2 0Z M-7 0 L0 -2 L7 0 L0 2Z", "class": "ic-l fill" }, fan);
-      el("path", { d: "M8 34h18", "class": "ic-l" }, g);
-    },
-    PACKER: function (g) { el("rect", { x: 6, y: 12, width: 28, height: 22, rx: 2, "class": "ic" }, g); el("path", { d: "M6 18h28M20 12v6", "class": "ic-l" }, g); },
-    AMR: function (g) {
-      el("rect", { x: 4, y: 12, width: 32, height: 16, rx: 6, "class": "ic" }, g);
-      el("circle", { cx: 11, cy: 31, r: 4, "class": "ic" }, g); el("circle", { cx: 29, cy: 31, r: 4, "class": "ic" }, g);
-      el("path", { d: "M14 8h12v4h-12z", "class": "ic-l" }, g);
-    },
-    OTHER: function (g) { el("rect", { x: 6, y: 8, width: 28, height: 26, rx: 4, "class": "ic" }, g); el("path", { d: "M12 21h16", "class": "ic-l" }, g); }
+  // ---------- icons (24 x 24 line drawings) ----------
+  var ICON = {
+    SILO: "M6 3h12v11l-4 5h-4l-4-5z M6 8h12 M10 19v2h4v-2",
+    CONVEYOR: "M5 10h14a3 3 0 0 1 0 6H5a3 3 0 0 1 0-6z M5.5 13h.01 M18.5 13h.01 M7 7h4 M13 7h4",
+    INBOUND: "M3 4h18l-6 8v7h-6v-7z M7 8h10",
+    SORTER: "M6 4h12a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z M7 12l-2 8 M12 12v8 M17 12l2 8",
+    MAIN_MOTOR: "M4 7h10a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2z M16 11h3v3h-3 M19 12.5h3",
+    PACKER: "M4 8l8-4 8 4v8l-8 4-8-4z M4 8l8 4 8-4 M12 12v8",
+    AMR: "M6 9h12a3 3 0 0 1 3 3v2a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3v-2a3 3 0 0 1 3-3z M9 5h6v4 M12 3v2",
+    OTHER: "M6 6h12v12H6z M9 12h6"
   };
-
-  function wrap(name, max) {
-    if (name.length <= max) return [name];
-    var cut = name.lastIndexOf(" ", max);
-    if (cut < 8) cut = max;
-    var rest = name.slice(cut).trim();
-    return [name.slice(0, cut).trim(), rest.length > max ? rest.slice(0, max - 1) + "…" : rest];
+  function icon(type, parent, size) {
+    var svg = s("svg", { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": 1.6,
+                         "stroke-linecap": "round", "stroke-linejoin": "round", "aria-hidden": "true", "class": "sc-ico" }, parent);
+    s("path", { d: ICON[type] || ICON.OTHER }, svg);
+    if (type === "MAIN_MOTOR") {
+      var fan = s("g", { "class": "sc-fan" }, s("g", { transform: "translate(9 12.5)" }, svg));
+      s("circle", { cx: 0, cy: 0, r: 3 }, fan); s("path", { d: "M0 -3v6M-3 0h6" }, fan);
+    }
+    return svg;
   }
-  function pos(n) { return { x: PADX + n.col * COLW, y: PADY + n.row * ROWH }; }
 
-  // ---------- draw ----------
+  // ---------- layout from the data ----------
+  function layout(nodes) {
+    var placed = nodes.filter(function (n) { return n.col !== null && n.row !== null; });
+    var byId = {}, cols = {};
+    placed.forEach(function (n) { byId[n.id] = n; (cols[n.col] = cols[n.col] || []).push(n); });
+    var maxCol = Math.max.apply(null, placed.map(function (n) { return n.col; }).concat([4]));
+    var colW = [], colX = [], x = PADX;
+    for (var c = 0; c <= maxCol; c++) {
+      colW[c] = Math.max.apply(null, (cols[c] || []).map(function (n) { return n.type === "MAIN_MOTOR" ? 220 : 160; }).concat([160]));
+      colX[c] = x; x += colW[c] + GAP;
+    }
+    var feedsIn = {};
+    placed.forEach(function (n) { n.feeds.forEach(function (to) { (feedsIn[to] = feedsIn[to] || []).push(n.id); }); });
+    var geo = {};
+    placed.forEach(function (n) {           // rows covered: its own + single-row neighbours in the next / previous column
+      var rows = [n.row];
+      (feedsIn[n.id] || []).forEach(function (id) { var o = byId[id]; if (o && o.col === n.col - 1) rows.push(o.row); });
+      n.feeds.forEach(function (id) { var o = byId[id]; if (o && o.col === n.col + 1) rows.push(o.row); });
+      var lo = Math.min.apply(null, rows), hi = Math.max.apply(null, rows);
+      (cols[n.col] || []).forEach(function (o) { if (o !== n && o.row > n.row && o.row <= hi) hi = o.row - 1; if (o !== n && o.row < n.row && o.row >= lo) lo = o.row + 1; });
+      var w = n.type === "MAIN_MOTOR" ? 220 : 160;
+      var left = colX[n.col] + (colW[n.col] - w) / 2, top, ht;
+      if (hi > lo) { top = TOP + lo * ROWH; ht = (hi - lo) * ROWH + CARD_H; }
+      else if (SLIM[n.type]) { top = TOP + n.row * ROWH + (CARD_H - SLIM_H) / 2; ht = SLIM_H; }
+      else { top = TOP + n.row * ROWH; ht = CARD_H; }
+      geo[n.id] = { x: left, y: top, w: w, h: ht, span: hi > lo, cx: left + w / 2, cy: top + ht / 2, rowY: TOP + n.row * ROWH + CARD_H / 2 };
+    });
+    var maxRow = Math.max.apply(null, placed.map(function (n) { return n.row; }).concat([2]));
+    return { placed: placed, byId: byId, geo: geo, colX: colX, colW: colW, W: x - GAP + PADX, H: TOP + maxRow * ROWH + CARD_H + 40, maxCol: maxCol };
+  }
+
+  // ---------- draw the plant ----------
   function draw() {
-    var nodes = data.nodes.filter(function (n) { return n.col !== null && n.row !== null; });
-    var byId = {};
-    nodes.forEach(function (n) { byId[n.id] = n; });
-    var cols = Math.max(5, 1 + Math.max.apply(null, nodes.map(function (n) { return n.col; }).concat([0])));
-    var rows = Math.max(3, 1 + Math.max.apply(null, nodes.map(function (n) { return n.row; }).concat([0])));
-    var W = PADX * 2 + (cols - 1) * COLW + NODEW, H = PADY + (rows - 1) * ROWH + NODEH + 24;
+    var L = layout(data.nodes), g = L.geo;
     canvas.textContent = "";
-    var svg = el("svg", { viewBox: "0 0 " + W + " " + H, "class": "scada-svg" }, canvas);
-    var defs = el("defs", {}, svg);
-    var m = el("marker", { id: "sc-arrow", viewBox: "0 0 10 10", refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: "auto-start-reverse" }, defs);
-    el("path", { d: "M0 0L10 5L0 10z", "class": "sc-arrowhead" }, m);
-    var hatch = el("pattern", { id: "sc-hatch", width: 8, height: 8, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" }, defs);
-    el("line", { x1: 0, y1: 0, x2: 0, y2: 8, "class": "sc-hatch-line" }, hatch);
-
-    // stage headers and the milling group frame
-    for (var c = 0; c < cols; c++) {
-      txt(svg, PADX + c * COLW + NODEW / 2, 30, text.stages[c] || "", "sc-stage", "middle");
+    canvas.style.width = L.W + "px"; canvas.style.height = L.H + "px";
+    // stage titles
+    for (var c = 0; c <= L.maxCol; c++) {
+      var st = h("div", "sc-stage" + (c === 3 ? " hot" : ""), canvas, text.stages[c] || "");
+      place(st, L.colX[c] - 20, 18, L.colW[c] + 40);
     }
-    var mill = nodes.filter(function (n) { return n.type === "MAIN_MOTOR"; });
-    if (mill.length > 1) {
-      var top = Math.min.apply(null, mill.map(function (n) { return pos(n).y; })), bottom = Math.max.apply(null, mill.map(function (n) { return pos(n).y; }));
-      var mx = Math.min.apply(null, mill.map(function (n) { return pos(n).x; }));
-      el("rect", { x: mx - 10, y: top - 12, width: NODEW + 20, height: bottom - top + NODEH + 24, rx: 16, "class": "sc-group" }, svg);
+    // the milling frame around the main motors
+    var motors = L.placed.filter(function (n) { return n.type === "MAIN_MOTOR"; });
+    if (motors.length) {
+      var x0 = Math.min.apply(null, motors.map(function (n) { return g[n.id].x; })) - 16;
+      var y0 = Math.min.apply(null, motors.map(function (n) { return g[n.id].y; })) - 24;
+      var x1 = Math.max.apply(null, motors.map(function (n) { return g[n.id].x + g[n.id].w; })) + 16;
+      var y1 = Math.max.apply(null, motors.map(function (n) { return g[n.id].y + g[n.id].h; })) + 24;
+      place(h("div", "sc-group", canvas), x0, y0, x1 - x0, y1 - y0);
     }
-
-    // links first (under the machines)
-    nodes.forEach(function (n) {
+    // glowing platforms
+    L.placed.forEach(function (n) {
+      var p = g[n.id], plat = h("div", "sc-plat st-" + state(n), canvas);
+      place(plat, p.x - 14, p.y + p.h - 16, p.w + 28, 32);
+    });
+    // links
+    var svg = s("svg", { "class": "sc-links", width: L.W, height: L.H, viewBox: "0 0 " + L.W + " " + L.H, "aria-hidden": "true" }, canvas);
+    var defs = s("defs", {}, svg);
+    [["a-dim", "dim"], ["a-hot", "hot"]].forEach(function (m) {
+      var mk = s("marker", { id: "sc-" + m[0], viewBox: "0 0 10 10", refX: 8, refY: 5, markerWidth: 6, markerHeight: 6, orient: "auto" }, defs);
+      s("path", { d: "M0 0L10 5L0 10z", "class": "sc-head " + m[1] }, mk);
+    });
+    L.placed.forEach(function (n) {
       n.feeds.forEach(function (to) {
-        var t = byId[to];
+        var t = L.byId[to];
         if (!t) return;
-        var a = pos(n), b = pos(t), d;
-        if (t.col === n.col) {                                     // same column: vertical (e.g. sorting -> inbound)
-          var x = a.x + NODEW / 2, up = b.y < a.y;
-          d = "M" + x + " " + (up ? a.y : a.y + NODEH) + " V" + (up ? b.y + NODEH + 6 : b.y - 6);
+        var a = g[n.id], b = g[t.id], d;
+        if (t.col === n.col) {
+          var up = b.y < a.y;
+          d = "M" + a.cx + " " + (up ? a.y : a.y + a.h) + " V" + (up ? b.y + b.h + 4 : b.y - 4);
         } else {
-          var x1 = a.x + NODEW, y1 = a.y + NODEH / 2, x2 = b.x - 6, y2 = b.y + NODEH / 2, xm = (x1 + x2) / 2;
-          d = y1 === y2 ? "M" + x1 + " " + y1 + " H" + x2 : "M" + x1 + " " + y1 + " H" + xm + " V" + y2 + " H" + x2;
+          var y1 = a.span && !b.span ? b.cy : a.cy, y2 = b.span && !a.span ? a.cy : b.cy;
+          if (a.span && b.span) { y1 = y2 = (Math.max(a.y, b.y) + Math.min(a.y + a.h, b.y + b.h)) / 2; }
+          var xa = a.x + a.w, xb = b.x - 4, xm = (xa + xb) / 2;
+          d = y1 === y2 ? "M" + xa + " " + y1 + " H" + xb : "M" + xa + " " + y1 + " H" + xm + " V" + y2 + " H" + xb;
         }
-        var live = state(n) === "run" && t.active;
-        el("path", { d: d, "class": "sc-link" + (live ? " flow" : "") + (n.active && t.active ? "" : " planned"), "marker-end": "url(#sc-arrow)" }, svg);
+        var hot = state(n) === "run";
+        var path = s("path", { d: d, "class": "sc-link" + (hot ? " hot" : ""), "marker-end": "url(#sc-" + (hot ? "a-hot" : "a-dim") + ")" }, svg);
+        if (hot) s("path", { d: d, "class": "sc-pulse" }, svg);
+        return path;
       });
     });
-
     // machines
-    nodes.forEach(function (n) {
-      var p = pos(n), st = state(n);
-      var g = el("g", { "class": "sc-node st-" + st + (selected === n.id ? " selected" : "") + (n.on_shift ? " on-shift" : ""),
-                         transform: "translate(" + p.x + " " + p.y + ")", tabindex: 0, role: "button",
-                         "aria-label": n.name + ": " + (text.status[n.active ? n.status : "DIS"] || "") }, svg);
-      el("rect", { x: 0, y: 0, width: NODEW, height: NODEH, rx: 12, "class": "sc-box" }, g);
-      if (!n.active) el("rect", { x: 0, y: 0, width: NODEW, height: NODEH, rx: 12, fill: "url(#sc-hatch)", "class": "sc-hatch" }, g);
-      el("rect", { x: 0, y: 0, width: 6, height: NODEH, rx: 3, "class": "sc-state-bar" }, g);
-      var icon = el("g", { transform: "translate(14 12)", "class": "sc-icon" }, g);
-      (ICONS[n.type] || ICONS.OTHER)(icon);
-      var lines = wrap(n.name, 17);
-      txt(g, 62, 26, lines[0], "sc-name");
-      if (lines[1]) txt(g, 62, 42, lines[1], "sc-name");
-      txt(g, 62, lines[1] ? 58 : 44, n.id, "sc-id");
-      var label = n.active ? (text.status[n.status] || "") : text.status.DIS;
-      if (n.live && n.live.fresh && n.status === "R") label += " · " + fmt(n.live.out_hz, 1) + " Hz";
-      if (n.live && n.live.fault) label = "⚠ " + n.live.fault;
-      txt(g, 14, NODEH - 30, label, "sc-state");
-      if (n.live && n.live.fresh) {
-        txt(g, 14, NODEH - 12, fmt(n.live.amp, 1) + " A · " + fmt(n.live.rpm, 0) + " rpm", "sc-val");
-        var frac = Math.max(0, Math.min(1, (n.live.out_hz || 0) / (n.live.max_hz || 50)));
-        el("rect", { x: NODEW - 18, y: 14, width: 6, height: NODEH - 28, rx: 3, "class": "sc-gauge-bg" }, g);
-        el("rect", { x: NODEW - 18, y: 14 + (NODEH - 28) * (1 - frac), width: 6, height: (NODEH - 28) * frac, rx: 3, "class": "sc-gauge" }, g);
-      } else if (n.active && n.type === "MAIN_MOTOR" && !n.live) {
-        txt(g, 14, NODEH - 12, text.noDevice, "sc-val");
-      }
+    L.placed.forEach(function (n) {
+      var p = g[n.id], st = state(n);
+      var b = h("button", "sc-node st-" + st + (n.type === "MAIN_MOTOR" ? " motor" : "") + (selected === n.id ? " selected" : "") + (p.span ? " tall" : ""), canvas);
+      b.type = "button";
+      b.setAttribute("aria-pressed", selected === n.id ? "true" : "false");
+      b.setAttribute("aria-label", n.name + ": " + statusText(n));
+      place(b, p.x, p.y, p.w, p.h);
+      icon(n.type, b, n.type === "MAIN_MOTOR" ? 38 : (SLIM[n.type] && !p.span ? 28 : 34));
+      var tx = h("span", "sc-txt", b);
+      h("b", "sc-name", tx, n.name);
+      var line = n.active ? statusText(n) : text.disShort;          // the long "Disabled (planned)" is in the panel
+      if (n.live && n.live.fresh && n.status === "R") line += " · " + fmt(n.live.out_hz, 1) + " Hz";
+      if (n.live && n.live.fault) line = "⚠ " + n.live.fault;
+      h("span", "sc-state", tx, line);
+      if (n.live && n.live.fresh) h("span", "sc-val", tx, fmt(n.live.amp, 1) + " A · " + fmt(n.live.rpm, 0) + " rpm");
+      else if (n.type === "MAIN_MOTOR" && n.kw) h("span", "sc-val", tx, n.kw + " kW");
+      b.addEventListener("click", function () { select(n.id); });
       if (n.shift) {
-        var chip = el("g", { transform: "translate(" + (NODEW - 76) + " " + (-11) + ")" }, g);
-        el("rect", { x: 0, y: 0, width: 72, height: 20, rx: 10, "class": "sc-shift" + (n.on_shift ? " now" : "") }, chip);
-        txt(chip, 36, 14, text.shift[n.shift] || n.shift, "sc-shift-t", "middle");
+        var chip = h("span", "sc-shift-chip" + (n.on_shift ? " now" : ""), canvas, (text.shift[n.shift] || n.shift) + (n.on_shift ? " · " + text.now : ""));
+        place(chip, p.x + p.w - 116, p.y - 11, 112);
       }
-      g.addEventListener("click", function () { select(n.id); });
-      g.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); select(n.id); } });
     });
+    fit(L);
+  }
+  // the plant scales down to the width it has (down to 60 %), below that it scrolls sideways
+  function fit(L) {
+    var k = Math.max(0.6, Math.min(1.25, (wrap.clientWidth - 2) / L.W));
+    canvas.style.transform = "scale(" + k + ")";
+    wrap.style.height = Math.ceil(L.H * k) + "px";
+    canvas.dataset.k = k;
+    wrap.classList.toggle("scroll", k * L.W > wrap.clientWidth + 2);
+    if (wrap.classList.contains("scroll")) wrap.style.height = Math.ceil(L.H * k) + 16 + "px";
   }
 
   // ---------- details panel ----------
-  function hidden(form, name, value) { var i = document.createElement("input"); i.type = "hidden"; i.name = name; i.value = value; form.appendChild(i); }
+  function hidden(form, name, value) { var i = h("input", null, form); i.type = "hidden"; i.name = name; i.value = value; }
   function commandForm(n, cmd, label, cls, confirmText, extra) {
-    var f = document.createElement("form");
-    f.method = "post"; f.action = root.getAttribute("data-command-url"); f.className = "scada-cmd";
+    var f = h("form", "scada-cmd");
+    f.method = "post"; f.action = root.getAttribute("data-command-url");
     hidden(f, "csrf_token", root.getAttribute("data-csrf")); hidden(f, "action", "command"); hidden(f, "back", "scada");
     hidden(f, "MACHINE_ID", n.id); hidden(f, "CMD", cmd);
     if (extra) extra(f);
-    var b = document.createElement("button");
-    b.type = "submit"; b.className = "action " + cls; b.textContent = label;
+    var b = h("button", "sc-btn " + cls, f, label);
+    b.type = "submit";
     if (confirmText) b.setAttribute("data-confirm", confirmText.replace("{name}", n.name));
-    var busy = n.live && n.live.busy;
-    b.disabled = !canCommand || !n.control || !!busy;
-    f.appendChild(b);
+    b.disabled = !canCommand || !n.control || !!(n.live && n.live.busy);
     return f;
   }
-  function row(dl, k, v) {
-    var dt = document.createElement("dt"); dt.textContent = k; var dd = document.createElement("dd"); dd.textContent = v;
-    dl.appendChild(dt); dl.appendChild(dd);
-  }
-  function select(id) { selected = id; draw(); details(); }
-  // The buttons are only rebuilt when the machine's control state changes, never while a confirm pop-up is open:
-  // a form taken out of the page cannot be sent (the cause of "ON does nothing" in update 31).
-  var panelSig = null;
   function signature(n) {
     var lv = n.live || {};
     return [n.id, n.status, n.active, n.control, canCommand, lv.busy, lv.fresh ? lv.running : "", lv.fault, lv.min_hz, lv.max_hz].join("|");
   }
+  function gauge(parent, n) {
+    var lv = n.live || {}, frac = lv.fresh ? Math.max(0, Math.min(1, (lv.out_hz || 0) / (lv.max_hz || 50))) : 0, C = 2 * Math.PI * 46;
+    var svg = s("svg", { width: 116, height: 116, viewBox: "0 0 112 112", role: "img", "class": "sc-gauge st-" + state(n),
+                         "aria-label": text.outHz + " " + fmt(lv.out_hz, 1) + " Hz" }, parent);
+    s("circle", { cx: 56, cy: 56, r: 46, "class": "g-bg" }, svg);
+    s("circle", { cx: 56, cy: 56, r: 46, "class": "g-val", "stroke-dasharray": (C * frac).toFixed(1) + " " + C.toFixed(1), transform: "rotate(-90 56 56)" }, svg);
+    var t1 = s("text", { x: 56, y: 58, "text-anchor": "middle", "class": "g-num", "data-g": "num" }, svg); t1.textContent = lv.fresh ? fmt(lv.out_hz, 1) : "-";
+    var t2 = s("text", { x: 56, y: 78, "text-anchor": "middle", "class": "g-unit" }, svg); t2.textContent = "Hz";
+  }
   function fillInfo(box, n) {
     box.textContent = "";
-    var pill = document.createElement("span"); pill.className = "scada-pill st-" + state(n);
-    pill.textContent = n.active ? (text.status[n.status] || n.status) : text.status.DIS; box.appendChild(pill);
-    var dl = document.createElement("dl"); dl.className = "scada-dl"; box.appendChild(dl);
-    if (n.kw) row(dl, text.kw, n.kw + " kW");
-    if (n.feeds.length) row(dl, text.feeds, n.feeds.join(", "));
-    if (!n.active) {
-      var note = document.createElement("p"); note.className = "scada-note"; note.textContent = text.planned; box.appendChild(note);
-    } else if (n.live) {
-      var lv = n.live;
-      if (!lv.fresh) row(dl, "", text.noData);
-      row(dl, text.outHz, fmt(lv.out_hz, 1) + " Hz"); row(dl, text.amp, fmt(lv.amp, 1) + " A" + (lv.rated_amp ? " / " + lv.rated_amp + " A" : ""));
-      row(dl, text.rpm, fmt(lv.rpm, 0)); row(dl, text.setHz, fmt(lv.set_hz, 1) + " Hz");
-      if (lv.fault) row(dl, text.fault, lv.fault);
-      if (lv.amp && lv.rated_amp && lv.amp > lv.rated_amp) { var w = document.createElement("p"); w.className = "scada-warn"; w.textContent = "⚠ " + text.overload; box.appendChild(w); }
-      if (lv.busy) { var b = document.createElement("p"); b.className = "scada-note"; b.textContent = text.busy.replace("{cmd}", lv.busy); box.appendChild(b); }
+    var top = h("div", "sc-info-top", box);
+    if (n.live) gauge(top, n);
+    var col = h("div", "sc-info-col", top);
+    h("span", "sc-pill st-" + state(n), col, statusText(n));
+    var lv = n.live;
+    if (lv) {
+      var r1 = h("span", "sc-kv", col, text.amp + " "); h("b", null, r1, fmt(lv.amp, 1)); r1.appendChild(document.createTextNode(lv.rated_amp ? " / " + lv.rated_amp + " A" : " A"));
+      var r2 = h("span", "sc-kv", col, text.rpm + " "); h("b", null, r2, fmt(lv.rpm, 0));
+      var r3 = h("span", "sc-kv", col, text.setHz + " "); h("b", null, r3, fmt(lv.set_hz, 1)); r3.appendChild(document.createTextNode(" Hz"));
+      if (!lv.fresh) h("span", "sc-note", col, text.noData);
     } else {
-      var nd = document.createElement("p"); nd.className = "scada-note"; nd.textContent = text.noDevice; box.appendChild(nd);
+      if (n.kw) { var rk = h("span", "sc-kv", col, text.kw + " "); h("b", null, rk, n.kw + " kW"); }
+      if (n.feeds.length) h("span", "sc-kv", col, text.feeds + " " + n.feeds.join(", "));
     }
+    if (!n.active) h("p", "sc-note", box, text.planned);
+    else if (!n.live) h("p", "sc-note", box, text.noDevice);
+    if (lv && lv.fault) h("p", "sc-warn", box, "⚠ " + text.fault + ": " + lv.fault);
+    if (lv && lv.amp && lv.rated_amp && lv.amp > lv.rated_amp) h("p", "sc-warn", box, "⚠ " + text.overload);
+    if (lv && lv.busy) h("p", "sc-note", box, text.busy.replace("{cmd}", lv.busy));
   }
   function details() {
     var n = data.nodes.filter(function (x) { return x.id === selected; })[0];
     if (!n) return;
     panel.textContent = "";
     panelSig = signature(n);
-    var h = document.createElement("p"); h.className = "scada-h"; h.textContent = n.name; panel.appendChild(h);
-    var sub = document.createElement("p"); sub.className = "scada-sub";
-    sub.textContent = n.id + " · " + (text.types[n.type] || n.type) + (n.shift ? " · " + text.shift[n.shift] + (n.on_shift ? " (" + text.onShift + ")" : "") : "");
-    panel.appendChild(sub);
-    var info = document.createElement("div"); info.id = "scada-info"; panel.appendChild(info);
+    var head = h("div", "sc-panel-head", panel);
+    h("span", "sc-eyebrow", head, text.selected);
+    h("span", "sc-panel-name", head, n.name);
+    h("span", "sc-panel-sub", head, n.id + " · " + (text.types[n.type] || n.type) + (n.shift ? " · " + text.shift[n.shift] : ""));
+    var info = h("div", "sc-info", panel); info.id = "scada-info";
     fillInfo(info, n);
     if (n.active && n.live) {
-      var lv = n.live;
-      var pair = document.createElement("div"); pair.className = "scada-pair";
-      var running = lv.fresh ? lv.running : n.status === "R";
-      var on = commandForm(n, "START", "▶ " + text.on, "primary", text.confirmOn), off = commandForm(n, "STOP", "■ " + text.off, "danger", text.confirmOff);
+      var lv = n.live, running = lv.fresh ? lv.running : n.status === "R";
+      var pair = h("div", "sc-pair", panel);
+      var on = commandForm(n, "START", text.on, "on", text.confirmOn), off = commandForm(n, "STOP", text.off, "off", text.confirmOff);
       if (running || n.status === "F") on.querySelector("button").disabled = true;
       if (!running) off.querySelector("button").disabled = true;
-      pair.appendChild(on); pair.appendChild(off); panel.appendChild(pair);
-      panel.appendChild(commandForm(n, "SPEED", text.speed, "", null, function (f) {
-        var i = document.createElement("input"); i.type = "number"; i.name = "CMD_VALUE"; i.min = lv.min_hz; i.max = lv.max_hz; i.step = "0.5";
-        i.value = lv.set_hz; i.required = true; i.setAttribute("aria-label", "Hz"); f.appendChild(i);
-      }));
-      if (n.status === "F") panel.appendChild(commandForm(n, "RESET", "↻ " + text.reset, "", null));
-      if (!canCommand || !n.control) {
-        var why = document.createElement("p"); why.className = "scada-note";
-        why.textContent = !canCommand ? text.noRight : text.offline; panel.appendChild(why);
-      }
+      pair.appendChild(on); pair.appendChild(off);
+      var sp = h("div", "sc-speed", panel);
+      var lab = h("label", "sc-speed-label", sp, text.speedRange.replace("{low}", lv.min_hz).replace("{high}", lv.max_hz));
+      lab.setAttribute("for", "sc-speed-range");
+      var row = commandForm(n, "SPEED", text.setTo.replace("{hz}", fmt(lv.set_hz, 1)), "set", null, function (f) {
+        var r = h("input", "sc-range", f); r.type = "range"; r.id = "sc-speed-range"; r.name = "CMD_VALUE";
+        r.min = lv.min_hz; r.max = lv.max_hz; r.step = "0.5"; r.value = lv.set_hz;
+        r.addEventListener("input", function () { f.querySelector("button").textContent = text.setTo.replace("{hz}", Number(r.value).toFixed(1)); });
+      });
+      sp.appendChild(row);
+      if (n.status === "F") panel.appendChild(commandForm(n, "RESET", "↻ " + text.reset, "set", null));
+      if (!canCommand || !n.control) h("p", "sc-note", panel, !canCommand ? text.noRight : text.offline);
     }
-    var a = document.createElement("a"); a.href = root.getAttribute("data-hardware-url"); a.className = "scada-link"; a.textContent = text.openHw + " →";
-    panel.appendChild(a);
+    var a = h("a", "sc-link-hw", panel, text.openHw + " →");
+    a.href = root.getAttribute("data-hardware-url");
   }
+  function select(id) { selected = id; draw(); details(); monitors(); }
   function refreshPanel() {
     var n = data.nodes.filter(function (x) { return x.id === selected; })[0];
     if (!n) return;
     var overlay = document.getElementById("app-modal-overlay");
-    if ((overlay && overlay.classList.contains("show")) || panel.contains(document.activeElement)) {
-      var box = document.getElementById("scada-info");
-      if (box) fillInfo(box, n);                          // numbers only; the buttons stay as they are
-      return;
-    }
-    if (signature(n) !== panelSig) details();
-    else fillInfo(document.getElementById("scada-info"), n);
+    var busy = (overlay && overlay.classList.contains("show")) || panel.contains(document.activeElement);
+    if (!busy && signature(n) !== panelSig) { details(); return; }
+    var box = document.getElementById("scada-info");
+    if (box) fillInfo(box, n);           // numbers only: the buttons stay (a pop-up may be asking about one)
   }
 
-  // ---------- figures, alarms, list ----------
+  // ---------- monitors ----------
+  function motorShown() {
+    var pick = data.nodes.filter(function (n) { return n.id === selected && n.live; })[0];
+    return pick || data.nodes.filter(function (n) { return n.type === "MAIN_MOTOR" && n.active && n.live; })
+      .sort(function (a, b) { return (b.on_shift ? 1 : 0) - (a.on_shift ? 1 : 0); })[0];
+  }
+  function trend(host, samples, field, cls, ceiling, ratedLine) {
+    host.textContent = "";
+    var W = 448, H = 96, pts = samples.filter(function (p) { return p[field] !== null && p[field] !== undefined; });
+    var svg = s("svg", { viewBox: "0 0 " + W + " " + H, preserveAspectRatio: "none", "class": "sc-trend-svg", role: "img",
+                         "aria-label": field === "hz" ? text.outHz : text.amp }, host);
+    [8, 48, 88].forEach(function (y) { s("path", { d: "M0 " + y + " H" + W, "class": "t-grid" }, svg); });
+    if (pts.length < 2) { var nt = s("text", { x: W / 2, y: 54, "text-anchor": "middle", "class": "t-empty" }, svg); nt.textContent = text.noData; return; }
+    var top = Math.max(ceiling || 0, Math.max.apply(null, pts.map(function (p) { return p[field]; })) * 1.1) || 1;
+    var t0 = Date.parse(pts[0].t), t1 = Date.parse(pts[pts.length - 1].t) || t0 + 1;
+    function X(t) { return (Date.parse(t) - t0) / Math.max(1, t1 - t0) * W; }
+    function Y(v) { return 88 - v / top * 80; }
+    if (ratedLine) s("path", { d: "M0 " + Y(ratedLine) + " H" + W, "class": "t-rated" }, svg);
+    s("polyline", { points: pts.map(function (p) { return X(p.t).toFixed(1) + "," + Y(p[field]).toFixed(1); }).join(" "), "class": "t-line " + cls }, svg);
+    var last = pts[pts.length - 1][field];
+    var lt = s("text", { x: W - 4, y: Math.max(14, Y(last) - 6), "text-anchor": "end", "class": "t-last " + cls }, svg); lt.textContent = fmt(last, 1);
+  }
+  function monitors() {
+    var m = motorShown(), samples = m && m.live ? m.live.samples : [];
+    trend(document.getElementById("scada-trend-hz"), samples, "hz", "hz", m && m.live ? m.live.max_hz : 50, null);
+    var rated = m && m.live ? m.live.rated_amp : null;
+    trend(document.getElementById("scada-trend-amp"), samples, "amp", "amp", rated ? rated * 1.2 : 0, rated);
+    document.getElementById("scada-rated").textContent = rated ? text.rated.replace("{a}", rated) : "";
+  }
+
+  // ---------- top: figures, shift, clock, alarms ----------
   function figures() {
     var k = data.kpi;
-    function set(name, value) { var e = root.querySelector('[data-k="' + name + '"]'); if (e) e.textContent = value; }
-    set("running", k.running + " / " + k.in_use + (k.planned ? "  (+" + k.planned + ")" : ""));
-    var motor = data.nodes.filter(function (n) { return n.type === "MAIN_MOTOR" && n.active && n.live; })
-      .sort(function (a, b) { return (b.on_shift ? 1 : 0) - (a.on_shift ? 1 : 0); })[0];
-    set("motor", motor && motor.live.fresh ? fmt(motor.live.out_hz, 1) + " Hz · " + fmt(motor.live.amp, 1) + " A" : text.noData);
-    set("queue", k.queue + " · " + Number(k.queue_kg).toLocaleString() + " kg / " + k.in_process);
-    set("paddy", Number(k.paddy_today).toLocaleString() + " kg");
-    set("energy", fmt(k.kwh_today, 1) + " kWh");
+    function set(name, main, sub) {
+      var e = root.querySelector('[data-k="' + name + '"]');
+      if (!e) return;
+      e.textContent = main;
+      if (sub) h("small", null, e, " " + sub);
+    }
+    set("running", k.running + " / " + k.in_use, k.planned ? text.kpiPlanned.replace("{n}", k.planned) : "");
+    var m = motorShown();
+    if (m && m.live && m.live.fresh) set("motor", fmt(m.live.out_hz, 1) + " Hz", "· " + fmt(m.live.amp, 1) + " A"); else set("motor", text.noData);
+    set("queue", String(k.queue), "· " + fmt(k.queue_kg, 0) + " kg / " + k.in_process);
+    set("paddy", fmt(k.paddy_today, 0), "kg");
+    set("energy", fmt(k.kwh_today, 1), "kWh");
     set("alarms", String(data.alarms.length + k.faults));
-    document.getElementById("scada-shift").textContent = text.shift[data.shift] || data.shift;
-    document.getElementById("scada-shift").className = "scada-shift " + (data.shift === "DAY" ? "day" : "night");
+    var shift = document.getElementById("scada-shift");
+    shift.className = "scada-shift " + (data.shift === "DAY" ? "day" : "night");
+    shift.textContent = "";
+    var ic = s("svg", { width: 16, height: 16, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": 1.8, "stroke-linecap": "round", "aria-hidden": "true" }, shift);
+    if (data.shift === "DAY") { s("circle", { cx: 12, cy: 12, r: 4 }, ic); s("path", { d: "M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" }, ic); }
+    else s("path", { d: "M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" }, ic);
+    shift.appendChild(document.createTextNode(text.shift[data.shift] || data.shift));
     var list = document.getElementById("scada-alarm-list");
     list.textContent = "";
-    if (!data.alarms.length) { var li = document.createElement("li"); li.className = "scada-sub"; li.textContent = text.noAlarms; list.appendChild(li); }
+    if (!data.alarms.length) h("li", "sc-ok", list, text.noAlarms);
     data.alarms.forEach(function (a) {
-      var li = document.createElement("li"), t = document.createElement("b");
-      t.textContent = new Date(a.time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) + "  " + a.id;
-      li.appendChild(t); li.appendChild(document.createTextNode("  " + (a.note || ""))); list.appendChild(li);
+      var li = h("li", "sc-alarm", list);
+      h("i", null, li);
+      h("b", null, li, new Date(a.time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
+      li.appendChild(document.createTextNode(" " + a.id + (a.note ? " · " + a.note : "")));
     });
     data.nodes.forEach(function (n) {
       var cell = document.querySelector('[data-row="' + n.id + '"] [data-cell="status"]');
-      if (cell) cell.textContent = n.active ? (text.status[n.status] || n.status) : text.status.DIS;
+      if (cell) cell.textContent = statusText(n);
     });
   }
   function clock() {
-    var c = document.getElementById("scada-clock");
     var stale = (Date.now() - lastOk) / 1000 > 10;
-    c.textContent = " " + new Date().toLocaleTimeString() + (stale ? " · " + text.lost : "");
-    document.getElementById("scada-link-dot").className = "scada-dot" + (stale ? " lost" : "");
+    document.getElementById("scada-clock").textContent = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    var dot = document.getElementById("scada-link-dot");
+    dot.className = "scada-dot" + (stale ? " lost" : "");
+    dot.title = stale ? text.lost : "";
   }
   function refresh() {
     fetch(root.getAttribute("data-url"), { credentials: "same-origin" }).then(function (r) { return r.json(); }).then(function (d) {
       if (!d.ok) return;
       data = d; canCommand = !!d.can_command; lastOk = Date.now();
-      draw(); figures();
+      draw(); figures(); monitors();
       if (selected) refreshPanel();
     }).catch(function () {}).then(function () { setTimeout(refresh, 2000); });
   }
@@ -298,9 +367,12 @@
     if (document.fullscreenElement) document.exitFullscreen();
     else if (root.requestFullscreen) root.requestFullscreen();
   });
-  draw(); figures(); clock();
+  var resizeTimer = null;
+  window.addEventListener("resize", function () { clearTimeout(resizeTimer); resizeTimer = setTimeout(draw, 150); });
+  document.addEventListener("fullscreenchange", function () { setTimeout(draw, 100); });
+  draw(); figures(); clock(); monitors();
   setInterval(clock, 1000);
-  var motor = data.nodes.filter(function (n) { return n.type === "MAIN_MOTOR" && n.active; })[0];
-  if (motor) select(motor.id);
+  var first = data.nodes.filter(function (n) { return n.type === "MAIN_MOTOR" && n.active; })[0];
+  if (first) select(first.id);
   setTimeout(refresh, 2000);
 })();

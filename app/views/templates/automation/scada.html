@@ -16,17 +16,20 @@
     "kw": t("scRatedKw"), "feeds": t("scFeeds"), "outHz": t("mcLiveOutHz"), "amp": t("mcLiveAmp"), "rpm": t("mcLiveRpm"),
     "setHz": t("mcLiveSetHz"), "fault": t("mcLiveFault"), "busy": t("mcLiveBusy"), "select": t("scSelectHint"),
     "updated": t("scUpdated"), "lost": t("scConnectionLost"), "noAlarms": t("scNoAlarms"), "overload": t("mcLiveOverload"),
-    "noRight": t("scNoRight"), "offline": t("scOffline")
+    "noRight": t("scNoRight"), "offline": t("scOffline"), "selected": t("scSelected"), "rated": t("scRatedA"),
+    "speedRange": t("scSpeedRange"), "setTo": t("scSetTo"), "running": t("mcRunning"),
+    "kpiPlanned": t("scKpiPlanned"), "milling": t("scStage3"), "now": t("scNow"), "disShort": t("scDisShort")
   }|tojson }}'>
 
   <div class="scada-top">
     <div class="scada-title">
       <span class="scada-dot" id="scada-link-dot" aria-hidden="true"></span>
-      <div><b>{{ t('scTitle') }}</b> &middot; {{ branch_label(branch) }}<small id="scada-clock" class="scada-sub"></small></div>
+      <div><b class="scada-brand">AOI SCADA</b><span class="scada-sub">{{ t('scTitle') }} &middot; {{ branch_label(branch) }}</span></div>
     </div>
     <div class="scada-top-actions">
       <span class="scada-shift" id="scada-shift"></span>
-      <button type="button" class="action scada-btn" id="scada-full" aria-label="{{ t('scFullScreen') }}">&#x26F6; {{ t('scFullScreen') }}</button>
+      <span class="scada-clock" id="scada-clock"></span>
+      <button type="button" class="scada-btn" id="scada-full"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>{{ t('scFullScreen') }}</button>
     </div>
   </div>
 
@@ -40,19 +43,21 @@
   </div>
 
   <div class="scada-body">
-    <div class="scada-canvas-wrap"><div class="scada-canvas" id="scada-canvas" role="img" aria-label="{{ t('scTitle') }}"></div></div>
+    <div class="scada-plant">
+      <div class="scada-canvas-wrap" id="scada-wrap"><div class="scada-canvas" id="scada-canvas" role="group" aria-label="{{ t('scTitle') }}"></div></div>
+      <div class="scada-legend" aria-hidden="true">
+        <span><i class="lg run"></i>{{ t('mcRunning') }}</span><span><i class="lg idle"></i>{{ t('mcIdle') }}</span>
+        <span><i class="lg fault"></i>{{ t('mcFault') }}</span><span><i class="lg dis"></i>{{ t('scDisabled') }}</span>
+        <span><i class="lg flow"></i>{{ t('scFlow') }}</span>
+      </div>
+    </div>
     <aside class="scada-panel" id="scada-panel" aria-live="polite"><p class="scada-hint">{{ t('scSelectHint') }}</p></aside>
   </div>
 
-  <div class="scada-legend" aria-hidden="true">
-    <span><i class="lg run"></i>{{ t('mcRunning') }}</span><span><i class="lg idle"></i>{{ t('mcIdle') }}</span>
-    <span><i class="lg fault"></i>{{ t('mcFault') }}</span><span><i class="lg off"></i>{{ t('scNoData') }}</span>
-    <span><i class="lg dis"></i>{{ t('scDisabled') }}</span><span><i class="lg flow"></i>{{ t('scFlow') }}</span>
-  </div>
-
-  <div class="scada-alarms">
-    <p class="scada-h">&#9888; {{ t('scAlarms') }}</p>
-    <ul id="scada-alarm-list"></ul>
+  <div class="scada-monitors">
+    <div class="scada-mon"><div class="scada-mon-h"><span>{{ t('scTrendHz') }}</span><span>{{ t('mcLive10min') }}</span></div><div class="scada-trend" id="scada-trend-hz"></div></div>
+    <div class="scada-mon"><div class="scada-mon-h"><span>{{ t('scTrendAmp') }}</span><span id="scada-rated"></span></div><div class="scada-trend" id="scada-trend-amp"></div></div>
+    <div class="scada-mon"><div class="scada-mon-h"><span>{{ t('scAlarms') }}</span></div><ul id="scada-alarm-list" class="scada-alarms"></ul></div>
   </div>
 </section>
 
@@ -67,4 +72,6 @@
 </div>
 </div>
 {% endblock %}
+{% block head %}<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&amp;family=IBM+Plex+Sans+Thai:wght@400;500;600&amp;display=swap">{% endblock %}
 {% block scripts %}<script src="{{ url_for('static', filename='js/scada.js') }}" defer></script>{% endblock %}

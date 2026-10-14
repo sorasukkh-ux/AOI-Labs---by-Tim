@@ -81,10 +81,26 @@ def order_list():
     status = request.args.get("status") if request.args.get("status") in LIST_FILTERS else None
     ord_type = request.args.get("type") if request.args.get("type") in (bs.BUY, bs.SELL) else None
     orders = BuySellOrder.for_branch(operating_branch(), [status] if status else None, ord_type)
-    return render_template("service/buysell_list.html", orders=_decorate(BuySellOrder.sort_for_list(orders)),
+    q = (request.args.get("q") or "").strip()[:60]
+    orders = _decorate(BuySellOrder.sort_for_list(orders))
+    if q:
+        orders = [o for o in orders if _matches(o, q)]
+    return render_template("service/buysell_list.html", orders=orders, q=q,
                            status=status, ord_type=ord_type, filters=LIST_FILTERS, status_keys=BS_STATUS_KEYS,
                            status_class=BS_STATUS_CLASS, type_keys=TYPE_KEYS, mat_keys=MAT_KEYS,
                            inv_status_keys=INV_STATUS_KEYS, can_edit=can(MENU, "edit"), can_cancel=can(MENU, "delete"))
+
+
+def _matches(order, q):
+    """Search at the top of the list (update 33): order no. / ID, the milling order it comes from (ID or queue no.),
+    customer name or code. Not case sensitive; a milling order ID opened from the Milling Order List matches exactly."""
+    needle = q.lower().lstrip("#")
+    milling = order.get("milling") or {}
+    fields = [order.get("ORD_ID"), order.get("QR_ID"), order.get("REF_ORD_ID"), milling.get("QR_ID"), order.get("CUST_CODE"),
+              (order.get("customer") or {}).get("CUST_NAME")]
+    if needle.startswith("ml-"):
+        return (order.get("REF_ORD_ID") or "").lower() == needle
+    return any(needle in str(f).lower() for f in fields if f)
 
 
 @bp.route("/<ord_id>/status", methods=["POST"])
@@ -104,7 +120,7 @@ def change_status(ord_id):
     else:
         flash_ok("msgOrderUpdated", id=order["QR_ID"])
     return redirect(url_for("service_buysell.order_list", status=request.form.get("status_filter") or None,
-                            type=request.form.get("type_filter") or None))
+                            type=request.form.get("type_filter") or None, q=request.form.get("q_filter") or None))
 
 
 # ---------- Customer Service > Buy / Sell (registration) ----------

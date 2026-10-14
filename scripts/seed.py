@@ -60,7 +60,7 @@ PLANT = [
     ("INBOUND", "ถังพักรอสี (คิวเข้าเครื่องสี)", "INBOUND", 0.75, None, 5, 2, 0, "MOTOR,MOTOR2", None),
     ("SORT", "เครื่องคัดแยก", "SORTER", 1.5, None, 6, 2, 2, "INBOUND", None),
     ("MOTOR2", "มอเตอร์หลัก 2 (กะกลางคืน)", "MAIN_MOTOR", 15.0, None, 8, 3, 1, "PACK", "NIGHT"),
-    ("PACK", "เครื่องบรรจุ", "PACKER", 3.0, None, 9, 4, 0, None, None),
+    ("PACK", "เครื่องบรรจุ", "PACKER", 3.0, None, 9, 4, 0, "AMR", None),           # update 34: packing -> AMR
     ("AMR", "หุ่นยนต์จัดเก็บ/เบิกสินค้า (AMR)", "AMR", 0.5, None, 10, 4, 2, None, None),
 ]
 OLD_SAMPLES = ("HUSK", "WHITE", "POLISH", "GRADE")
@@ -210,6 +210,9 @@ def seed(log=print, reset=False):
                                         {"$set": {"SCADA_COL": 3, "SCADA_ROW": 0, "FEEDS_TO": prefix + "-PACK", "SHIFT": "DAY"}})
         db["AOIMS_MACHINE"].update_many({"MACHINE_ID": prefix + "-MOTOR", "MACHINE_NAME": "มอเตอร์หลักเครื่องสีข้าว"},
                                         {"$set": {"MACHINE_NAME": MAIN_MOTOR["MACHINE_NAME"]}})
+        # update 34: Tim's updated plan sends packing on to the storage robot (AMR)
+        db["AOIMS_MACHINE"].update_many({"MACHINE_ID": prefix + "-PACK", "FEEDS_TO": None, "OPE_USER": SEED_USER},
+                                        {"$set": {"FEEDS_TO": prefix + "-AMR"}})
         # update 31: the sample machines of update 9 (husker, whitener, polisher, grader) are not in Tim's plan: removed
         # when nobody set them up (still the seed's record, no device key, no status history)
         for old in OLD_SAMPLES:

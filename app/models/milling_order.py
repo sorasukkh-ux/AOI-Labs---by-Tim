@@ -295,6 +295,8 @@ class MillingOrder:
             Account.post_milling_income(updated, descriptions or {"full": "", "fee": ""}, ope_user)
         elif new_status == flow.FINISHED and updated["ORDER_TYPE"] == flow.TAKEAWAY:
             cls._notify(updated, "finished", now_utc())      # LINE: the rice is ready to pick up
+        elif new_status == flow.FINISHED:
+            cls._notify(updated, "finished_delivery", now_utc())   # update 33: delivery order milled, delivery comes next
         elif arrival is not None:
             cls._notify(updated, "delivery", arrival)        # LINE: the expected arrival time
         return updated

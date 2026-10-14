@@ -293,8 +293,15 @@ def change_status(ord_id):
     if new_status == flow.CANCELLED and not can(STATUS, "delete"):
         abort(403)                                   # cancelling an order needs the Delete right
     descriptions = {"full": t("acctAutoMillingIncomeDesc"), "fee": t("acctAutoMillingFeeDesc")}
-    return _run(ord_id, lambda order: MillingOrder.change_status(
+    response = _run(ord_id, lambda order: MillingOrder.change_status(
         order["ORD_ID"], operating_branch(), new_status, _user_id(), request.form, descriptions))
+    order = MillingOrder.find(ord_id)
+    if (new_status == flow.FINISHED and order and order["MILL_STATUS"] == flow.FINISHED and can("SV_BSSTATUS")
+            and BuySellOrder.open_for_milling([order["ORD_ID"]]).get(order["ORD_ID"])):
+        # update 33: the take-home bran / broken rice orders come next; the list opens filtered on this order
+        from flask import flash
+        flash(url_for("service_buysell.order_list", q=order["ORD_ID"]), "linked")
+    return response
 
 
 @bp.route("/<ord_id>/line-resend", methods=["POST"])

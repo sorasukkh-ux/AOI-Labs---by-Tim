@@ -348,7 +348,13 @@ inverter for Modbus RTU, its station number, reverse rotation prevention (Pr.78 
 The emergency stop, the motor overload relay and the local/remote switch stay hard-wired; the app never replaces them.
 Device API for any other device: `POST /api/v1/machines/<id>/telemetry` (see `app/controllers/device_api.py`).
 
-## SCADA and the plant plan (update 31)
+## SCADA and the plant plan (updates 31, 34)
+
+Update 34: the control-room design Tim approved (deep navy circuit-board background, glowing machine tiles on lit platforms,
+glowing flow links, details panel with a speed gauge, monitors for output Hz, motor current and alarms). Fonts Chakra Petch /
+IBM Plex Sans Thai come from Google Fonts (allowed in the security policy); without internet the system font is used.
+Packing now feeds the AMR (Tim's updated plan).
+
 
 Automation > **SCADA** (`/automation/scada`, Admin / Manager / Operator) draws the plant as Tim planned it, per factory:
 Silo 1-2 -> Conveyor in 1-2 -> Milling inbound (queue) <- Sorting; Milling inbound -> Main motor 1 (day shift) and

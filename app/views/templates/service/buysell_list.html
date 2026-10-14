@@ -4,20 +4,31 @@
 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 <input type="hidden" name="status_filter" value="{{ status or '' }}">
 <input type="hidden" name="type_filter" value="{{ ord_type or '' }}">
+<input type="hidden" name="q_filter" value="{{ q or '' }}">
 {% endmacro %}
 {% block content %}
 <div id="tab-update-buysell-status">
 {{ page_head(t('updateBuySellStatusTitle'), url_for('home.index', g='SV')) }}
+<form method="get" action="{{ url_for('service_buysell.order_list') }}" class="card mt14 bs-search" id="bs-search-form">
+  {% if status %}<input type="hidden" name="status" value="{{ status }}">{% endif %}{% if ord_type %}<input type="hidden" name="type" value="{{ ord_type }}">{% endif %}
+  <label class="field-label" for="bs-search">{{ t('bsSearchLabel') }}</label>
+  <div class="row-inline">
+    <input type="search" id="bs-search" name="q" value="{{ q }}" placeholder="{{ t('bsSearchPh') }}" autocapitalize="characters" spellcheck="false" data-scan>
+    <button type="submit" class="action primary" id="bs-search-btn">{{ t('btnSearch') }}</button>
+    {% if q %}<a class="action" href="{{ url_for('service_buysell.order_list', status=status, type=ord_type) }}" id="bs-search-clear">{{ t('btnClear') }}</a>{% endif %}
+  </div>
+  {% if q %}<p class="cap-note tight" id="bs-search-note">{{ t('bsSearchResult', n=orders|length, q=q) }}</p>{% endif %}
+</form>
 <div class="chips mt14" id="bs-type-filter-chips">
-  <a class="chip bs-type-chip{% if not ord_type %} active{% endif %}" href="{{ url_for('service_buysell.order_list', status=status) }}">{{ t('filterAll') }}</a>
+  <a class="chip bs-type-chip{% if not ord_type %} active{% endif %}" href="{{ url_for('service_buysell.order_list', status=status, q=q or None) }}">{{ t('filterAll') }}</a>
   {% for code in ['BY', 'SL'] %}
-  <a class="chip bs-type-chip{% if ord_type == code %} active{% endif %}" href="{{ url_for('service_buysell.order_list', status=status, type=code) }}" data-bs-type-filter="{{ code }}">{{ t(type_keys[code]) }}</a>
+  <a class="chip bs-type-chip{% if ord_type == code %} active{% endif %}" href="{{ url_for('service_buysell.order_list', status=status, type=code, q=q or None) }}" data-bs-type-filter="{{ code }}">{{ t(type_keys[code]) }}</a>
   {% endfor %}
 </div>
 <div class="chips" id="bs-status-filter-chips">
-  <a class="chip bs-status-chip{% if not status %} active{% endif %}" href="{{ url_for('service_buysell.order_list', type=ord_type) }}">{{ t('filterAll') }}</a>
+  <a class="chip bs-status-chip{% if not status %} active{% endif %}" href="{{ url_for('service_buysell.order_list', type=ord_type, q=q or None) }}">{{ t('filterAll') }}</a>
   {% for s in filters %}
-  <a class="chip bs-status-chip{% if status == s %} active{% endif %}" href="{{ url_for('service_buysell.order_list', status=s, type=ord_type) }}" data-bs-status-filter="{{ s }}">{{ t(status_keys[s]) }}</a>
+  <a class="chip bs-status-chip{% if status == s %} active{% endif %}" href="{{ url_for('service_buysell.order_list', status=s, type=ord_type, q=q or None) }}" data-bs-status-filter="{{ s }}">{{ t(status_keys[s]) }}</a>
   {% endfor %}
 </div>
 

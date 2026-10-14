@@ -15,6 +15,7 @@ ORDER_PARAMS = ("no", "name", "time", "date", "rice_kg", "pay", "branch")
 # MSG_ID: (default name key, default text key (Thai), parameters)
 MESSAGES = (
     ("ML_FINISHED", "lmName_ML_FINISHED", "lmDefault_ML_FINISHED", ORDER_PARAMS),
+    ("ML_FINISHED_DELIVERY", "lmName_ML_FINISHED_DELIVERY", "lmDefault_ML_FINISHED_DELIVERY", ORDER_PARAMS + ("address",)),
     ("ML_DELIVERY", "lmName_ML_DELIVERY", "lmDefault_ML_DELIVERY", ORDER_PARAMS + ("address",)),
     ("LN_WELCOME", "lmName_LN_WELCOME", "lnrWelcome", ()),
     ("LN_WELCOME_BACK", "lmName_LN_WELCOME_BACK", "lnrWelcomeBack", ("name",)),

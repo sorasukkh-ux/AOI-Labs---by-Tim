@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="th"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex">
+<title>AOI {{ c.CUST_CODE }}</title><link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}"></head>
+<body class="cust-card-page">
+<div class="cc-tools">
+  <form method="get" class="cc-copies"><label for="cc-n">{{ t('custCardCopies') }}</label>
+    <select id="cc-n" name="n" data-autosubmit>{% for n in (1, 2, 4, 6, 8, 10) %}<option value="{{ n }}"{% if n == copies %} selected{% endif %}>{{ n }}</option>{% endfor %}</select></form>
+  <button class="action primary" type="button" data-print>{{ t('custCardPrint') }}</button>
+</div>
+<div class="cc-sheet">
+{% for i in range(copies) %}
+<div class="cust-card">
+  <div class="cc-head"><img src="{{ url_for('static', filename='img/logo.png') }}" alt="AOI"><div><b>AOI Labs</b><small>{{ t('custCardSub') }}</small></div></div>
+  <div class="cc-body">
+    <div class="cc-info">
+      <p class="cc-name">{{ c.CUST_NAME }}</p>
+      <p class="cc-code">{{ c.CUST_CODE }}</p>
+      {% if mobile %}<p class="cc-phone">{{ mobile }}</p>{% endif %}
+      <p class="cc-note">{{ t('custCardNote') }}</p>
+    </div>
+    <div class="od-qr cc-qr" data-qr="{{ c.CUST_CODE }}"></div>
+  </div>
+</div>
+{% endfor %}
+</div>
+<script src="{{ url_for('static', filename='js/qr.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/label.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/poster.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/card.js') }}" defer></script>
+</body></html>

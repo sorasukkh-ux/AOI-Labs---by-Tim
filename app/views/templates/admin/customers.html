@@ -34,6 +34,13 @@
     {% if can_edit and customer %}<a class="action" id="cust-edit-btn" href="{{ url_for('admin_customers.customer_view', code=customer.CUST_CODE, edit=1, next=next_url or None) }}">{{ t('btnEdit') }}</a>
     {% else %}<button class="action" id="cust-edit-btn" type="button" disabled>{{ t('btnEdit') }}</button>{% endif %}
   </div>
+  {% if customer %}
+  <div class="cust-qr-row mb14" id="cust-qr">
+    <div class="od-qr cust-qr-small" data-qr="{{ customer.CUST_CODE }}"></div>
+    <div><p class="card-title sub">{{ t('custQrTitle') }}</p><p class="cap-note tight">{{ t('custQrNote') }}</p>
+      <a class="action" id="cust-card-btn" href="{{ url_for('admin_customers.customer_card', code=customer.CUST_CODE) }}" target="_blank" rel="noopener">&#129706; {{ t('custQrPrint') }}</a></div>
+  </div>
+  {% endif %}
   {% if can_delete and customer %}
   <form method="post" action="{{ url_for('admin_customers.customer_delete', code=customer.CUST_CODE) }}" class="mb14" id="cust-delete-form">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

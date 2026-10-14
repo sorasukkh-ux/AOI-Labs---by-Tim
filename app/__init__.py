@@ -94,7 +94,10 @@ def create_app(overrides=None):
         response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
         response.headers.setdefault("Referrer-Policy", "same-origin")
         response.headers.setdefault("Content-Security-Policy",
-                                    "default-src 'self'; img-src 'self' data:; frame-ancestors 'self'; form-action 'self'")
+                                    "default-src 'self'; img-src 'self' data:; frame-ancestors 'self'; form-action 'self'; "
+                                    # update 34: the SCADA fonts (Chakra Petch, IBM Plex Sans Thai) from Google Fonts;
+                                    # without internet the system font is used
+                                    "style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com")
         if request.endpoint != "static":
             response.headers.setdefault("Cache-Control", "no-store")
         return response

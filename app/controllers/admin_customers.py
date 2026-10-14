@@ -53,6 +53,19 @@ def customer_list():
     return _page("view")
 
 
+@bp.route("/<code>/card")
+@require(MENU)
+def customer_card(code):
+    """Update 33: the customer's QR card (business-card size, printable). The QR holds the customer code, so a
+    scanner or the camera on Customer Service / Customer Registration chooses the customer at once."""
+    customer = Customer.find(code)
+    if not customer or customer.get("CUST_STATUS") == "D":
+        abort(404)
+    from ..models import phone
+    return render_template("admin/customer_card.html", c=customer, mobile=phone.of(customer),
+                           copies=max(1, min(10, request.args.get("n", 1, type=int))))
+
+
 @bp.route("/check.json")
 @require(MENU)
 def customer_check():

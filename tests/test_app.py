@@ -1985,14 +1985,16 @@ class Update21(Base):
         ord_id = self.new_order(ORDER_TYPE="D")["ORD_ID"]
         for status in ("I", "F", "D"):
             self.set_status(ord_id, status)
-        self.assertEqual(self.notes(ord_id), [])                          # not at Finished: the time is not known yet
+        (milled,) = self.notes(ord_id)                                       # update 33: "milled" at Finished
+        self.assertEqual((milled["NOTIFY_KIND"], milled["ERROR"]), ("finished_delivery", "lnNotConfigured"))
+        self.assertIn("แจ้งเวลาจัดส่ง", milled["NOTIFY_MESSAGE"])
         with self.app.app_context():
             col("AOIMS_CUSTOMER").update_one({"CUST_CODE": "C261001001"}, {"$set": {"LINE_USER_ID": self.USER}})
         with mock.patch.dict(os.environ, {"AOI_LINE_CHANNEL_TOKEN": "token"}), \
                 mock.patch("app.models.notify._push", return_value="HTTP 400 Invalid reply token") as push:
             self.post("/service/milling/%s/delivery" % ord_id, {"DELIVERY_ADDRESS": "9 New Road", "DELIVERY_DISTANCE": "10",
                                                                "DELIVERY_ARRIVAL_TIME": "2026-10-09T15:30"})
-        (note,) = self.notes(ord_id)
+        note = sorted(self.notes(ord_id), key=lambda n: n["NOTIFY_ID"])[-1]
         self.assertEqual(note["NOTIFY_FLG"], "9")
         self.assertIn("15:30", push.call_args[0][1])
         self.assertIn("จัดส่ง", note["NOTIFY_MESSAGE"])
@@ -2700,6 +2702,7 @@ class Update31(Base):
         self.assertEqual((mine["F2-MOTOR"]["SHIFT"], mine["F2-MOTOR2"]["SHIFT"]), ("DAY", "NIGHT"))
         self.assertEqual(mine["F2-INBOUND"]["FEEDS_TO"], "F2-MOTOR,F2-MOTOR2")
         self.assertEqual(mine["F2-SORT"]["FEEDS_TO"], "F2-INBOUND")
+        self.assertEqual(mine["F2-PACK"]["FEEDS_TO"], "F2-AMR")                     # update 34
         self.assertEqual(mine["F2-MOTOR2"]["RATED_AMP"], 30.0)
         self.assertNotIn("F2-HUSK", mine)                                       # the update 9 samples are gone
         self.assertEqual(re.findall(r'data-machine="([^"]+)"', self.text("/automation/hardware")), ["F2-MOTOR"])
@@ -2709,6 +2712,9 @@ class Update31(Base):
         page = self.text("/automation/scada")
         self.assertIn('id="scada-canvas"', page)
         self.assertIn("scada.js", page)
+        self.assertIn('id="scada-trend-hz"', page)                              # update 34: the control-room design
+        self.assertNotIn(' style="', page.split('id="scada"')[1].split("</section>")[0])   # no inline styles (CSP)
+        self.assertIn("fonts.googleapis.com", self.client.get("/automation/scada").headers["Content-Security-Policy"])
         data = self.client.get("/automation/scada.json").get_json()
         nodes = {n["id"]: n for n in data["nodes"]}
         self.assertEqual((nodes["F2-MOTOR"]["status"], nodes["F2-MOTOR"]["active"]), ("O", True))
@@ -2730,6 +2736,37 @@ class Update31(Base):
         self.assertEqual(self.machine("F2-PACK")["SCADA_COL"], 4)                # out of range: refused
         reply = self.post("/automation/hardware", {"action": "command", "MACHINE_ID": "F2-MOTOR", "CMD": "START", "back": "scada"})
         self.assertTrue(reply.headers["Location"].endswith("/automation/scada"))
+
+
+class Update33(Base):
+    """LINE at Finished for delivery orders, customer QR card, linked buying/selling orders search."""
+
+    def setUp(self):
+        super().setUp()
+        self.login("admin")
+        self.client.get("/lang/en")
+
+    def test_customer_qr_card(self):
+        page = self.text("/admin/customers/C261001001")
+        self.assertIn('data-qr="C261001001"', page)
+        card = self.text("/admin/customers/C261001001/card?n=4")
+        self.assertEqual(card.count('class="cust-card"'), 4)
+        self.assertIn("+66 81-234-5678", card)
+        self.assertEqual(self.client.get("/admin/customers/C999999999/card").status_code, 404)
+
+    def test_finished_opens_the_linked_buying_orders(self):
+        order = self.new_order(BRAN_ORDER="2")
+        self.set_status(order["ORD_ID"], "I")
+        response = self.set_status(order["ORD_ID"], "F")
+        page = self.client.get(response.headers["Location"]).get_data(as_text=True)
+        self.assertIn("/service/buysell/?q=" + order["ORD_ID"], page)
+        self.assertIn("data-return-url", page)
+        other = self.new_order(BRAN_ORDER="1")
+        found = self.text("/service/buysell/?q=" + order["ORD_ID"])
+        self.assertEqual(len(re.findall(r'class="status-card" data-order=', found)), 1)
+        self.assertNotIn(other["REF_BUYING_ORDER"], found)
+        self.assertIn('value="%s"' % order["ORD_ID"], found)
+        self.assertEqual(len(re.findall(r'class="status-card" data-order=', self.text("/service/buysell/?q=" + order["QR_ID"]))), 1)
 
 
 if __name__ == "__main__":
