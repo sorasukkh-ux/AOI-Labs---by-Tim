@@ -43,12 +43,14 @@
   function say(msg, cls) { status.textContent = msg; status.className = "qs-status" + (cls ? " " + cls : ""); }
 
   var frozen = [];
-  function freeze(on) {
+  function freeze(on) {                                // all but the path from <body> to the scanner (update 40)
     if (on) {
-      Array.prototype.forEach.call(document.body.children, function (node) {
-        if (node === box || node.tagName === "SCRIPT" || node.inert) return;
-        node.inert = true; frozen.push(node);
-      });
+      for (var keep = box; keep && keep !== document.body && keep.parentElement; keep = keep.parentElement) {
+        Array.prototype.forEach.call(keep.parentElement.children, function (node) {
+          if (node === keep || node.tagName === "SCRIPT" || node.inert) return;
+          node.inert = true; frozen.push(node);
+        });
+      }
     } else { frozen.forEach(function (node) { node.inert = false; }); frozen = []; }
   }
   function open(input) {

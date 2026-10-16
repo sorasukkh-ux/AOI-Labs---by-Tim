@@ -191,7 +191,7 @@
   function hidden(form, name, value) { var i = h("input", null, form); i.type = "hidden"; i.name = name; i.value = value; }
   function commandForm(n, cmd, label, cls, confirmText, extra) {
     var f = h("form", "scada-cmd");
-    f.method = "post"; f.action = root.getAttribute("data-command-url");
+    f.method = "post"; f.action = root.getAttribute("data-command-url"); f.setAttribute("data-ajax", "");
     hidden(f, "csrf_token", root.getAttribute("data-csrf")); hidden(f, "action", "command"); hidden(f, "back", "scada");
     hidden(f, "MACHINE_ID", n.id); hidden(f, "CMD", cmd);
     if (extra) extra(f);
@@ -354,6 +354,40 @@
     dot.className = "scada-dot" + (stale ? " lost" : "");
     dot.title = stale ? text.lost : "";
   }
+  // update 40: commands go by fetch, so the page (and full screen) stays; a short message shows the answer
+  var toast = null, toastTimer = null;
+  function say(msg, bad) {
+    if (!toast) { toast = h("div", "scada-toast", root); toast.setAttribute("role", "status"); }
+    toast.textContent = msg; toast.className = "scada-toast show" + (bad ? " bad" : "");
+    clearTimeout(toastTimer); toastTimer = setTimeout(function () { toast.className = "scada-toast"; }, 4000);
+  }
+  document.addEventListener("submit", function (e) {
+    var f = e.target;
+    if (!f.classList || !f.classList.contains("scada-cmd") || !window.fetch) return;
+    e.preventDefault();
+    var body = new FormData(f);
+    if (e.submitter && e.submitter.name) body.append(e.submitter.name, e.submitter.value);
+    f.querySelectorAll("button").forEach(function (b) { b.disabled = true; });
+    // getAttribute: the form has an input named "action", so f.action is that input, not the address
+    fetch(f.getAttribute("action"), { method: "POST", body: body, credentials: "same-origin", headers: { "X-AOI-Fetch": "1" } })
+      .then(function (r) { return r.json().catch(function () { return { ok: false, message: text.lost }; }); })
+      .catch(function () { return { ok: false, message: text.lost }; })
+      .then(function (res) {
+        say(res.message || "", !res.ok);
+        if (f.parentElement === document.body) f.remove();      // the copy kept alive during the question
+        panelSig = null;                                       // draw the buttons again with the new state
+        refreshNow();
+      });
+  });
+  function refreshNow() {
+    fetch(root.getAttribute("data-url"), { credentials: "same-origin" }).then(function (r) { return r.json(); }).then(function (d) {
+      if (!d.ok) return;
+      data = d; canCommand = !!d.can_command; lastOk = Date.now();
+      draw(); figures(); monitors();
+      if (selected) refreshPanel();
+    }).catch(function () {});
+  }
+
   function refresh() {
     fetch(root.getAttribute("data-url"), { credentials: "same-origin" }).then(function (r) { return r.json(); }).then(function (d) {
       if (!d.ok) return;

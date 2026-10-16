@@ -14,18 +14,34 @@
 
   // update 37: while the pop-up is open the page behind it is "inert" - the iPad keyboard arrows (next / previous
   // field) and Tab cannot jump to a drop-down behind the pop-up (it opened the priority list over Start milling)
+  // update 40: everything except the path from <body> to the pop-up, so it also works when the pop-up has been
+  // moved into a full-screen element (SCADA full screen)
   function freeze(on) {
     if (on) {
       if (inerted.length) return;
-      Array.prototype.forEach.call(document.body.children, function (node) {
-        if (node === overlay || node.id === "qr-scan-overlay" || node.tagName === "SCRIPT" || node.inert) return;
-        node.inert = true; node.setAttribute("aria-hidden", "true"); inerted.push(node);
-      });
+      for (var keep = overlay; keep && keep !== document.body && keep.parentElement; keep = keep.parentElement) {
+        Array.prototype.forEach.call(keep.parentElement.children, function (node) {
+          if (node === keep || node.id === "qr-scan-overlay" || node.id === "app-modal-overlay" || node.tagName === "SCRIPT" || node.inert) return;
+          node.inert = true; node.setAttribute("aria-hidden", "true"); inerted.push(node);
+        });
+      }
     } else {
       inerted.forEach(function (node) { node.inert = false; node.removeAttribute("aria-hidden"); });
       inerted = [];
     }
   }
+
+  // update 40: in full screen only the full-screen element is drawn - the pop-ups (this one and the camera scanner)
+  // move into it, and back to <body> when full screen ends; otherwise the ON / OFF confirmation was invisible
+  function hostOverlays() {
+    var host = document.fullscreenElement || document.webkitFullscreenElement || document.body;
+    [overlay, document.getElementById("qr-scan-overlay")].forEach(function (node) {
+      if (node && node.parentElement !== host) host.appendChild(node);
+    });
+    if (overlay.classList.contains("show")) { freeze(false); freeze(true); }
+  }
+  document.addEventListener("fullscreenchange", hostOverlays);
+  document.addEventListener("webkitfullscreenchange", hostOverlays);
 
   function close(result) {
     freeze(false);
@@ -125,7 +141,8 @@
       if (!ok) return;
       if (button.name) setHidden(form, button.name, button.value);
       if (!form.isConnected) { form.hidden = true; document.body.appendChild(form); }   // redrawn meanwhile: still sent
-      form.submit();
+      // update 40: a form marked data-ajax is sent by its page's script (submit event), e.g. the SCADA in full screen
+      if (form.hasAttribute("data-ajax") && form.requestSubmit) form.requestSubmit(); else form.submit();
     });
   });
   // <select data-autosubmit> sends its form when the value changes (after any question on the chosen option).

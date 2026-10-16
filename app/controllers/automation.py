@@ -88,6 +88,12 @@ def hardware():
                 if cmd.get("CMD_VALUE") is not None:
                     label += " %g Hz " % cmd["CMD_VALUE"]
                 return {"cmd": label, "name": machine["MACHINE_NAME"]}
+            if request.headers.get("X-AOI-Fetch") == "1":     # update 40: the SCADA sends without leaving the page (full screen)
+                try:
+                    result = send()
+                except ValidationError as error:
+                    return jsonify({"ok": False, "message": t(error.key, **error.params)}), 422
+                return jsonify({"ok": True, "message": t("msgCommandSent", **result)})
             return _run(send, "msgCommandSent", "automation.scada" if request.form.get("back") == "scada" else "automation.hardware")
         if action in ("save", "key"):
             if not can(HARDWARE, "create"):

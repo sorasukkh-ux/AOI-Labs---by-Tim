@@ -393,6 +393,11 @@ Each machine's place (SCADA column 0-5, row 0-3), the machines it feeds and its 
 Machine setup; turning on "In use" there adds it to Hardware Control. The sample machines of update 9 (husker,
 whitener, polisher, grader) are removed when nobody set them up.
 
+
+**Full screen (update 40):** the ON / OFF confirmation and the camera scanner now show inside full screen, and ON, OFF,
+speed and Reset are sent without reloading the page, so the SCADA stays in full screen; a short message at the top shows
+the answer.
+
 ## Automation and devices
 
 The Automation screens work without any hardware: operators set a machine's status by hand and type

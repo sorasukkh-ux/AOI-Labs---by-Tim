@@ -82,10 +82,10 @@ class Base(unittest.TestCase):
     def logout(self):
         self.client.post("/logout", data={"csrf_token": self.token("/")})
 
-    def post(self, path, data=None, token_from="/"):
+    def post(self, path, data=None, token_from="/", headers=None):
         data = dict(data or {})
         data["csrf_token"] = self.token(token_from)
-        return self.client.post(path, data=data)
+        return self.client.post(path, data=data, headers=headers or {})
 
     def text(self, path):
         return self.client.get(path).get_data(as_text=True)
@@ -2892,6 +2892,28 @@ class Update39(Base):
         css = self.text("/static/css/app.css")
         self.assertIn("body:not(.cust-card-page):not(.line-poster) * { visibility: hidden; }", css)
         self.assertNotIn("\n  body * { visibility: hidden; }", css)
+
+
+class Update40(Base):
+    """SCADA commands by fetch (the page and its full screen stay): JSON answer."""
+
+    def setUp(self):
+        super().setUp()
+        self.login("admin")
+        self.client.get("/lang/en")
+
+    def test_command_answers_json_for_the_scada(self):
+        page = self.text("/automation/scada")
+        self.assertIn("data-command-url", page)
+        r = self.post("/automation/hardware", {"action": "command", "back": "scada", "MACHINE_ID": "F2-MOTOR", "CMD": "START"},
+                      "/automation/scada", headers={"X-AOI-Fetch": "1"})
+        body = r.get_json()
+        self.assertIsNotNone(body)
+        self.assertIn("ok", body)
+        self.assertTrue(body["message"])
+        r = self.post("/automation/hardware", {"action": "command", "back": "scada", "MACHINE_ID": "F2-MOTOR", "CMD": "START"},
+                      "/automation/scada")
+        self.assertEqual(r.status_code, 302)                                   # the plain form still redirects
 
 
 if __name__ == "__main__":
