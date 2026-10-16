@@ -992,3 +992,7 @@ html.qs-open, html.qs-open body { overflow: hidden; }
 .qs-status.err { color: #fecaca; }
 .qs-cancel { align-self: center; min-width: 160px; }
 @media (prefers-reduced-motion: reduce) { .qs-frame b { animation: none; top: 50%; } }
+.field-row.has-scan { display: grid; grid-template-columns: 1fr auto; gap: 6px 8px; align-items: center; }
+.field-row.has-scan > .field-label { grid-column: 1 / -1; margin-bottom: 0; }
+.field-row.has-scan > input { min-width: 0; }
+.field-row.has-scan > .scan-btn { height: 100%; min-height: 40px; }

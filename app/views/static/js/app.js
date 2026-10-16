@@ -10,9 +10,25 @@
   var messageEl = document.getElementById("app-modal-message"), inputEl = document.getElementById("app-modal-input");
   var yesBtn = document.getElementById("app-modal-yes"), noBtn = document.getElementById("app-modal-no");
   var actionsEl = document.getElementById("app-modal-actions");
-  var pending = null;
+  var pending = null, inerted = [];
+
+  // update 37: while the pop-up is open the page behind it is "inert" - the iPad keyboard arrows (next / previous
+  // field) and Tab cannot jump to a drop-down behind the pop-up (it opened the priority list over Start milling)
+  function freeze(on) {
+    if (on) {
+      if (inerted.length) return;
+      Array.prototype.forEach.call(document.body.children, function (node) {
+        if (node === overlay || node.id === "qr-scan-overlay" || node.tagName === "SCRIPT" || node.inert) return;
+        node.inert = true; node.setAttribute("aria-hidden", "true"); inerted.push(node);
+      });
+    } else {
+      inerted.forEach(function (node) { node.inert = false; node.removeAttribute("aria-hidden"); });
+      inerted = [];
+    }
+  }
 
   function close(result) {
+    freeze(false);
     overlay.classList.remove("show");
     actionsEl.hidden = false;
     var done = pending; pending = null;
@@ -34,6 +50,7 @@
       yesBtn.textContent = ask && !options.input ? overlay.getAttribute("data-yes") : overlay.getAttribute("data-ok");
       noBtn.textContent = options.input ? overlay.getAttribute("data-cancel") : overlay.getAttribute("data-no");
       overlay.classList.add("show");
+      freeze(true);
       var first = options.node && options.node.querySelector("input:not([type=hidden]), select");
       (first || (options.input ? inputEl : yesBtn)).focus();
     });

@@ -42,9 +42,19 @@
 
   function say(msg, cls) { status.textContent = msg; status.className = "qs-status" + (cls ? " " + cls : ""); }
 
+  var frozen = [];
+  function freeze(on) {
+    if (on) {
+      Array.prototype.forEach.call(document.body.children, function (node) {
+        if (node === box || node.tagName === "SCRIPT" || node.inert) return;
+        node.inert = true; frozen.push(node);
+      });
+    } else { frozen.forEach(function (node) { node.inert = false; }); frozen = []; }
+  }
   function open(input) {
     target = input; last = null;
-    box.classList.add("show"); box.classList.remove("done");
+    if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+    box.classList.add("show"); box.classList.remove("done"); freeze(true);
     document.documentElement.classList.add("qs-open");
     if (!window.isSecureContext) { say(text("https"), "err"); return; }
     if (!canCamera) { say(text("nocam"), "err"); return; }
@@ -66,7 +76,7 @@
     clearInterval(timer); timer = null;
     if (stream) stream.getTracks().forEach(function (t) { t.stop(); });
     stream = null; video.srcObject = null;
-    box.classList.remove("show");
+    box.classList.remove("show"); freeze(false);
     document.documentElement.classList.remove("qs-open");
   }
   function tick() {
@@ -106,7 +116,7 @@
     } else {
       input.dispatchEvent(new Event("change", { bubbles: true }));
     }
-    input.focus();
+    // no focus() here: on the iPad it opens the keyboard and its next / previous field arrows
   }
   box.addEventListener("click", function (e) { if (e.target.closest("[data-scan-close]")) close(); });
   document.addEventListener("keydown", function (e) { if (e.key === "Escape" && box.classList.contains("show")) close(); });
