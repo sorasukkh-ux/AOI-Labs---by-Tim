@@ -136,6 +136,38 @@
     draw();
   }
 
+  // update 39: full screen like the SCADA (button, or double-click / double-tap anywhere). The button shows while
+  // the mouse / remote pointer moves and hides after 4 seconds, so it is not on the TV all day.
+  var fullBtn = document.getElementById("tvb-full"), idle = null, de = document.documentElement;
+  function isFull() { return !!(document.fullscreenElement || document.webkitFullscreenElement); }
+  function toggleFull() {
+    try {
+      if (isFull()) { (document.exitFullscreen || document.webkitExitFullscreen).call(document); }
+      else if (de.requestFullscreen) { de.requestFullscreen(); }
+      else if (de.webkitRequestFullscreen) { de.webkitRequestFullscreen(); }
+    } catch (e) { /* not allowed here */ }
+  }
+  function fullLabel() {
+    if (!fullBtn) return;
+    fullBtn.lastChild.textContent = fullBtn.getAttribute(isFull() ? "data-off" : "data-on");
+  }
+  function wake() {
+    document.body.className = "tvb awake";
+    clearTimeout(idle);
+    idle = setTimeout(function () { document.body.className = "tvb"; }, 4000);
+  }
+  if (fullBtn) {
+    if (!(de.requestFullscreen || de.webkitRequestFullscreen)) fullBtn.style.display = "none";
+    fullBtn.onclick = function (e) { e.stopPropagation(); toggleFull(); };
+  }
+  document.addEventListener("dblclick", toggleFull);
+  document.addEventListener("mousemove", wake);
+  document.addEventListener("touchstart", wake);
+  document.addEventListener("keydown", function (e) { wake(); if (e.key === "f" || e.key === "F") toggleFull(); });
+  document.addEventListener("fullscreenchange", function () { fullLabel(); fit(); });
+  document.addEventListener("webkitfullscreenchange", function () { fullLabel(); fit(); });
+  wake();
+
   window.addEventListener("resize", fit);
   fit(); syncClock(); clock(); draw();
   setInterval(clock, 1000);

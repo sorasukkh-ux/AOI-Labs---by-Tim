@@ -19,6 +19,7 @@
     <img src="{{ url_for('static', filename='img/logo.png') }}" alt="AOI">
     <div class="tvb-brand"><h1><span id="tvb-branch">{{ data.branch_name }}</span> · {{ text.tvbStatus.th }}</h1>
       <p>{{ data.branch_name_en }} · {{ text.tvbStatus.en }} &nbsp;·&nbsp; {{ text.tvbScan.th }}</p></div>
+    <button type="button" class="tvb-full" id="tvb-full" data-on="{{ text.tvbFull.th }} · {{ text.tvbFull.en }}" data-off="{{ text.tvbFullExit.th }} · {{ text.tvbFullExit.en }}"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg><span>{{ text.tvbFull.th }} · {{ text.tvbFull.en }}</span></button>
     <div class="tvb-motor" id="tvb-motor" hidden><i></i><span class="l">{{ text.tvbMotor.th }}</span><b id="tvb-motor-v"></b></div>
     <div class="tvb-live" id="tvb-live"><i></i>LIVE</div>
     <div class="tvb-clock"><div class="t" id="tvb-time">--:--</div><div class="d" id="tvb-date"></div></div>

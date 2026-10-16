@@ -107,6 +107,11 @@
     node.addEventListener("click", function (e) { if (e.target.closest("[data-modal-close]")) window.AOIModal.close(); });
     return window.AOIModal.form(node);
   }
+  // update 39: <button data-open-form="template-id"> opens that form in the pop-up (e.g. Edit items of a take-home order)
+  document.addEventListener("click", function (event) {
+    var opener = event.target.closest("button[data-open-form]");
+    if (opener) { event.preventDefault(); openForm(opener.getAttribute("data-open-form")); }
+  });
   document.addEventListener("click", function (event) {
     var button = event.target.closest("button[data-confirm], button[data-prompts]");
     if (!button || !button.form) return;

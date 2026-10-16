@@ -27,7 +27,7 @@ body.tvb { color: var(--text); font-family: var(--body); cursor: none; }
 .tvb-motor.fault { border-color: #f87171; box-shadow: 0 0 26px rgba(248,113,113,.45); animation: tvb-alarm 1s steps(2) infinite; }
 .tvb-motor.fault i { background: #f87171; } .tvb-motor.fault b { color: #fecaca; }
 @keyframes tvb-alarm { 50% { box-shadow: none; } }
-.tvb-motor[hidden] + .tvb-live { margin-left: auto; }
+.tvb-motor[hidden] + .tvb-live { margin-left: 0; }
 .tvb-live { display: flex; align-items: center; gap: 10px; font-family: var(--head); font-size: 20px; font-weight: 700; letter-spacing: .14em; color: #a7f3d0; }
 .tvb-live i { width: 12px; height: 12px; border-radius: 50%; background: var(--ready); box-shadow: 0 0 0 5px rgba(52,211,153,.2), 0 0 14px var(--ready); animation: tvb-pulse 2s ease-in-out infinite; }
 .tvb-live.lost { color: #fecaca; } .tvb-live.lost i { background: #f87171; box-shadow: 0 0 14px #f87171; animation: none; }
@@ -92,3 +92,12 @@ body.tvb { color: var(--text); font-family: var(--body); cursor: none; }
 .tvb-denied img { height: 90px; background: #fff; border-radius: 14px; padding: 4px 8px; }
 .tvb-denied h1 { font-family: var(--head); font-size: 40px; } .tvb-denied p { font-size: 22px; color: var(--sub); }
 @media (prefers-reduced-motion: reduce) { .tvb-col.mill h2 .ico svg, .tvb-live i, .tvb-motor.fault, .tvb-row.new { animation: none; } }
+
+/* full screen button (update 39): shown while the pointer moves */
+.tvb-full { margin-left: auto; flex: 0 0 auto; display: flex; align-items: center; gap: 10px; padding: 12px 20px;
+  border-radius: 999px; border: 1.5px solid rgba(96,165,250,.6); background: rgba(8,24,60,.85); color: #dbeafe; font: 600 18px var(--body);
+  cursor: pointer; box-shadow: 0 0 22px rgba(56,189,248,.3); opacity: 0; pointer-events: none; transition: opacity .3s; }
+body.tvb.awake { cursor: default; }
+body.tvb.awake .tvb-full { opacity: 1; pointer-events: auto; }
+.tvb-full:hover, .tvb-full:focus-visible { background: rgba(14,60,130,.95); outline: none; border-color: #7dd3fc; }
+.tvb-full + .tvb-motor { margin-left: 0; }

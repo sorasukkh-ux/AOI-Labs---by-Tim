@@ -203,6 +203,13 @@ class MillingOrder:
         col(cls.LOG).insert_one(entry)
 
     @classmethod
+    def follow_take_home(cls, order, values, ope_user):
+        """Update 39: the take-home order was maintained on the Buying/Selling Order List - the milling order's
+        BRAN_ORDER / BROKE_ORDER and EST_PAY_BRAN / EST_PAY_BROKE follow (any status: the receipt must agree)."""
+        allowed = {k: v for k, v in values.items() if k in ("BRAN_ORDER", "BROKE_ORDER", "EST_PAY_BRAN", "EST_PAY_BROKE")}
+        return cls._save(order, allowed, ope_user) if allowed else order
+
+    @classmethod
     def _save(cls, order, values, ope_user):
         values.update(audit_update(ope_user))
         col(cls.COL).update_one({"ORD_ID": order["ORD_ID"]}, {"$set": values})

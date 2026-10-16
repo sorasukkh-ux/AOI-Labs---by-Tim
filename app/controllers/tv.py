@@ -8,7 +8,7 @@ from ..models import variety as var
 bp = Blueprint("tv", __name__, url_prefix="/tv")
 LABELS = ("tvbReady", "tvbMilling", "tvbQueue", "tvbDoneAt", "tvbFinishAt", "tvbReceive", "tvbDeliver", "tvbArrive",
           "tvbTomorrow", "tvbMore", "tvbPage", "tvbBuy", "tvbSell", "tvbUnit", "tvbUpdated", "tvbEvery", "tvbNone",
-          "tvbStatus", "tvbScan", "tvbOffline", "tvbKg", "tvbMotor", "tvbMotorOn", "tvbMotorOff")
+          "tvbStatus", "tvbScan", "tvbOffline", "tvbKg", "tvbMotor", "tvbMotorOn", "tvbMotorOff", "tvbFull", "tvbFullExit")
 DAYS_TH = ("จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์", "เสาร์", "อาทิตย์")
 MONTHS_TH = ("ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค.")
 

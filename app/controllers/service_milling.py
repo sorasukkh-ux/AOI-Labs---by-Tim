@@ -13,6 +13,7 @@ from ..models.mill_yield import MillYield
 from ..models import notify, mill_event, phone, line_link
 from ..models.milling_order import MillingOrder, PRIORITIES
 from ..models.rules import status_flow as flow
+from ..models.variety import mat_name
 from ..security import can, current_user, operating_branch, require
 from ..models.branch import Branch
 from .service_buysell import INV_STATUS_KEYS
@@ -211,6 +212,10 @@ def _decorate(orders, details=False):
         if details:
             order["events"] = mill_event.for_order(order["ORD_ID"])
             order["linked"] = BuySellOrder.for_milling(order["ORD_ID"])
+            for bso in order["linked"]:                      # update 39: one order, a line per SKU
+                lines = [l for l in BuySellOrder.items_of(bso) if l["ORD_QTY"] > 0] or BuySellOrder.items_of(bso)[:1]
+                bso["mat_text"] = ", ".join(mat_name(l["MAT_CODE"]) for l in lines)
+                bso["qty_text"] = " + ".join("%s kg" % ("%.2f" % l["ORD_QTY"]) for l in lines)
             order["stock"] = Inventory.for_order(order["BRANCH_ID"], order["ORD_ID"])
     return orders
 

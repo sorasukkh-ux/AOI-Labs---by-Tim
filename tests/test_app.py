@@ -638,52 +638,107 @@ class Update4(Base):
         self.assertEqual(shown, [orders[n] for n in expected])
 
     def test_take_home_bran_and_broken_become_selling_orders(self):
+        """Update 39: ONE selling order for the milling order, a line per SKU."""
         order = self.new_order(BRAN_ORDER="2", BROKE_ORDER="1")
         ord_id = order["ORD_ID"]
         linked = self.bs()
-        self.assertEqual(len(linked), 2)
-        bran, broken = sorted(linked, key=lambda o: o["MAT_CODE"])
-        self.assertEqual(order["REF_BUYING_ORDER"], ",".join(sorted(o["ORD_ID"] for o in linked)))
-        self.assertRegex(bran["ORD_ID"], r"^SL-\d{8}-0001$")
-        self.assertEqual((bran["ORD_TYPE"], bran["ORD_STATUS"], bran["MAT_CODE"], bran["ORD_QTY"], bran["ORD_AMOUNT"], bran["REF_ORD_ID"], bran["CUST_CODE"]),
-                         ("SL", "O", "BRAN", 2.0, 21.6, ord_id, "C261001001"))
-        self.assertEqual((broken["MAT_CODE"], broken["ORD_QTY"], broken["ORD_AMOUNT"], broken["PRICING_UINT"]), ("BROKEN", 1.0, 11.07, 11.07))
-        self.assertEqual(len(self.db("AOILOG_ORDBUYSELL")), 2)
+        self.assertEqual(len(linked), 1)
+        sl = linked[0]
+        self.assertEqual(order["REF_BUYING_ORDER"], sl["ORD_ID"])
+        self.assertRegex(sl["ORD_ID"], r"^SL-\d{8}-0001$")
+        self.assertEqual((sl["ORD_TYPE"], sl["ORD_STATUS"], sl["MAT_CODE"], sl["ORD_QTY"], sl["ORD_AMOUNT"], sl["REF_ORD_ID"], sl["CUST_CODE"]),
+                         ("SL", "O", "BRAN", 3.0, 32.67, ord_id, "C261001001"))
+        lines = {l["MAT_CODE"]: l for l in sl["ORD_ITEMS"]}
+        self.assertEqual((lines["BRAN"]["ORD_QTY"], lines["BRAN"]["ORD_AMOUNT"]), (2.0, 21.6))
+        self.assertEqual((lines["BROKEN"]["ORD_QTY"], lines["BROKEN"]["ORD_AMOUNT"], lines["BROKEN"]["PRICING_UINT"]), (1.0, 11.07, 11.07))
+        self.assertEqual(len(self.db("AOILOG_ORDBUYSELL")), 1)
         page = self.text("/service/buysell/")
         self.assertIn("From Milling #%s" % order["QR_ID"], page)
+        self.assertIn("Rice bran 2 kg, Broken rice (White) 1 kg", page)
         self.assertIn("Can be prepared when milling order #%s is finished" % order["QR_ID"], page)
         # cannot be prepared before the milling is finished
-        self.bs_status(bran["ORD_ID"], "P", LOC_ID="01-002-005")
-        self.assertEqual(self.bs(bran["ORD_ID"])["ORD_STATUS"], "O")
+        self.bs_status(sl["ORD_ID"], "P", LOC_ID="01-002-005")
+        self.assertEqual(self.bs(sl["ORD_ID"])["ORD_STATUS"], "O")
         self.set_status(ord_id, "I")
         self.set_status(ord_id, "F", LOC_ID="01-002-005")
-        self.assertIn('data-form="prepare-%s"' % bran["ORD_ID"], self.text("/service/buysell/"))
-        self.assertIn('name="LOC_ID" value="01-002-005"', self.text("/service/buysell/"))      # next to the customer's rice
-        self.bs_status(bran["ORD_ID"], "P", LOC_ID="01-002-005")
-        self.assertEqual((self.bs(bran["ORD_ID"])["ORD_STATUS"], self.bs(bran["ORD_ID"])["REF_INV_LOC"]), ("P", "01-002-005"))
-        bran_stock = [s for s in self.onhand() if s["MAT_CODE"] == "BRAN"]
-        self.assertEqual((bran_stock[0]["INV_QTY"], bran_stock[0]["SUB_1"], bran_stock[0]["SUB_2"]), (2.0, "LOT-" + ord_id, bran["ORD_ID"]))
-        # update 28: the milling order cannot be closed while its selling orders are open
-        page = self.text("/service/milling/")
-        self.assertIn('data-linked-open="%s,%s"' % (bran["ORD_ID"], broken["ORD_ID"]), page)
+        page = self.text("/service/buysell/")
+        self.assertIn('data-form="prepare-%s"' % sl["ORD_ID"], page)
+        self.assertIn('name="INV_QTY_BRAN"', page)
+        self.assertIn('name="INV_QTY_BROKEN"', page)
+        self.assertIn('name="LOC_ID" value="01-002-005"', page)                  # next to the customer's rice
+        self.bs_status(sl["ORD_ID"], "P", LOC_ID="01-002-005", INV_QTY_BRAN="2", INV_QTY_BROKEN="1")
+        self.assertEqual((self.bs(sl["ORD_ID"])["ORD_STATUS"], self.bs(sl["ORD_ID"])["REF_INV_LOC"]), ("P", "01-002-005"))
+        stock = {s["MAT_CODE"]: s for s in self.onhand() if s["SUB_2"] == sl["ORD_ID"]}
+        self.assertEqual((stock["BRAN"]["INV_QTY"], stock["BRAN"]["SUB_1"], stock["BROKEN"]["INV_QTY"]), (2.0, "LOT-" + ord_id, 1.0))
+        # update 28: the milling order cannot be closed while its selling order is open
+        self.assertIn('data-linked-open="%s"' % sl["ORD_ID"], self.text("/service/milling/"))
         self.set_status(ord_id, "C")
         self.assertEqual(self.order(ord_id)["MILL_STATUS"], "F")
-        self.bs_status(bran["ORD_ID"], "C")                                      # the selling order posts the bran
-        self.assertEqual(self.bs(bran["ORD_ID"])["ORD_STATUS"], "C")
+        self.bs_status(sl["ORD_ID"], "C")                                        # the selling order posts both
+        self.assertEqual(self.bs(sl["ORD_ID"])["ORD_STATUS"], "C")
         entries = self.db("AOITS_ACCOUNT")
         self.assertEqual([(a["REF_ORD_ID"], a["REF_ORD_TYPE"], a["ACC_TYPE"], a["ACC_AMOUNT"], a["ACC_DESC"]) for a in entries],
-                         [(bran["ORD_ID"], "SL", "IN", 21.6, "Sold Rice bran")])
-        self.bs_status(broken["ORD_ID"], "U")                                    # not allowed from Open
-        self.assertEqual(self.bs(broken["ORD_ID"])["ORD_STATUS"], "O")
-        self.set_status(ord_id, "C")
-        self.assertEqual(self.order(ord_id)["MILL_STATUS"], "F")                 # broken rice order still open
-        self.bs_status(broken["ORD_ID"], "CC")
+                         [(sl["ORD_ID"], "SL", "IN", 32.67, "Sold Rice bran, Broken rice (White)")])
         self.set_status(ord_id, "C")                                             # now it closes: only its fee is posted
         self.assertEqual(self.order(ord_id)["MILL_STATUS"], "C")
         self.assertEqual([(a["REF_ORD_ID"], a["ACC_AMOUNT"]) for a in self.db("AOITS_ACCOUNT")][-1], (ord_id, 12.0))
-        self.assertEqual([s["MAT_CODE"] for s in self.onhand()], [])
+        self.assertEqual([s["MAT_CODE"] for s in self.onhand() if s["SUB_2"] == sl["ORD_ID"]], [])
         detail = self.text("/service/milling/%s?popup=1" % ord_id)
-        self.assertIn('data-linked="%s"' % bran["ORD_ID"], detail)
+        self.assertIn('data-linked="%s"' % sl["ORD_ID"], detail)
+        self.assertIn("Rice bran, Broken rice (White) taken home", detail)
+        receipt = self.text("/service/buysell/billing?ids=" + sl["ORD_ID"])
+        self.assertIn("21.60", receipt)
+        self.assertIn("11.07", receipt)
+
+    def test_old_take_home_orders_are_merged(self):
+        """Update 39 migration: two Open orders (one per SKU, made before) become one order with two lines."""
+        order = self.new_order(BRAN_ORDER="2", BROKE_ORDER="1")
+        sl = self.bs()[0]
+        with self.app.app_context():
+            from app.models.buysell_order import BuySellOrder
+            c = col("AOITS_ORDBUYSELL")
+            c.update_one({"ORD_ID": sl["ORD_ID"]}, {"$set": {"MAT_CODE": "BRAN", "ORD_QTY": 2.0, "ORD_AMOUNT": 21.6, "PRICING_UINT": 10.8},
+                                                   "$unset": {"ORD_ITEMS": ""}})
+            c.insert_one(dict({k: v for k, v in sl.items() if k != "ORD_ITEMS"}, ORD_ID="SL-OLD-0002", QR_ID="0002", MAT_CODE="BROKEN",
+                              ORD_QTY=1.0, ORD_AMOUNT=11.07, PRICING_UINT=11.07))
+            self.assertEqual(BuySellOrder.merge_take_home("seed"), 1)
+            self.assertEqual(BuySellOrder.merge_take_home("seed"), 0)           # once
+        merged = self.bs(sl["ORD_ID"])
+        self.assertEqual(({l["MAT_CODE"]: l["ORD_QTY"] for l in merged["ORD_ITEMS"]}, merged["ORD_AMOUNT"]), ({"BRAN": 2.0, "BROKEN": 1.0}, 32.67))
+        self.assertEqual(self.bs("SL-OLD-0002")["ORD_STATUS"], "CC")
+        self.assertEqual(self.order(order["ORD_ID"])["REF_BUYING_ORDER"], sl["ORD_ID"])
+
+    def test_take_home_order_can_be_maintained_until_unpaid(self):
+        """Update 39: Edit items changes the kg (and the amount) of each line; the milling order follows."""
+        order = self.new_order(BRAN_ORDER="2", BROKE_ORDER="1")
+        ord_id, sl = order["ORD_ID"], self.bs()[0]
+        self.assertIn('data-open-form="edit-%s"' % sl["ORD_ID"], self.text("/service/buysell/"))
+        self.post("/service/buysell/%s/items" % sl["ORD_ID"], {"QTY_BRAN": "4", "QTY_BROKEN": "0"})
+        sl2 = self.bs(sl["ORD_ID"])
+        lines = {l["MAT_CODE"]: l for l in sl2["ORD_ITEMS"]}
+        self.assertEqual((lines["BRAN"]["ORD_QTY"], lines["BROKEN"]["ORD_QTY"], sl2["ORD_QTY"]), (4.0, 0.0, 4.0))
+        self.assertEqual(sl2["ORD_AMOUNT"], lines["BRAN"]["ORD_AMOUNT"])
+        self.assertGreater(lines["BRAN"]["ORD_AMOUNT"], 21.6)
+        milling = self.order(ord_id)
+        self.assertEqual((milling["BRAN_ORDER"], milling["BROKE_ORDER"], milling["EST_PAY_BRAN"], milling["EST_PAY_BROKE"]),
+                         (4.0, 0.0, lines["BRAN"]["ORD_AMOUNT"], 0.0))
+        self.post("/service/buysell/%s/items" % sl["ORD_ID"], {"QTY_BRAN": "0", "QTY_BROKEN": "0"})     # all zero: refused
+        self.assertEqual(self.bs(sl["ORD_ID"])["ORD_QTY"], 4.0)
+        # prepared: the stock kept for the customer follows
+        self.set_status(ord_id, "I")
+        self.set_status(ord_id, "F", LOC_ID="01-002-005")
+        self.bs_status(sl["ORD_ID"], "P", LOC_ID="01-002-005")
+        self.post("/service/buysell/%s/items" % sl["ORD_ID"], {"QTY_BRAN": "3", "QTY_BROKEN": "1.5"})
+        stock = {s["MAT_CODE"]: s["INV_QTY"] for s in self.onhand() if s["SUB_2"] == sl["ORD_ID"]}
+        self.assertEqual(stock, {"BRAN": 3.0, "BROKEN": 1.5})
+        self.assertEqual((self.order(ord_id)["BRAN_ORDER"], self.order(ord_id)["BROKE_ORDER"]), (3.0, 1.5))
+        logs = [l for l in self.db("AOILOG_ONHAND") if l["MOVE_TYPE"] == "Order changed"]
+        self.assertEqual(len(logs), 1)                    # bran -1 (broken came in as a new inbound)
+        # unpaid: no more changes
+        self.bs_status(sl["ORD_ID"], "U")
+        self.post("/service/buysell/%s/items" % sl["ORD_ID"], {"QTY_BRAN": "1"})
+        self.assertEqual(self.bs(sl["ORD_ID"])["ORD_QTY"], 4.5)
+        self.assertNotIn('data-open-form="edit-%s"' % sl["ORD_ID"], self.text("/service/buysell/"))
 
     def test_milling_order_is_cancelled_after_its_selling_orders(self):
         order = self.new_order(BRAN_ORDER="2")
@@ -747,13 +802,20 @@ class Update5(Base):
         self.assertEqual((saved["CUST_CODE"], saved["REGIST_PADDY"], saved["EXPCT_RICE"], saved["EST_PAY_MILLFEE"], saved["REMARK"]),
                          ("C261001002", 66.0, 34.0, 12.0, "Dry paddy"))
         self.assertEqual((saved["BRAN_ORDER"], saved["BROKE_ORDER"], saved["QR_ID"]), (3.0, 1.0, order["QR_ID"]))   # same queue number
-        linked = {o["MAT_CODE"]: o for o in self.bs()}
-        self.assertEqual((linked["BRAN"]["ORD_QTY"], linked["BRAN"]["ORD_AMOUNT"], linked["BRAN"]["CUST_CODE"]), (3.0, saved["EST_PAY_BRAN"], "C261001002"))
-        self.assertEqual((linked["BROKEN"]["ORD_QTY"], linked["BROKEN"]["ORD_STATUS"]), (1.0, "O"))
-        self.assertEqual(saved["REF_BUYING_ORDER"], ",".join(sorted(o["ORD_ID"] for o in linked.values())))
-        self.details(ord_id, BRAN_ORDER="0", BROKE_ORDER="1")                     # no bran any more: its order is cancelled
-        self.assertEqual({o["MAT_CODE"]: o["ORD_STATUS"] for o in self.bs()}, {"BRAN": "CC", "BROKEN": "O"})
-        self.assertEqual(self.order(ord_id)["REF_BUYING_ORDER"], linked["BROKEN"]["ORD_ID"])
+        self.assertEqual(len(self.bs()), 1)                                      # update 39: still one order
+        sl = self.bs()[0]
+        lines = {l["MAT_CODE"]: l for l in sl["ORD_ITEMS"]}
+        self.assertEqual((lines["BRAN"]["ORD_QTY"], lines["BRAN"]["ORD_AMOUNT"], sl["CUST_CODE"]), (3.0, saved["EST_PAY_BRAN"], "C261001002"))
+        self.assertEqual((lines["BROKEN"]["ORD_QTY"], sl["ORD_STATUS"]), (1.0, "O"))
+        self.assertEqual(saved["REF_BUYING_ORDER"], sl["ORD_ID"])
+        self.details(ord_id, BRAN_ORDER="0", BROKE_ORDER="1")                     # no bran any more: its line is 0
+        sl = self.bs()[0]
+        self.assertEqual(({l["MAT_CODE"]: l["ORD_QTY"] for l in sl["ORD_ITEMS"]}, sl["MAT_CODE"], sl["ORD_STATUS"]), ({"BRAN": 0.0, "BROKEN": 1.0}, "BROKEN", "O"))
+        self.details(ord_id, BRAN_ORDER="0", BROKE_ORDER="0")                     # nothing taken home: cancelled
+        self.assertEqual(self.bs()[0]["ORD_STATUS"], "CC")
+        self.assertIsNone(self.order(ord_id)["REF_BUYING_ORDER"])
+        self.details(ord_id, BRAN_ORDER="1")                                      # again: a new order
+        self.assertEqual([o["ORD_STATUS"] for o in self.bs()], ["CC", "O"])
         for fields in ({"REGIST_PADDY": "0"}, {"REGIST_PADDY": "x"}, {"BRAN_ORDER": "-1"}, {"CUST_CODE": "C000000000"}):
             self.details(ord_id, **fields)
             self.assertEqual(self.order(ord_id)["REGIST_PADDY"], 66.0, fields)
@@ -2813,6 +2875,23 @@ class Update37(Base):
         order = self.new_order(BRAN_ORDER="2")
         found = self.text("/service/buysell/?q=AOI-" + order["ORD_ID"])
         self.assertEqual(len(re.findall(r'class="status-card" data-order=', found)), 1)
+
+
+class Update39(Base):
+    """TV full screen button; the customer card prints (the QR-label print rule no longer hides it)."""
+
+    def test_tv_has_full_screen(self):
+        with self.app.app_context():
+            from app.models import tv
+            key = tv.issue_key("factory2", "admin")
+        page = self.text("/tv/factory2?key=" + key)
+        self.assertIn('id="tvb-full"', page)
+        self.assertIn("เต็มจอ · Full screen", page)
+
+    def test_card_page_is_not_hidden_in_print(self):
+        css = self.text("/static/css/app.css")
+        self.assertIn("body:not(.cust-card-page):not(.line-poster) * { visibility: hidden; }", css)
+        self.assertNotIn("\n  body * { visibility: hidden; }", css)
 
 
 if __name__ == "__main__":

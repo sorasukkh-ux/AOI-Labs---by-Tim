@@ -273,6 +273,11 @@ def seed(log=print, reset=False):
     rebuilt = mill_event.backfill()
     if rebuilt:
         log("Status timeline rebuilt for %d earlier milling order(s)" % rebuilt)
+    # update 39: one take-home selling order per milling order (a line per SKU)
+    from app.models.buysell_order import BuySellOrder
+    merged = BuySellOrder.merge_take_home(SEED_USER)
+    if merged:
+        log("Take-home orders merged for %d milling order(s)" % merged)
     if added:
         log("Seed data added: " + ", ".join("%s %d" % item for item in sorted(added.items())))
     else:

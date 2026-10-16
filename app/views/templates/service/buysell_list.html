@@ -42,7 +42,7 @@
       <span class="badge {{ 'buy-type' if order.ORD_TYPE == 'BY' else 'sell-type' }}">{{ t(type_keys[order.ORD_TYPE]) }}</span>
       {% if order.milling %}<span class="badge from-milling">{{ t('fromMillingBadge', id=order.milling.get('QR_ID', order.REF_ORD_ID)) }}</span>
       {% else %}<span class="badge manual">{{ t('newServiceOrderBadge') }}</span>{% endif %}
-      <span class="ord-cust">{{ order.customer.get('CUST_NAME', order.CUST_CODE) }} &middot; {{ material }} {{ order.ORD_QTY|num }} kg &middot; <span class="bs-amount">{{ order.amount|num }} THB</span> &middot; {{ order.registered_text }}</span>
+      <span class="ord-cust">{{ order.customer.get('CUST_NAME', order.CUST_CODE) }} &middot; {{ order.lines_text or (material ~ ' ' ~ order.ORD_QTY|num ~ ' kg') }} &middot; <span class="bs-amount">{{ order.amount|num }} THB</span> &middot; {{ order.registered_text }}</span>
     </div>
     <form method="post" action="{{ url_for('service_buysell.change_status', ord_id=order.ORD_ID) }}">
       {{ hidden() }}
@@ -67,6 +67,33 @@
     {% endif %}
 
     <a class="action bs-billing-btn" href="{{ url_for('service_buysell.billing', ids=order.ORD_ID) }}" data-popup>{{ t('btnPrintBilling') }}</a>
+    {% if can_edit and order.can_maintain %}
+    <button type="button" class="action bs-billing-btn bs-edit-btn" data-open-form="edit-{{ order.ORD_ID }}">{{ t('bsEditItems') }}</button>
+    <template id="edit-{{ order.ORD_ID }}">
+      <form method="post" action="{{ url_for('service_buysell.maintain', ord_id=order.ORD_ID) }}" class="inbound-form order-details bs-edit-form">
+        {{ hidden() }}
+        <p class="od-title">{{ t('bsEditTitle', id=order.QR_ID) }}</p>
+        <p class="cap-note">{{ t('bsEditNotePrepared') if order.ORD_STATUS == 'P' else t('bsEditNote') }}</p>
+        <div class="od-row"><span class="od-label">{{ t('colCustomer') }}</span><span class="od-value">{{ order.customer.get('CUST_NAME', order.CUST_CODE) }}</span></div>
+        {% if order.milling %}<div class="od-row"><span class="od-label">{{ t('colMillingOrder') }}</span><span class="od-value">#{{ order.milling.get('QR_ID') }}</span></div>{% endif %}
+        <table class="bs-check-table bs-edit-table">
+          <thead><tr><th>{{ t('colProduct') }}</th><th class="num">kg</th><th class="num">THB</th></tr></thead>
+          <tbody>
+          {% for l in order.lines %}
+          <tr><td><label for="edit-{{ order.ORD_ID }}-{{ l.MAT_CODE }}">{{ l.name }}</label>{% if l.OWN_KG %}<small class="inv-sub">{{ t('bsEditOwn', kg=l.OWN_KG|num, pct=l.DISC_PCT|plain) }}</small>{% endif %}</td>
+            <td class="num"><input type="number" id="edit-{{ order.ORD_ID }}-{{ l.MAT_CODE }}" name="QTY_{{ l.MAT_CODE }}" value="{{ l.ORD_QTY|plain }}" min="0" step="0.001" inputmode="decimal"></td>
+            <td class="num">{{ l.ORD_AMOUNT|num }}</td></tr>
+          {% endfor %}
+          </tbody>
+          <tfoot><tr><td colspan="2">{{ t('totalLabel') }}</td><td class="num">{{ order.amount|num }}</td></tr></tfoot>
+        </table>
+        <div class="btn-pair">
+          <button type="button" class="action" data-modal-close>{{ t('btnCancel') }}</button>
+          <button type="submit" class="action primary">{{ t('btnSaveChanges') }}</button>
+        </div>
+      </form>
+    </template>
+    {% endif %}
 
     {% if editable and 'P' in order.next_statuses and order.milling_ready and order.needs_inbound %}
     {# Prepared: the goods go into an inventory location for the customer (inbound pop-up) #}
@@ -76,13 +103,23 @@
         <input type="hidden" name="new_status" value="P">
         <p class="od-title">{{ t('prepareTitle', id=order.QR_ID) }}</p>
         <p class="cap-note">{{ t('prepareNoteBuy') if order.ORD_TYPE == 'BY' else t('prepareNote') }}</p>
-        <div class="od-row"><span class="od-label">{{ t('lblSkuName') }}</span><span class="od-value">{{ material }}</span></div>
+        <div class="od-row"><span class="od-label">{{ t('lblSkuName') }}</span><span class="od-value">{{ order.lines_text or material }}</span></div>
         <div class="od-row"><span class="od-label">{{ t('colLot') }}</span><span class="od-value">LOT-{{ order.REF_ORD_ID if order.milling else order.ORD_ID }}</span></div>
         <div class="od-row"><span class="od-label">{{ t('colCustomer') }}</span><span class="od-value">{{ order.customer.get('CUST_NAME', order.CUST_CODE) }}</span></div>
+        {% set prep_lines = order.lines|selectattr('ORD_QTY', 'gt', 0)|list %}
+        {% if prep_lines|length > 1 %}
+        {% for l in prep_lines %}
+        <div class="field-row">
+          <label class="field-label" for="prep-qty-{{ order.ORD_ID }}-{{ l.MAT_CODE }}">{{ l.name }} &middot; {{ t('lblInboundQty', kg=l.ORD_QTY|num) }}</label>
+          <input type="number" id="prep-qty-{{ order.ORD_ID }}-{{ l.MAT_CODE }}" name="INV_QTY_{{ l.MAT_CODE }}" value="{{ l.ORD_QTY|plain }}" min="0.001" step="0.001" required>
+        </div>
+        {% endfor %}
+        {% else %}
         <div class="field-row">
           <label class="field-label" for="prep-qty-{{ order.ORD_ID }}">{{ t('lblInboundQty', kg=order.ORD_QTY|num) }}</label>
           <input type="number" id="prep-qty-{{ order.ORD_ID }}" name="INV_QTY" value="{{ order.ORD_QTY|plain }}" min="0.001" step="0.001" required>
         </div>
+        {% endif %}
         <div class="field-row">
           <label class="field-label" for="prep-loc-{{ order.ORD_ID }}">{{ t('lblLocation') }}</label>
           <input type="text" id="prep-loc-{{ order.ORD_ID }}" name="LOC_ID" value="{{ order.suggest_loc or '' }}" placeholder="01-002-005"

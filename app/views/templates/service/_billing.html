@@ -12,9 +12,9 @@
     <table class="rc-table">
       <thead><tr><th>{{ t('colProduct') }}</th><th class="num">kg</th><th class="num">THB/kg</th><th class="num">THB</th></tr></thead>
       <tbody>
-      {% for o in orders %}
-        <tr><td>{{ mat_name(o.MAT_CODE) }}</td><td class="num">{{ o.ORD_QTY|num }}</td><td class="num">{{ o.PRICING_UINT|num }}</td><td class="num">{{ (o.ORD_AMOUNT if o.ORD_AMOUNT is not none else o.ORD_QTY * o.PRICING_UINT)|num }}</td></tr>
-      {% endfor %}
+      {% for o in orders %}{% for l in items_of(o) if l.ORD_QTY > 0 %}
+        <tr><td>{{ mat_name(l.MAT_CODE) }}</td><td class="num">{{ l.ORD_QTY|num }}</td><td class="num">{{ l.PRICING_UINT|num }}</td><td class="num">{{ l.ORD_AMOUNT|num }}</td></tr>
+      {% endfor %}{% endfor %}
       </tbody>
       <tfoot><tr><td colspan="3">{{ t('totalLabel') }}</td><td class="num">{{ total|num }}</td></tr></tfoot>
     </table>

@@ -70,7 +70,8 @@ def price_advice(branch_id, days=14):
     sold, bought = {}, {}
     for o in col("AOITS_ORDBUYSELL").find({"BRANCH_ID": branch_id, "ORD_STATUS": "C", "LAST_UPDATE": {"$gte": since}}, NO_ID):
         target = sold if o["ORD_TYPE"] == "SL" else bought
-        target[o["MAT_CODE"]] = target.get(o["MAT_CODE"], 0.0) + o["ORD_QTY"]
+        for line in (o.get("ORD_ITEMS") or [o]):          # update 39: take-home orders have a line per SKU
+            target[line["MAT_CODE"]] = target.get(line["MAT_CODE"], 0.0) + (line.get("ORD_QTY") or 0)
     out = []
     for price in Price.for_branch(branch_id):
         mat = price["MAT_CODE"]

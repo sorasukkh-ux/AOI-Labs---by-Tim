@@ -41,6 +41,10 @@ def _decorate(orders):
         order["next_statuses"] = BuySellOrder.allowed_next(order)
         order["is_open"] = BuySellOrder.is_open(order)
         order["amount"] = BuySellOrder.amount(order)
+        order["lines"] = [dict(l, name=mat_name(l["MAT_CODE"])) for l in BuySellOrder.items_of(order)]
+        order["lines_text"] = ", ".join("%s %s kg" % (l["name"], ("%.2f" % l["ORD_QTY"]).rstrip("0").rstrip("."))
+                                        for l in order["lines"] if l["ORD_QTY"] > 0)
+        order["can_maintain"] = BuySellOrder.can_maintain(order)
         registered = to_local(order["REGIST_DATE"])
         order["registered_text"] = fmt_time(registered) if registered.date() == today_local() else fmt_datetime(registered)
         milling = None
@@ -105,6 +109,23 @@ def _matches(order, q):
     return any(needle in str(f).lower() for f in fields if f)
 
 
+@bp.route("/<ord_id>/items", methods=["POST"])
+@require(MENU, "edit")
+def maintain(ord_id):
+    """Update 39: new quantities of a take-home order's lines (bran, broken rice) before it is Unpaid / Closed."""
+    order = BuySellOrder.find(ord_id, operating_branch())
+    if not order:
+        abort(404)
+    try:
+        BuySellOrder.maintain(order["ORD_ID"], operating_branch(), request.form, current_user()["USER_ID"])
+    except ValidationError as error:
+        flash_error(error)
+    else:
+        flash_ok("msgOrderUpdated", id=order["QR_ID"])
+    return redirect(url_for("service_buysell.order_list", status=request.form.get("status_filter") or None,
+                            type=request.form.get("type_filter") or None, q=request.form.get("q_filter") or None))
+
+
 @bp.route("/<ord_id>/status", methods=["POST"])
 @require(MENU, "edit")
 def change_status(ord_id):
@@ -130,8 +151,8 @@ REGISTER = "SV_SERVICE"
 
 
 def describe(order):
-    """Ledger text of a closed buying/selling order: Bought / Sold <material>."""
-    material = mat_name(order["MAT_CODE"])
+    """Ledger text of a closed buying/selling order: Bought / Sold <material(s)>."""
+    material = ", ".join(mat_name(l["MAT_CODE"]) for l in BuySellOrder.items_of(order) if l["ORD_QTY"] > 0) or mat_name(order["MAT_CODE"])
     return t("acctAutoBuyExpenseDesc" if order["ORD_TYPE"] == bs.BUY else "acctAutoSellIncomeDesc", mat=material)
 
 
@@ -185,7 +206,7 @@ def billing():
     if not orders:
         abort(404)
     customer = Customer.find(orders[0]["CUST_CODE"]) or {}
-    return render_template("service/_billing.html", orders=orders, customer=customer, mat_keys=MAT_KEYS,
+    return render_template("service/_billing.html", orders=orders, customer=customer, mat_keys=MAT_KEYS, items_of=BuySellOrder.items_of,
                            type_keys=TYPE_KEYS, total=sum(BuySellOrder.amount(o) for o in orders),
                            printed=fmt_datetime(now_utc()), address=current_app.config["LABEL_ADDRESS_TH"],
                            address_en=current_app.config["LABEL_ADDRESS_EN"], tel=current_app.config["LABEL_TEL"])

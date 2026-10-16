@@ -132,6 +132,12 @@ How one request travels, for example saving the output ratios:
   Finished -> Ready for Delivery (delivery) / Closed (take-away) / Cancelled; Ready for Delivery -> Closed.
 - **Linked orders (update 28)**: a milling order with take-home bran/broken rice cannot be Closed or Cancelled
   until its buying/selling orders (SL-...) are Closed or Cancelled; the order card shows which ones are still open.
+- **One take-home order (update 39)**: the bran and broken rice a milling customer takes home are ONE selling order
+  with a line per SKU (`ORD_ITEMS`). **Edit items** on the Buying/Selling Order List changes the kg per line while
+  the order is Open or Prepared (charged as at registration: milling discount up to the customer's own output); at
+  Prepared the stock kept for the customer is corrected; the milling order's take-home kg and charges follow.
+  Prepared asks the kg received per line, one location. Earlier orders (one per SKU, still Open) are merged once by
+  `start.sh`.
 - **Numbers**: order ID `ML-YYYYMMDD-NNNN` (queue number `NNNN` restarts each day),
   customer code `C` + `YYMMDD` + 3 digits, QR text `AOI-ML-YYYYMMDD-NNNN`.
 
@@ -215,7 +221,8 @@ printed QR label. Differences that remain, and why:
 
 Each factory has its own full-screen TV page for the waiting area: `/tv/factory1?key=...` and `/tv/factory2?key=...`.
 Administration > Milling Maintenance > TV display shows the link of the chosen factory and issues a new key (the
-old link stops at once). The TV does not sign in; open the link in the TV's browser in full screen.
+old link stops at once). The TV does not sign in; open the link in the TV's browser and press **Full screen**
+(top right, shown while the mouse / remote pointer moves; or double-click, or the F key) - like the SCADA.
 
 **Testing in GitHub Codespaces:** the link shown is the codespace's forwarded address (it is built from the address
 in your browser). A TV is not signed in to GitHub, so make the port public first: Ports tab > right-click port

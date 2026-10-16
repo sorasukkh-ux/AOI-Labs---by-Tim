@@ -90,7 +90,7 @@
   <div class="od-row od-part"><span class="od-label">{{ mat_name(item.MAT_CODE) }} &middot; {{ item.SUB_1 }}</span><span class="od-value">{{ item.INV_QTY|num }} kg</span></div>
   {% endfor %}
   {% for bso in order.linked %}
-  <div class="od-row" data-linked="{{ bso.ORD_ID }}"><span class="od-label">{{ t('detLinkedOrder', mat=mat_name(bso.MAT_CODE)) }}<small>{{ t('svcSellLabel') }} #{{ bso.QR_ID }} &middot; {{ bso.ORD_QTY|num }} kg</small></span><span class="od-value">{{ t(bs_status_keys[bso.ORD_STATUS]) }}</span></div>
+  <div class="od-row" data-linked="{{ bso.ORD_ID }}"><span class="od-label">{{ t('detLinkedOrder', mat=bso.mat_text) }}<small>{{ t('svcSellLabel') }} #{{ bso.QR_ID }} &middot; {{ bso.qty_text }}</small></span><span class="od-value">{{ t(bs_status_keys[bso.ORD_STATUS]) }}</span></div>
   {% endfor %}
   {% endif %}
   <p class="od-section">{{ t('detSecPay') }}</p>
