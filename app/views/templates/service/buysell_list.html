@@ -13,7 +13,7 @@
   {% if status %}<input type="hidden" name="status" value="{{ status }}">{% endif %}{% if ord_type %}<input type="hidden" name="type" value="{{ ord_type }}">{% endif %}
   <label class="field-label" for="bs-search">{{ t('bsSearchLabel') }}</label>
   <div class="row-inline">
-    <input type="search" id="bs-search" name="q" value="{{ q }}" placeholder="{{ t('bsSearchPh') }}" autocapitalize="characters" spellcheck="false" data-scan>
+    <input type="search" id="bs-search" name="q" value="{{ q }}" placeholder="{{ t('bsSearchPh') }}" autocapitalize="characters" spellcheck="false" data-scan="submit">
     <button type="submit" class="action primary" id="bs-search-btn">{{ t('btnSearch') }}</button>
     {% if q %}<a class="action" href="{{ url_for('service_buysell.order_list', status=status, type=ord_type) }}" id="bs-search-clear">{{ t('btnClear') }}</a>{% endif %}
   </div>

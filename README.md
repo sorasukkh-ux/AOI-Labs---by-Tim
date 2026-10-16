@@ -241,6 +241,24 @@ period, waiting and milling times, holds, cancellations and the real yield again
 variety and per customer, with CSV downloads (orders, and every status change). Orders made before this update
 get their timeline once from `AOILOG_ORDMILLING` when `start.sh` runs.
 
+## Scan QR with the iPad / phone camera (update 37)
+
+Every scan field has a camera button next to it: New Order "Scan QR" (customer card), Customer Maintenance,
+the Milling Order List search, the Buying/Selling Order List search, "Change customer" in the order details and
+the paddy label at **In process**. Tap it, hold the QR inside the frame: the code is read in the page
+(`static/js/qrdecode.js`, written for this project - no library or outside service, the picture never leaves the
+iPad) and fills the field (read twice the same, so a half-seen code is not used). Then the field does what Enter
+does: New Order picks the customer, the list searches run. A Bluetooth / USB scanner (keyboard mode) still works
+in the same fields without the button.
+
+The **Milling Order List** has a search (order ID, queue no., customer code or name). Scanning the QR label on the
+paddy bag (`AOI-ML-...`) shows that order and opens its details at once; status changes keep the search.
+
+The browser gives the camera only on a secure link: `https://...` (GitHub Codespaces is https) or `localhost`. On a
+plain `http://192.168.x.x` address the button explains this; the server for the mill needs https (a certificate,
+e.g. Caddy or a Cloudflare tunnel) for the camera. First use: Safari asks to use the camera - **Allow** (iPad
+Settings > Safari > Camera).
+
 ## LINE messages to customers
 
 When a take-away order is set to **Finished** the customer gets "your rice is ready"; for a delivery order the

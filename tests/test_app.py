@@ -2773,5 +2773,47 @@ class Update33(Base):
         self.assertEqual(len(re.findall(r'class="status-card" data-order=', self.text("/service/buysell/?q=" + order["QR_ID"]))), 1)
 
 
+class Update37(Base):
+    """Camera QR scan buttons, milling order list search (the label QR opens the order)."""
+
+    def setUp(self):
+        super().setUp()
+        self.login("admin")
+        self.client.get("/lang/en")
+
+    def test_scan_fields_and_scripts(self):
+        page = self.text("/service/milling/new")
+        self.assertIn('id="qr-scan-overlay"', page)
+        self.assertIn("js/qrdecode.js", page)
+        self.assertIn("js/qrscan.js", page)
+        self.assertIn('id="reg-scan" data-scan ', page)
+        self.assertIn('data-scan="submit"', self.text("/admin/customers/"))
+        self.assertIn('id="bs-search" name="q"', self.text("/service/buysell/"))
+        listing = self.text("/service/milling/")
+        self.assertIn('id="ml-search"', listing)
+        self.assertIn('data-scan="submit"', listing)
+
+    def test_milling_list_search(self):
+        first = self.new_order()
+        second = self.new_order()
+        cards = lambda page: re.findall(r'class="status-card[^"]*" data-order="([^"]+)"', page)
+        page = self.text("/service/milling/?q=AOI-" + first["ORD_ID"])          # the label QR scanned
+        self.assertEqual(cards(page), [first["ORD_ID"]])
+        self.assertIn("data-auto-popup", page)
+        page = self.text("/service/milling/?q=" + second["QR_ID"])
+        self.assertIn(second["ORD_ID"], cards(page))
+        self.assertNotIn("data-auto-popup", page)
+        self.assertEqual(set(cards(self.text("/service/milling/?q=C261001001"))) >= {first["ORD_ID"], second["ORD_ID"]}, True)
+        self.assertEqual(cards(self.text("/service/milling/?q=nobody-here")), [])
+        # a status change from the searched list comes back to the same search
+        response = self.set_status(first["ORD_ID"], "I", back="list", q_filter="AOI-" + first["ORD_ID"])
+        self.assertIn("q=AOI-" + first["ORD_ID"], response.headers["Location"])
+
+    def test_buysell_search_takes_the_milling_label(self):
+        order = self.new_order(BRAN_ORDER="2")
+        found = self.text("/service/buysell/?q=AOI-" + order["ORD_ID"])
+        self.assertEqual(len(re.findall(r'class="status-card" data-order=', found)), 1)
+
+
 if __name__ == "__main__":
     unittest.main()

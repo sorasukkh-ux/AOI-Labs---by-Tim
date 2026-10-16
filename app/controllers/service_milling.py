@@ -231,8 +231,32 @@ def order_list():
     orders = MillingOrder.for_branch(operating_branch(), [status] if status else None)
     if order_type:
         orders = [o for o in orders if o["ORDER_TYPE"] == order_type]
-    return render_template("service/milling_list.html", orders=_decorate(MillingOrder.sort_for_list(orders)),
+    q = (request.args.get("q") or "").strip()[:60]
+    orders = _decorate(MillingOrder.sort_for_list(orders))
+    exact = False
+    if q:                                                # update 37: search (typed, or the QR on the label scanned)
+        orders = [o for o in orders if _matches(o, q)]
+        exact = len(orders) == 1 and orders[0]["ORD_ID"].lower() == scan_text(q)
+    return render_template("service/milling_list.html", orders=orders, q=q, auto_open=exact,
                            status=status, order_type=order_type, filters=LIST_FILTERS, **_context())
+
+
+def scan_text(q):
+    """What was typed or scanned, for comparing: the label QR is 'AOI-<order ID>'; '#0012' is the queue no."""
+    needle = (q or "").strip().lower().lstrip("#")
+    return needle[4:] if needle.startswith("aoi-") else needle
+
+
+def _matches(order, q):
+    """Milling order list search: order ID (exact when it is a whole ID, e.g. the label QR), queue no.,
+    customer code or name. Not case sensitive."""
+    needle = scan_text(q)
+    if not needle:
+        return True
+    if needle.startswith("ml-"):
+        return order["ORD_ID"].lower() == needle or (len(needle) < 16 and needle in order["ORD_ID"].lower())
+    fields = [order.get("QR_ID"), order.get("CUST_CODE"), (order.get("customer") or {}).get("CUST_NAME")]
+    return any(needle in str(f).lower() for f in fields if f)
 
 
 def _order_or_404(ord_id):
@@ -256,7 +280,7 @@ def order_detail(ord_id):
 def _back(ord_id):
     if request.form.get("back") == "list":
         return redirect(url_for("service_milling.order_list", status=request.form.get("status_filter") or None,
-                                type=request.form.get("type_filter") or None))
+                                type=request.form.get("type_filter") or None, q=request.form.get("q_filter") or None))
     return redirect(url_for("service_milling.order_detail", ord_id=ord_id))
 
 

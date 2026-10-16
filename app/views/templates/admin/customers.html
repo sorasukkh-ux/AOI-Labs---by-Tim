@@ -7,7 +7,7 @@
   <form method="get" action="{{ url_for('admin_customers.customer_list') }}" id="cust-search-form">
     <div class="row-inline">
       <label class="field-label" for="cust-scan">{{ t('scanQR') }}</label>
-      <input type="text" id="cust-scan" name="scan" value="{{ scan }}" placeholder="{{ t('customerIdPh') }}" autocapitalize="characters" spellcheck="false">
+      <input type="text" id="cust-scan" data-scan="submit" name="scan" value="{{ scan }}" placeholder="{{ t('customerIdPh') }}" autocapitalize="characters" spellcheck="false">
     </div>
     <div class="row-inline">
       <label class="field-label" for="cust-search-name">{{ t('custNameLabel') }}</label>

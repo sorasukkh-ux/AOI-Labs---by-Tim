@@ -209,6 +209,9 @@
       })
       .catch(function () { window.location.href = link.getAttribute("href"); });
   });
+  // update 37: a scanned milling label (one exact order) opens its details at once - not over a message
+  var autoPopup = document.querySelector("a[data-auto-popup]");
+  if (autoPopup && !overlay.classList.contains("show")) autoPopup.click();
 })();
 
 /* TV display link (Milling Maintenance): built from the address in the browser, so it is right behind any

@@ -55,9 +55,19 @@
     </div>
   </div>
 </div>
+<div id="qr-scan-overlay" data-title="{{ t('scanCamTitle') }}" data-aim="{{ t('scanCamAim') }}" data-starting="{{ t('scanCamStarting') }}"
+  data-https="{{ t('scanCamHttps') }}" data-denied="{{ t('scanCamDenied') }}" data-nocam="{{ t('scanCamNoCam') }}" role="dialog" aria-modal="true" aria-label="{{ t('scanCamTitle') }}">
+  <div class="qs-box">
+    <div class="qs-view"><video muted playsinline autoplay></video><div class="qs-frame" aria-hidden="true"><i></i><i></i><i></i><i></i><b></b></div></div>
+    <p class="qs-status" data-scan-status aria-live="polite"></p>
+    <button type="button" class="action qs-cancel" data-scan-close>{{ t('btnCancel') }}</button>
+  </div>
+</div>
 <script src="{{ url_for('static', filename='js/qr.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/label.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/app.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/qrdecode.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/qrscan.js') }}" defer></script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

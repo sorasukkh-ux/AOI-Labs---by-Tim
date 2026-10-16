@@ -30,7 +30,7 @@
   <div class="od-field od-cust-search">
     <label class="field-label" for="od-cust-q-{{ order.ORD_ID }}">{{ t('detChangeCustomer') }}</label>
     <div class="od-inline">
-      <input type="text" id="od-cust-q-{{ order.ORD_ID }}" data-cust-query placeholder="{{ t('custSearchPh') }}" autocomplete="off">
+      <input type="text" id="od-cust-q-{{ order.ORD_ID }}" data-cust-query data-scan="enter" placeholder="{{ t('custSearchPh') }}" autocomplete="off">
       <button type="button" class="action" data-cust-search="{{ url_for('service_milling.customer_search') }}" data-empty="{{ t('custListEmpty') }}">{{ t('btnSearch') }}</button>
     </div>
     <div class="od-cust-results" data-cust-results hidden></div>

@@ -94,7 +94,9 @@ def order_list():
 def _matches(order, q):
     """Search at the top of the list (update 33): order no. / ID, the milling order it comes from (ID or queue no.),
     customer name or code. Not case sensitive; a milling order ID opened from the Milling Order List matches exactly."""
-    needle = q.lower().lstrip("#")
+    needle = q.strip().lower().lstrip("#")
+    if needle.startswith("aoi-"):                        # update 37: the milling label QR is 'AOI-<milling order ID>'
+        needle = needle[4:]
     milling = order.get("milling") or {}
     fields = [order.get("ORD_ID"), order.get("QR_ID"), order.get("REF_ORD_ID"), milling.get("QR_ID"), order.get("CUST_CODE"),
               (order.get("customer") or {}).get("CUST_NAME")]
