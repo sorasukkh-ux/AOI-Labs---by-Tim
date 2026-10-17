@@ -201,7 +201,16 @@ def snapshot(branch_id):
                          for e in profit.evaluate_all(branch_id)],
         "yields": {v: MillYield.ratios(branch_id, v) for v in ("HM", "WH", "GL")},
         "supply_indicator_nabc_agri_production_index": _supply(),
+        "server_health": _health(),                       # update 48: disk, memory, CPU, database, log
     }
+
+
+def _health():
+    try:
+        from . import health
+        return health.summary()
+    except Exception:                                     # noqa: BLE001
+        return None
 
 
 def _supply():
@@ -238,6 +247,8 @@ def ask(branch_id, user_id, question, lang):
               "BRAN rice bran, HUSK husk. Prices are THB per kg. profit_check gives, per variety, the value of 1 kg paddy once "
               "milled, the break-even and recommended buying prices. Prices only change when a person approves them. "
               "Milling statuses: Q queue, I in process, H hold, F finished, D ready for delivery. "
+              "server_health holds the server's disk / memory / CPU use, the database answer time and the app's warnings and "
+              "errors of the last hour (levels ok, warn, crit); when asked about it, say what the risk is and the next step. "
               "Never invent numbers." % ("Thai" if lang == "th" else "English"))
     body = {"model": config["AI_MODEL"], "max_tokens": 600, "system": system,
             "messages": [{"role": "user", "content": "Figures of the branch (JSON):\n%s\n\nQuestion: %s"

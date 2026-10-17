@@ -316,6 +316,44 @@ LINE display name and how it was linked.
 with `LINK <customer code>-<check>`. The customer scans it with the new LINE and taps Send; the new account replaces
 the old one (`STAFF_QR`). "Remove LINE link" clears it, so the next queue ticket shows the LINE QR again.
 
+## Queue QR to the customer's LINE (update 47)
+
+When a milling order is registered (Print QR) and the customer is linked to the mill's LINE OA, the customer also
+gets the queue number, payment and receive time (message **ML_LABEL**, editable on LINE Message Maintenance) **and the
+QR picture** of the label, to show when collecting. The order details have **Send QR to LINE** to send it again.
+LINE downloads the picture from the app (`/line/qr/<order>.png?t=<secret token>`), so the app needs a public https
+address: `AOI_PUBLIC_URL` in `.env`, or else the address in the staff's browser (in Codespaces: port 5000 **Public**,
+as for the TV). Without one, the text is sent alone. The picture is made by the server (`app/models/qr_png.py`, the
+same QR as the printed label; no extra package).
+
+## Server health on AI (update 48)
+
+Automation > AI starts with **Server health**: disk, memory (RAM), CPU, the database answer time, the app's errors and
+warnings of the last hour (the log list below it), and machine devices that stopped reporting. The server checks itself
+every 5 minutes (and **Check now**); limits: disk / memory 85 % warning, 95 % critical; CPU 85 / 97 %; database
+500 / 3000 ms; errors 1 / 20 per hour; warnings 20 / 200. When something is not ok, the **home menu shows a red "!"**
+on AI (and its group) and a banner with the problem - for everyone who can open AI. With an AI key, **Ask AI what to do**
+explains the risk and the next step (the health figures are part of what the AI sees). The app's own warnings and errors
+are kept in `AOITS_SYSLOG` (14 days), the checks in `AOITS_HEALTH` (7 days).
+
+**Customer card to LINE:** Print QR card also sends the card (text LN_CARD + the QR picture of the customer code) to the
+customer's LINE when "Also send to the customer's LINE" is ticked (shown for customers linked to LINE); "Send to LINE
+only" sends without printing. The same public https address is needed as for the queue QR (update 47).
+
+## API, LINE and hardware monitoring (update 49)
+
+The Server health card also shows:
+
+- **API (last hour)** per area - app screens, device API (machines), LINE webhook, public (TV, QR pictures): calls,
+  4xx, 5xx, slow (> 2 s), average / max ms, and device calls with a wrong key. Counted per hour in `AOITS_MONITOR`
+  (3 days). Findings: server errors 1 / 10 per hour, slow 10 / 50, wrong device keys 20 / 200.
+- **LINE interface**: token and channel secret set, the token checked with LINE every 30 minutes (refused = critical),
+  the last call from LINE, the last message sent, messages refused / waiting in 24 h.
+- **Hardware devices**: every machine in use with remote control and every meter with a key - online / offline / no
+  key, live values, last report, failed or expired commands and faults in 24 h (warning when any).
+
+The same findings give the red "!" on the menu and are part of what the AI sees.
+
 ## Customer Registration
 
 - The name must not be registered yet (case and extra spaces ignored). The screen checks it before saving and

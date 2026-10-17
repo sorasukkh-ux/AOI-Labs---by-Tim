@@ -7,10 +7,36 @@ import threading
 import time
 
 _started = False
+_health_started = False
+
+
+def start_health(app):
+    """Update 48: a server health check every 5 minutes (Automation > AI, the red "!" on the menu)."""
+    global _health_started
+    if _health_started or app.config.get("TESTING"):
+        return
+    _health_started = True
+
+    def loop():
+        from .models import health
+        time.sleep(20)
+        while True:
+            try:
+                with app.app_context():
+                    doc = health.check(sample_seconds=1.0)
+                    if doc["LEVEL"] == health.CRIT:
+                        bad = [f["key"] for f in doc["FINDINGS"] if f["level"] == health.CRIT]
+                        app.logger.warning("Server health critical: %s", ", ".join(bad))
+            except Exception:                                   # never let the thread die
+                pass
+            time.sleep(5 * 60)
+
+    threading.Thread(target=loop, name="aoi-health", daemon=True).start()
 
 
 def start(app):
     global _started
+    start_health(app)
     if _started or app.config.get("TESTING") or not app.config.get("MARKET_AUTO"):
         return
     _started = True

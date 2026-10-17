@@ -6,11 +6,69 @@
 {{ page_head(t('tabAi'), url_for('home.index', g='AT')) }}
 <div class="card gap"><p class="desc-text">{{ t('aiDesc') }}</p></div>
 <div class="chips">
+  <a class="chip{% if health.LEVEL != 'ok' %} hl-chip-{{ health.LEVEL }}{% endif %}" href="#ai-health">{{ t('hlTitle') }}{% if health.LEVEL != 'ok' %} &#9888;{% endif %}</a>
   <a class="chip" href="#ai-forecast">{{ t('aiForecast') }}</a><a class="chip" href="#ai-price">{{ t('aiPrice') }}</a>
   <a class="chip" href="#ai-supply">{{ t('spChip') }}</a><a class="chip" href="#ai-alerts">{{ t('aiAlerts') }} ({{ alerts|length }})</a><a class="chip" href="#ai-ask">{{ t('aiAsk') }}</a>
 </div>
 
-<div class="card" id="ai-forecast">
+{% set m = health.METRICS %}
+<div class="card hl-card hl-{{ health.LEVEL }}" id="ai-health">
+  <div class="hl-head">
+    <p class="card-title sub">{{ t('hlTitle') }}</p>
+    <span class="badge hl-badge-{{ health.LEVEL }}" id="hl-level">{{ t('hlLevel_' ~ health.LEVEL) }}</span>
+  </div>
+  <div class="hl-grid">
+    {% set tiles = [('hlDisk', m.disk.used_pct, '%', t('hlFreeGb', n=m.disk.free_gb)), ('hlMemory', m.memory.used_pct, '%', t('hlTotalMb', n=m.memory.total_mb)),
+                    ('hlCpu', m.cpu.used_pct if m.cpu.used_pct is not none else m.cpu.load1, '%' if m.cpu.used_pct is not none else '', t('hlLoad', load=m.cpu.load1, cores=m.cpu.cores)),
+                    ('hlDb', m.db.ms if m.db.ok else none, 'ms', (m.db.kind ~ (' · ' ~ m.db.size_mb ~ ' MB' if m.db.size_mb else '')) if m.db.ok else t('hlDbDown')),
+                    ('hlErrors', m.logs.errors, '', t('hlLastHour')), ('hlWarnings', m.logs.warnings, '', t('hlLastHour'))] %}
+    {% for key, val, unit, sub in tiles %}{% set f = (health.FINDINGS|selectattr('key', 'in', [key, key ~ 'Down'])|list or [{'level': 'ok'}])[0] %}
+    <div class="hl-tile hl-{{ f.level }}" data-hl="{{ key }}"><span class="hl-k">{{ t(key) }}</span><b>{{ (val|plain if val is not none else '-') }}{% if val is not none %}<small>{{ unit }}</small>{% endif %}</b><span class="hl-sub">{{ sub }}</span></div>
+    {% endfor %}
+  </div>
+  {% set bad = health.FINDINGS|rejectattr('level', 'equalto', 'ok')|list %}
+  {% for f in bad %}<p class="alert-row hl-row {{ f.level }}"><span class="badge {{ 'blocked' if f.level == 'crit' else 'pending' }}">&#9888; {{ t('hlLevel_' ~ f.level) }}</span> {{ t(f.key ~ 'Msg', **f.params) }} <small class="hl-todo">{{ t(f.key ~ 'Todo') }}</small></p>
+  {% else %}<p class="hint">&#10003; {{ t('hlAllOk') }}</p>{% endfor %}
+  {# update 49: the app's API, the LINE interface, the hardware devices #}
+  <div class="hl-mon">
+    <p class="card-title section">{{ t('hlApiTitle') }}</p>
+    <div class="inv-table-wrap"><table class="tv-table hl-api"><thead><tr><th>{{ t('hlArea') }}</th><th class="num">{{ t('hlCalls') }}</th><th class="num">4xx</th><th class="num">5xx</th><th class="num">{{ t('hlSlow') }}</th><th class="num">{{ t('hlAvgMs') }}</th><th class="num">{{ t('hlMaxMs') }}</th></tr></thead><tbody>
+    {% for area in ('web', 'device', 'line', 'public') %}{% set a = (m.api or {}).get(area) or {} %}
+    <tr data-area="{{ area }}"><td>{{ t('hlArea_' ~ area) }}</td><td class="num">{{ a.calls or 0 }}</td><td class="num">{{ a.err4xx or 0 }}{% if a.rejected %} <small>({{ t('hlRejected', n=a.rejected) }})</small>{% endif %}</td>
+      <td class="num{% if a.err5xx %} bad{% endif %}">{{ a.err5xx or 0 }}</td><td class="num{% if a.slow %} warnc{% endif %}">{{ a.slow or 0 }}</td><td class="num">{{ a.avg_ms if a.avg_ms is not none else '-' }}</td><td class="num">{{ a.max_ms if a.max_ms is not none else '-' }}</td></tr>
+    {% endfor %}</tbody></table></div>
+    <p class="card-title section">{{ t('hlLineTitle') }}</p>{% set ln = m.line or {} %}
+    <div class="hl-line" id="hl-line">
+      <span class="hl-pill {{ 'ok' if ln.token else 'off' }}">{{ t('hlLineTokenSet') if ln.token else t('hlLineTokenNone') }}</span>
+      <span class="hl-pill {{ 'ok' if ln.secret else ('warn' if ln.token else 'off') }}">{{ t('hlLineSecretSet') if ln.secret else t('hlLineSecretNone') }}</span>
+      {% if ln.bot %}<span class="hl-pill {{ 'ok' if ln.bot == 'ok' else ('crit' if ln.bot == 'invalid' else 'warn') }}">{{ t('hlLineBot_' ~ ln.bot) }}</span>{% endif %}
+      <span class="hl-kv">{{ t('hlLineLastHook') }}: <b>{{ fmt_iso(ln.last_webhook) }}</b></span>
+      <span class="hl-kv">{{ t('hlLineLastSent') }}: <b>{{ fmt_iso(ln.last_sent) }}</b></span>
+      <span class="hl-kv{% if ln.failed_24h %} bad{% endif %}">{{ t('hlLineFailed24') }}: <b>{{ ln.failed_24h or 0 }}</b></span>
+      <span class="hl-kv">{{ t('hlLineWaiting') }}: <b>{{ ln.waiting_24h or 0 }}</b></span>
+    </div>
+    <p class="card-title section">{{ t('hlDevTitle') }}</p>
+    {% if m.devices %}<div class="inv-table-wrap"><table class="tv-table hl-dev"><thead><tr><th>{{ t('hlDevice') }}</th><th>{{ t('colStatus') }}</th><th>{{ t('hlLastSeen') }}</th><th class="num">{{ t('hlFailedCmds') }}</th><th class="num">{{ t('hlFaults24') }}</th></tr></thead><tbody>
+    {% for d in m.devices %}<tr data-device="{{ d.id }}"><td>{{ d.name }}<small class="inv-sub">{{ d.id }}</small></td>
+      <td><span class="hl-pill {{ 'ok' if d.online else ('warn' if d.recent else 'off') }}">{{ t('hlOnline') if d.online else (t('hlNoKey') if not d.has_key else t('hlOffline')) }}</span>{% if d.online and d.fresh is not none %} <small>{{ t('hlLive') if d.fresh else t('hlNoLive') }}</small>{% endif %}</td>
+      <td>{{ d.last_seen or '-' }}</td><td class="num{% if d.failed_cmds %} warnc{% endif %}">{{ d.failed_cmds }}</td><td class="num{% if d.faults %} warnc{% endif %}">{{ d.faults }}</td></tr>{% endfor %}
+    </tbody></table></div>{% else %}<p class="hint">{{ t('hlNoDevices') }}</p>{% endif %}
+  </div>
+  <p class="cap-note">{{ t('hlChecked', level='') }} {{ health_time }} &middot; {{ t('hlUptime', h=m.uptime_h) }}{% if m.app_mb %} &middot; {{ t('hlAppMb', n=m.app_mb) }}{% endif %} &middot; {{ t('hlEvery') }}</p>
+  <div class="btn-pair mt6">
+    {% if can_ask %}<form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="health">
+      <button class="action full" type="submit" id="hl-check">&#8635; {{ t('hlCheckNow') }}</button></form>{% endif %}
+    {% if configured and can_ask and bad %}<form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="QUESTION" value="{{ health_q }}">
+      <button class="action primary full" type="submit" id="hl-ask">&#129302; {{ t('hlAskAi') }}</button></form>{% endif %}
+  </div>
+  <details class="mt6 hl-log"{% if m.logs.errors %} open{% endif %}><summary class="cap-note">{{ t('hlLogTitle', n=health_logs|length) }}</summary>
+    {% if health_logs %}<div class="inv-table-wrap"><table class="tv-table hl-log-table"><thead><tr><th>{{ t('colTime') }}</th><th>{{ t('hlLevelCol') }}</th><th>{{ t('hlMessage') }}</th><th class="num">&times;</th></tr></thead><tbody>
+    {% for d in health_logs %}<tr class="lv-{{ d.LEVEL|lower }}"><td>{{ d.when }}</td><td>{{ d.LEVEL }}</td><td>{{ d.MESSAGE }}</td><td class="num">{{ d.COUNT }}</td></tr>{% endfor %}
+    </tbody></table></div>{% else %}<p class="hint">{{ t('hlNoLog') }}</p>{% endif %}
+  </details>
+</div>
+
+<div class="card mt14" id="ai-forecast">
   <p class="card-title sub">{{ t('aiForecast') }}</p>
   <div class="auto-kpis">
     <div><p class="card-title">{{ t('aiQueueNow') }}</p><p class="kpi-value">{{ queue.orders }} &middot; {{ "{:,.0f}".format(queue.kg) }} kg</p></div>

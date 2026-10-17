@@ -3104,5 +3104,190 @@ class Update45(Base):
         self.assertEqual((a.unit, b.unit), (1, 2))
 
 
+class Update47(Base):
+    """The queue QR to the customer's LINE at registration (text + picture), and Send QR to LINE in the details."""
+    USER = "U" + "1" * 32
+
+    def setUp(self):
+        super().setUp()
+        self.login("admin")
+        self.client.get("/lang/en")
+
+    def link(self):
+        with self.app.app_context():
+            col("AOIMS_CUSTOMER").update_one({"CUST_CODE": "C261001001"}, {"$set": {"LINE_USER_ID": self.USER}})
+
+    def test_png_is_the_label_qr(self):
+        from app.models import qr_png
+        data = qr_png.png("AOI-ML-20261017-0001")
+        self.assertTrue(data.startswith(b"\x89PNG"))
+        self.assertEqual(len(qr_png.encode("AOI-ML-20261017-0001")), 25)       # version 2, like the printed label
+
+    def test_registration_sends_text_and_picture(self):
+        from unittest import mock
+        import os
+        self.link()
+        with mock.patch.dict(os.environ, {"AOI_LINE_CHANNEL_TOKEN": "token", "AOI_PUBLIC_URL": ""}), \
+                mock.patch("app.models.notify._push", return_value=None) as push:
+            order = self.new_order(PUBLIC_BASE="https://mill.example.com")
+            push.assert_called_once()
+            user, text, image = push.call_args[0]
+            self.assertEqual(user, self.USER)
+            self.assertIn(order["QR_ID"], text)
+            self.assertTrue(image.startswith("https://mill.example.com/line/qr/%s.png?t=" % order["ORD_ID"]))
+            path = image[len("https://mill.example.com"):]
+            self.logout()
+            r = self.client.get(path)                                            # LINE fetches it: no sign-in
+            self.assertEqual((r.status_code, r.mimetype), (200, "image/png"))
+            self.assertEqual(self.client.get(path.split("?")[0] + "?t=wrong").status_code, 404)
+            self.login("admin")
+            # no https address -> the text only; the details button sends again
+            push.reset_mock()
+            self.post("/service/milling/%s/line-qr" % order["ORD_ID"], {"PUBLIC_BASE": "http://127.0.0.1:5000"})
+            self.assertIsNone(push.call_args[0][2])
+        notes = [n for n in self.db("AOITS_NOTIFY") if n["ORD_ID"] == order["ORD_ID"]]
+        self.assertEqual([n["NOTIFY_KIND"] for n in notes], ["label", "label"])
+        self.assertIn("Send QR to LINE", self.text("/service/milling/%s?popup=1" % order["ORD_ID"]))
+
+    def test_not_linked_customer_gets_nothing(self):
+        from unittest import mock
+        with mock.patch("app.models.notify._push", return_value=None) as push:
+            order = self.new_order(PUBLIC_BASE="https://mill.example.com")
+        push.assert_not_called()
+        self.assertEqual([n for n in self.db("AOITS_NOTIFY") if n["ORD_ID"] == order["ORD_ID"]], [])
+        self.assertNotIn("Send QR to LINE", self.text("/service/milling/%s?popup=1" % order["ORD_ID"]))
+
+
+class Update48(Base):
+    """Customer card to LINE; server health on AI with the red "!" and banner on the menu."""
+    USER = "U" + "2" * 32
+
+    def setUp(self):
+        super().setUp()
+        self.login("admin")
+        self.client.get("/lang/en")
+
+    def test_card_is_sent_to_line(self):
+        from unittest import mock
+        import os
+        with self.app.app_context():
+            col("AOIMS_CUSTOMER").update_one({"CUST_CODE": "C261001001"}, {"$set": {"LINE_USER_ID": self.USER}})
+        self.assertIn("Not linked to LINE", self.text("/admin/customers/C261001002/card"))
+        with mock.patch.dict(os.environ, {"AOI_LINE_CHANNEL_TOKEN": "token", "AOI_PUBLIC_URL": ""}), \
+                mock.patch("app.models.notify._push", return_value=None) as push:
+            page = self.text("/admin/customers/C261001001/card")
+            self.assertIn('id="cc-line-on" checked', page)
+            r = self.post("/admin/customers/C261001001/card/line", {"PUBLIC_BASE": "https://mill.example.com"}, "/admin/customers/")
+            self.assertEqual(r.get_json()["ok"], True)
+            user, text, image = push.call_args[0]
+            self.assertEqual(user, self.USER)
+            self.assertIn("C261001001", text)
+            self.assertTrue(image.startswith("https://mill.example.com/line/card/C261001001.png?t="))
+            self.logout()
+            png = self.client.get(image[len("https://mill.example.com"):])
+            self.assertEqual((png.status_code, png.mimetype), (200, "image/png"))
+            self.assertEqual(self.client.get("/line/card/C261001001.png?t=bad").status_code, 404)
+        self.assertEqual([n["NOTIFY_KIND"] for n in self.db("AOITS_NOTIFY") if n["CUST_CODE"] == "C261001001"], ["card"])
+
+    def test_health_findings_and_levels(self):
+        from app.models import health
+        m = {"disk": {"used_pct": 96.0, "free_gb": 1.0}, "memory": {"used_pct": 50.0, "total_mb": 4000},
+             "cpu": {"cores": 2, "used_pct": 10.0, "load1": 0.2}, "db": {"ok": True, "ms": 3.0}, "logs": {"errors": 2, "warnings": 0},
+             "gateways": {"offline": ["F2-MOTOR"]}}
+        found = {f["key"]: f["level"] for f in health.evaluate(m)}
+        self.assertEqual((found["hlDisk"], found["hlMemory"], found["hlErrors"], found["hlGateways"]), ("crit", "ok", "warn", "warn"))
+        self.assertEqual(health.overall(health.evaluate(m)), "crit")
+        with self.app.app_context():
+            doc = health.check(sample_seconds=0)
+            self.assertIn(doc["LEVEL"], ("ok", "warn", "crit"))
+            self.assertIsNotNone(doc["METRICS"]["disk"]["used_pct"])
+
+    def test_log_is_kept_and_counted(self):
+        from app.models import health
+        self.app.logger.error("Test failure in the mill job")
+        self.app.logger.error("Test failure in the mill job")
+        logs = [d for d in self.db("AOITS_SYSLOG") if d["MESSAGE"] == "Test failure in the mill job"]
+        self.assertEqual((len(logs), logs[0]["COUNT"], logs[0]["LEVEL"]), (1, 2, "ERROR"))
+        with self.app.app_context():
+            self.assertGreaterEqual(health.collect(0)["logs"]["errors"], 2)
+
+    def test_menu_badge_banner_and_ai_card(self):
+        from unittest import mock
+        from app.models import health
+        bad = {"CHECK_DATE": __import__("app.timeutil", fromlist=["now_utc"]).now_utc(), "LEVEL": "crit",
+               "METRICS": {}, "FINDINGS": [{"key": "hlDisk", "level": "crit", "params": {"pct": 97.0, "free": 0.5}}]}
+        with mock.patch.object(health, "latest", return_value=bad):
+            page = self.text("/?g=AT")
+            self.assertIn('id="health-banner"', page)
+            self.assertIn("Disk 97.0% full", page)
+            self.assertRegex(page, r'home-tile-badge show">!</span>\s*<span class="icon" aria-hidden="true">\U0001F916')
+        page = self.text("/automation/ai")
+        self.assertIn('id="ai-health"', page)
+        self.assertIn('data-hl="hlDisk"', page)
+        self.post("/automation/ai", {"action": "health"}, "/automation/ai")
+        self.logout()
+        self.login("wanida.s")                                                   # accountant: AI view, so she sees it too
+        self.assertEqual(self.client.get("/").status_code, 200)
+
+
+class Update49(Base):
+    """API, LINE interface and hardware device monitoring on the server health card."""
+
+    def setUp(self):
+        super().setUp()
+        self.login("admin")
+        self.client.get("/lang/en")
+
+    def test_requests_are_counted_per_area(self):
+        from app.models import monitor
+        self.client.get("/automation/ai")
+        self.client.post("/api/v1/machines/F2-MOTOR1/status", json={"status": "R"}, headers={"X-Device-Key": "wrong"})
+        with self.app.app_context():
+            monitor.record_request("/x", None, 500, 10.0)
+            monitor.record_request("/x", None, 200, 2500.0)
+            st = monitor.api_stats()
+        self.assertGreaterEqual(st["web"]["calls"], 3)
+        self.assertGreaterEqual(st["web"]["err5xx"], 1)
+        self.assertGreaterEqual(st["web"]["slow"], 1)
+        self.assertGreaterEqual(st["web"]["max_ms"], 2500.0)
+        self.assertEqual((st["device"]["calls"], st["device"]["rejected"]), (1, 1))
+        self.assertEqual(monitor.area_of("/line/webhook", "line_api"), "line")
+        self.assertEqual(monitor.area_of("/line/qr/x.png", "line_api"), "public")
+
+    def test_findings_for_api_line_and_devices(self):
+        from app.models import health
+        base = {"disk": {"used_pct": 10.0, "free_gb": 50.0}, "memory": {"used_pct": 10.0, "total_mb": 4000},
+                "cpu": {"cores": 2, "used_pct": 10.0, "load1": 0.1}, "db": {"ok": True, "ms": 3.0}, "logs": {"errors": 0, "warnings": 0},
+                "gateways": {"offline": []}}
+        m = dict(base, **{"api": {"web": {"err5xx": 12, "slow": 11}, "device": {"rejected": 25}},
+             "line": {"token": True, "secret": False, "bot": "invalid", "failed_24h": 2},
+             "devices": [{"id": "F2-MOTOR1", "failed_cmds": 1, "faults": 2}]})
+        found = {f["key"]: f["level"] for f in health.evaluate(m)}
+        self.assertEqual(found["hlApi5xx"], "crit")
+        self.assertEqual(found["hlApiSlow"], "warn")
+        self.assertEqual(found["hlDeviceRejected"], "warn")
+        self.assertEqual(found["hlLineToken"], "crit")
+        self.assertEqual(found["hlLineSecret"], "warn")
+        self.assertIn("hlLineFailed", found)
+        self.assertIn("hlCommands", found)
+        self.assertIn("hlFaults", found)
+        quiet = {f["key"] for f in health.evaluate(dict(base, api={}, line={"token": False}, devices=[])) if f["level"] != "ok"}
+        self.assertFalse(quiet & {"hlApi5xx", "hlLineToken", "hlLineSecret", "hlCommands"})
+
+    def test_line_status_and_devices_on_the_card(self):
+        from app.models import monitor
+        with self.app.app_context():
+            ln = monitor.line_status()
+            devs = monitor.devices()
+        self.assertEqual((ln["token"], ln["bot"]), (False, None))
+        ids = [d["id"] for d in devs]
+        self.assertTrue(ids)
+        self.assertFalse([i for i in ids if i.endswith("SELECT")])
+        self.post("/automation/ai", {"action": "health"}, "/automation/ai")
+        page = self.text("/automation/ai")
+        for text in ('id="hl-line"', "LINE interface", "Hardware devices", 'data-area="device"', 'data-device="%s"' % ids[0]):
+            self.assertIn(text, page)
+
+
 if __name__ == "__main__":
     unittest.main()

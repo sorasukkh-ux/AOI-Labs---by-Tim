@@ -103,6 +103,12 @@
   {% endif %}
   <div class="od-row"><span class="od-label">{{ t('receiveTimeLabel') }}</span><span class="od-value">{{ fmt_datetime(order.EXPCT_RECEIVE_TIME) }}</span></div>
   <div class="od-row"><span class="od-label">{{ t('detNotify') }}</span><span class="od-value">{% if order.notify %}{{ t({'1': 'notifySentLabel', '9': 'notifyFailLabel'}.get(order.notify.NOTIFY_FLG, 'notifyWaitLabel')) }}{% else %}-{% endif %}</span></div>
+  {% if edit and order.customer.get('LINE_USER_ID') %}
+  <form method="post" action="{{ url_for('service_milling.line_qr', ord_id=order.ORD_ID) }}" class="inline-form od-line-qr">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="back" value="list"><input type="hidden" name="PUBLIC_BASE" value="" data-public-base>
+    <button class="action small-btn" type="submit" id="od-line-qr-{{ order.ORD_ID }}">&#128172; {{ t('btnSendQrLine') }}</button>
+  </form>
+  {% endif %}
   {% if order.notify and order.notify.NOTIFY_FLG != '1' %}<p class="cap-note tight ln-reason-detail">{{ t(ln_reason(order.notify.ERROR)) }}{% if order.notify.ERROR and not order.notify.ERROR.startswith('ln') %} ({{ order.notify.ERROR }}){% endif %}</p>{% endif %}
   {% if order.ACT_PADDY or order.ACT_RICE %}
   <p class="od-section">{{ t('detSecActual') }}</p>

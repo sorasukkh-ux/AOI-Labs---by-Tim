@@ -5,8 +5,17 @@
 <div class="cc-tools">
   <form method="get" class="cc-copies"><label for="cc-n">{{ t('custCardCopies') }}</label>
     <select id="cc-n" name="n" data-autosubmit>{% for n in (1, 2, 4, 6, 8, 10) %}<option value="{{ n }}"{% if n == copies %} selected{% endif %}>{{ n }}</option>{% endfor %}</select></form>
-  <button class="action primary" type="button" data-print>{{ t('custCardPrint') }}</button>
+  <button class="action primary" type="button" id="cc-print">{{ t('custCardPrint') }}</button>
+  {% if line_ready %}
+  <form class="cc-line" id="cc-line-form" method="post" action="{{ url_for('admin_customers.customer_card_line', code=c.CUST_CODE) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="PUBLIC_BASE" value="">
+    <label class="checkline"><input type="checkbox" id="cc-line-on" checked> {{ t('custCardAlsoLine') }}</label>
+    <button class="action" type="button" id="cc-line-send">&#128172; {{ t('custCardLineOnly') }}</button>
+  </form>
+  {% elif line_linked %}<span class="cc-line-note">{{ t('custCardLineOff') }}</span>
+  {% else %}<span class="cc-line-note">{{ t('custCardNoLine') }}</span>{% endif %}
 </div>
+<p class="cc-line-status" id="cc-line-status" role="status" hidden></p>
 <div class="cc-sheet">
 {% for i in range(copies) %}
 <div class="cust-card">

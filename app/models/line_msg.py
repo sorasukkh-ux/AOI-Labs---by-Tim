@@ -17,6 +17,8 @@ MESSAGES = (
     ("ML_FINISHED", "lmName_ML_FINISHED", "lmDefault_ML_FINISHED", ORDER_PARAMS),
     ("ML_FINISHED_DELIVERY", "lmName_ML_FINISHED_DELIVERY", "lmDefault_ML_FINISHED_DELIVERY", ORDER_PARAMS + ("address",)),
     ("ML_DELIVERY", "lmName_ML_DELIVERY", "lmDefault_ML_DELIVERY", ORDER_PARAMS + ("address",)),
+    ("ML_LABEL", "lmName_ML_LABEL", "lmDefault_ML_LABEL", ORDER_PARAMS),          # update 47: + the QR picture
+    ("LN_CARD", "lmName_LN_CARD", "lmDefault_LN_CARD", ("name", "code")),          # update 48: the customer card
     ("LN_WELCOME", "lmName_LN_WELCOME", "lnrWelcome", ()),
     ("LN_WELCOME_BACK", "lmName_LN_WELCOME_BACK", "lnrWelcomeBack", ("name",)),
     ("LN_LINKED_TICKET", "lmName_LN_LINKED_TICKET", "lnrLinkedTicket", ("name", "no")),
@@ -31,7 +33,7 @@ MESSAGES = (
 )
 INFO = {m[0]: m for m in MESSAGES}
 SAMPLE = {"no": "0031", "name": "สมชาย ก.", "time": "14:30", "date": "13/10/2026", "rice_kg": "51.52", "pay": "120.00",
-          "branch": "โรงงาน 2", "address": "45 หมู่ 2 ต.บ้านเป็ด อ.เมือง จ.ขอนแก่น", "n": "1"}
+          "branch": "โรงงาน 2", "address": "45 หมู่ 2 ต.บ้านเป็ด อ.เมือง จ.ขอนแก่น", "n": "1", "code": "C261001001"}
 
 
 def default_text(msg_id):

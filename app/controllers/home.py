@@ -19,6 +19,8 @@ def build_menu(user, branch):
     """Groups -> sub-groups -> tiles, keeping only the screens the role may View."""
     perms = RoleAuth.for_role(user["ROLE_CODE"])
     badges = {"SV_MILLSTATUS": MillingOrder.count_attention(branch)}
+    if perms.get("AT_AI", {}).get("view"):                # update 48: server health risk -> red "!" on AI
+        badges["AT_AI"] = 1 if server_health_alert() else 0
     groups = []
     for code, label_key in GROUPS:
         sections = []                                  # [(sub-group label key or None, [tiles])]
@@ -41,13 +43,27 @@ def build_menu(user, branch):
     return groups
 
 
+def server_health_alert():
+    """Update 48: the newest server health check when it is not ok ({"level", "finding"}), else None."""
+    from ..models import health
+    try:
+        doc = health.latest()
+    except Exception:                                     # noqa: BLE001 - the menu always opens
+        return None
+    if doc["LEVEL"] == health.OK:
+        return None
+    return {"level": doc["LEVEL"], "finding": doc["FINDINGS"][0]}
+
+
 @bp.route("/")
 @require_login
 def index():
-    groups = build_menu(current_user(), operating_branch())
+    user = current_user()
+    groups = build_menu(user, operating_branch())
     codes = [g["code"] for g in groups]
     active = request.args.get("g") if request.args.get("g") in codes else (codes[0] if codes else None)
-    return render_template("home.html", groups=groups, active=active)
+    alert = server_health_alert() if RoleAuth.can(user["ROLE_CODE"], "AT_AI", "view") else None
+    return render_template("home.html", groups=groups, active=active, health_alert=alert)
 
 
 @bp.route("/planned/<menu_code>")

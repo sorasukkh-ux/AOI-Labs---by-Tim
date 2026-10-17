@@ -123,6 +123,11 @@
     node.addEventListener("click", function (e) { if (e.target.closest("[data-modal-close]")) window.AOIModal.close(); });
     return window.AOIModal.form(node);
   }
+  // update 47: forms that send a LINE picture tell the server the address the staff use (https, reachable by LINE)
+  document.addEventListener("submit", function (event) {
+    var f = event.target, field = f.querySelector && f.querySelector("input[data-public-base]");
+    if (field) field.value = window.location.origin;
+  }, true);
   // update 39: <button data-open-form="template-id"> opens that form in the pop-up (e.g. Edit items of a take-home order)
   document.addEventListener("click", function (event) {
     var opener = event.target.closest("button[data-open-form]");

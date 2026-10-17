@@ -115,13 +115,15 @@ def new_order():
                 return jsonify({"ok": False, "error": t(error.key, **error.params)}), 422
             flash_error(error)
         else:
+            line_sent = _send_label(order, request.form.get("PUBLIC_BASE"))     # update 47: the QR to the customer's LINE
             if wants_json:                               # Print QR on the page: the script prints the label, then asks
                 customer = Customer.find(order["CUST_CODE"]) or {}
                 return jsonify({
                     "ok": True, "ord_id": order["ORD_ID"], "qr_id": order["QR_ID"], "is_delivery": order["ORDER_TYPE"] == flow.DELIVER,
                     "label": label_data(order["QR_ID"], "AOI-" + order["ORD_ID"], customer.get("CUST_NAME", order["CUST_CODE"]),
                                         MillingOrder.pay_total(order), order["EXPCT_RECEIVE_TIME"], order["REGIST_DATE"], customer),
-                    "message": t("orderCreatedMsg", id=order["QR_ID"]), "question": t("confirmGoOrderList"),
+                    "message": t("orderCreatedMsg", id=order["QR_ID"]) + (("\n" + t(line_sent)) if line_sent else ""),
+                    "question": t("confirmGoOrderList"),
                     "list_url": url_for("service_milling.order_list") if can(STATUS) else None,
                     "new_url": url_for("service_milling.new_order")})
             flash_ok("orderCreatedMsg", id=order["QR_ID"])
@@ -138,6 +140,34 @@ def new_order():
                       "confirmCloseQuestion", "sellReleaseDetailsTitle", "colSku", "colLocation", "colOnHand", "colQty",
                       "confirmOrderCreated", "errLocFormat"),
         js_text=texts("custListEmpty", "errCustomerRequired", "alertEnterPaddy", "errServer", "btnPrintQR", "btnConfirmOrder"))
+
+
+def _send_label(order, browser_origin, force=False):
+    """Update 47: the queue number and QR picture to the customer's LINE, when the customer is linked to the LINE OA.
+    Returns the text key for the staff (lnLabelSent / lnLabelText / error key) or None when nothing was sent."""
+    customer = Customer.find(order["CUST_CODE"]) or {}
+    if not (customer.get("LINE_USER_ID") or force):
+        return None
+    image = notify.qr_image_url(order, browser_origin)
+    doc = notify.queue(order, "label", order.get("EXPCT_RECEIVE_TIME"), image_url=image)
+    if not doc:
+        return "lnLabelOff" if force else None
+    if doc["NOTIFY_FLG"] != notify.SENT:
+        return notify.reason_key(doc.get("ERROR"))
+    return "lnLabelSent" if image else "lnLabelText"
+
+
+@bp.route("/<ord_id>/line-qr", methods=["POST"])
+@require(STATUS, "edit")
+def line_qr(ord_id):
+    """Update 47: Send QR to LINE (order details) - the queue number and the QR picture again."""
+    order = _order_or_404(ord_id)
+    key = _send_label(order, request.form.get("PUBLIC_BASE"), force=True)
+    if key in ("lnLabelSent", "lnLabelText"):
+        flash_ok(key)
+    else:
+        flash_error(ValidationError(key or "lnFailed"))
+    return _back(order["ORD_ID"])
 
 
 @bp.route("/customers.json")

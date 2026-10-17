@@ -7,7 +7,7 @@ GET /line/webhook answers "AOI Labs LINE webhook" so the address can be checked 
 """
 import json
 
-from flask import Blueprint, abort, jsonify, request
+from flask import Blueprint, Response, abort, jsonify, request
 
 from ..models import line_link
 
@@ -29,3 +29,32 @@ def webhook():
     except ValueError:
         abort(400)
     return jsonify({"ok": True, "handled": line_link.handle(events)})
+
+
+@bp.route("/qr/<ord_id>.png")
+def order_qr(ord_id):
+    """Update 47: the QR picture of a milling order for the customer's LINE (LINE fetches it: no sign-in). The address
+    carries a secret token made from the order ID, so other orders cannot be guessed."""
+    import secrets
+    from ..models import notify, qr_png
+    from ..models.milling_order import MillingOrder
+    order = MillingOrder.find(ord_id)
+    if not order or not secrets.compare_digest(request.args.get("t", ""), notify.qr_token(order["ORD_ID"])):
+        abort(404)
+    resp = Response(qr_png.png("AOI-" + order["ORD_ID"], scale=14), mimetype="image/png")
+    resp.headers["Cache-Control"] = "public, max-age=86400"
+    return resp
+
+
+@bp.route("/card/<code>.png")
+def customer_qr(code):
+    """Update 48: the customer card QR (the customer code) for the customer's LINE."""
+    import secrets
+    from ..models import notify, qr_png
+    from ..models.customer import Customer
+    customer = Customer.find(code)
+    if not customer or not secrets.compare_digest(request.args.get("t", ""), notify.card_token(customer["CUST_CODE"])):
+        abort(404)
+    resp = Response(qr_png.png(customer["CUST_CODE"], scale=14), mimetype="image/png")
+    resp.headers["Cache-Control"] = "public, max-age=86400"
+    return resp

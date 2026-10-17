@@ -1,6 +1,7 @@
 """Administration > Customer Registration (AOIMS_CUSTOMER). One screen: search, the chosen customer, history."""
 from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
 
+from ..i18n import t
 from ..models.base import ValidationError
 from ..models.customer import Customer
 from ..models.milling_order import MillingOrder
@@ -61,9 +62,28 @@ def customer_card(code):
     customer = Customer.find(code)
     if not customer or customer.get("CUST_STATUS") == "D":
         abort(404)
-    from ..models import phone
+    from ..models import phone, notify
+    linked = bool(customer.get("LINE_USER_ID"))
     return render_template("admin/customer_card.html", c=customer, mobile=phone.of(customer),
-                           copies=max(1, min(10, request.args.get("n", 1, type=int))))
+                           copies=max(1, min(10, request.args.get("n", 1, type=int))),
+                           line_linked=linked, line_ready=linked and notify.configured() and can(MENU, "edit"))
+
+
+@bp.route("/<code>/card/line", methods=["POST"])
+@require(MENU, "edit")
+def customer_card_line(code):
+    """Update 48: Print QR card also sends the card (text + QR picture) to the customer's LINE. Answers JSON."""
+    from flask import jsonify
+    from ..models import notify
+    customer = Customer.find(code)
+    if not customer or customer.get("CUST_STATUS") == "D":
+        abort(404)
+    if not customer.get("LINE_USER_ID"):
+        return jsonify({"ok": False, "message": t("lnNoUser")}), 422
+    doc = notify.send_card(customer, request.form.get("PUBLIC_BASE"))
+    if doc.get("NOTIFY_FLG") != notify.SENT:
+        return jsonify({"ok": False, "message": t(notify.reason_key(doc.get("ERROR")))}), 422
+    return jsonify({"ok": True, "message": t("lnCardSent" if doc.get("IMAGE_URL") else "lnCardText")})
 
 
 @bp.route("/check.json")

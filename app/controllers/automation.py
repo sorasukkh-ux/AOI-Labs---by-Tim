@@ -293,6 +293,11 @@ def ai_screen():
     if request.method == "POST":
         if not can(AI_MENU, "create"):
             abort(403)
+        if request.form.get("action") == "health":             # update 48: check the server now
+            from ..models import health
+            doc = health.check(sample_seconds=1.0)
+            flash_ok("hlChecked", level=t("hlLevel_" + doc["LEVEL"]))
+            return redirect(url_for("automation.ai_screen", _anchor="ai-health"))
         if request.form.get("action") == "supply":
             try:
                 n = supply.fetch(_user_id())
@@ -308,6 +313,11 @@ def ai_screen():
             return redirect(url_for("automation.ai_screen", _anchor="ai-ask"))
         session["ai_answer"] = {"q": request.form.get("QUESTION"), "a": answer}
         return redirect(url_for("automation.ai_screen", _anchor="ai-ask"))
+    from ..models import health
+    hl = health.latest()
+    hl_logs = health.recent_logs(20)
+    for d in hl_logs:
+        d["when"] = fmt_datetime(d.get("LAST_DATE"))
     fc = ai.forecast(branch)
     bars = _bars([(f["day"].strftime("%d/%m"), f["kg"], "%s · %.0f kg · %.1f %s" % (f["day"].strftime("%d/%m"), f["kg"], f["orders"], t("aiOrders")))
                   for f in fc])
@@ -321,7 +331,8 @@ def ai_screen():
     sp = supply.summary()
     sp_bars = _bars([("%s/%s" % (d["PERIOD"][5:], str(d["YEAR_TH"])[2:]), d["INDEX_VALUE"],
                       "%s/%s · %.1f" % (d["PERIOD"][5:], d["YEAR_TH"], d["INDEX_VALUE"])) for d in supply.series(sp["scope"] if sp else None, 24)])
-    return render_template("automation/ai.html", supply=sp, supply_bars=sp_bars, can_ask_fetch=can(AI_MENU, "create"), forecast=fc, bars=bars, queue=ai.queue_load(branch), advice=advice,
+    return render_template("automation/ai.html", health=hl, health_logs=hl_logs, health_time=fmt_datetime(hl["CHECK_DATE"]),
+                           health_q=t("hlAskQuestion"), supply=sp, supply_bars=sp_bars, can_ask_fetch=can(AI_MENU, "create"), forecast=fc, bars=bars, queue=ai.queue_load(branch), advice=advice,
                            alerts=alerts, configured=ai.ai_configured(), last=session.pop("ai_answer", None),
                            recent=ai.recent_questions(branch, _user_id()), can_ask=can(AI_MENU, "create"),
                            basis=min((f["basis"] for f in fc), default=0))

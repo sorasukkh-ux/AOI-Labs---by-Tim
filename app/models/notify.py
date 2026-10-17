@@ -3,6 +3,8 @@
 When they are sent (the milling status flow):
   * take-away order set to Finished      -> "your rice is ready" (notifyFinishedMsg)
   * delivery order, delivery time confirmed on Ready for Delivery -> "it will arrive at ..." (notifyDeliveryMsg)
+  * update 47: registration (Print QR), customer linked to LINE -> the queue number and the QR picture (ML_LABEL);
+    again with "Send QR to LINE" in the order details
 
 Every message is first written to AOITS_NOTIFY (NOTIFY_FLG 0 = not sent yet), then sent with the LINE Messaging API
 (push message, https://api.line.me/v2/bot/message/push) and marked 1 = sent or 9 = error with the reason in ERROR.
@@ -41,9 +43,13 @@ def configured():
     return bool(_token())
 
 
-def _push(user_id, text):
-    """Sends one text message; returns None when LINE accepted it, otherwise the error text."""
-    body = json.dumps({"to": user_id, "messages": [{"type": "text", "text": text[:5000]}]}).encode("utf-8")
+def _push(user_id, text, image_url=None):
+    """Sends one text message (update 47: and the QR picture when `image_url`); returns None when LINE accepted it,
+    otherwise the error text."""
+    messages = [{"type": "text", "text": text[:5000]}]
+    if image_url:
+        messages.append({"type": "image", "originalContentUrl": image_url, "previewImageUrl": image_url})
+    body = json.dumps({"to": user_id, "messages": messages}).encode("utf-8")
     req = urllib.request.Request(PUSH_URL, data=body, method="POST", headers={
         "Content-Type": "application/json", "Authorization": "Bearer " + _token(),
         "X-Line-Retry-Key": str(uuid.uuid4())})
@@ -107,7 +113,35 @@ def reason_key(error):
     return "lnApiError"
 
 
-MSG_IDS = {"finished": "ML_FINISHED", "finished_delivery": "ML_FINISHED_DELIVERY", "delivery": "ML_DELIVERY"}
+MSG_IDS = {"finished": "ML_FINISHED", "finished_delivery": "ML_FINISHED_DELIVERY", "delivery": "ML_DELIVERY",
+           "label": "ML_LABEL"}                    # update 47: the queue QR at registration
+
+
+def qr_token(ord_id):
+    """The secret part of the public QR picture address of an order (LINE fetches it without signing in)."""
+    import hashlib
+    import hmac
+    from flask import current_app
+    key = (current_app.config.get("SECRET_KEY") or "aoi").encode("utf-8")
+    return hmac.new(key, ("qr:" + ord_id).encode("utf-8"), hashlib.sha256).hexdigest()[:24]
+
+
+def public_base(browser_origin=None):
+    """https://<server> that LINE can reach: AOI_PUBLIC_URL (.env), else the address in the staff's browser
+    (behind Codespaces / a proxy the server only sees its own local address). None when there is no https address."""
+    for base in ((os.environ.get("AOI_PUBLIC_URL") or "").strip(), (browser_origin or "").strip()):
+        base = base.rstrip("/")
+        if re.match(r"^https://[A-Za-z0-9.-]+(:\d+)?$", base):
+            return base
+    return None
+
+
+def qr_image_url(order, browser_origin=None):
+    from flask import url_for
+    base = public_base(browser_origin)
+    if not base:
+        return None
+    return base + url_for("line_api.order_qr", ord_id=order["ORD_ID"], t=qr_token(order["ORD_ID"]))
 
 
 def order_params(order, when):
@@ -144,7 +178,7 @@ def send(doc):
         if not USER_ID.match(user_id):
             flag, error = ERROR, "lnNoUser"
         else:
-            problem = _push(user_id, doc["NOTIFY_MESSAGE"])
+            problem = _push(user_id, doc["NOTIFY_MESSAGE"], doc.get("IMAGE_URL"))
             flag, error = (SENT, None) if problem is None else (ERROR, problem)
     now = now_utc()
     values = {"NOTIFY_FLG": flag, "ERROR": error, "LAST_UPDATE": now}
@@ -155,9 +189,10 @@ def send(doc):
     return doc
 
 
-def queue(order, kind, when):
-    """Writes the message of `kind` ('finished' | 'finished_delivery' | 'delivery') for a milling order and tries to send it.
-    Nothing is written when the message is switched off on LINE Message Maintenance."""
+def queue(order, kind, when, image_url=None):
+    """Writes the message of `kind` ('finished' | 'finished_delivery' | 'delivery' | 'label') for a milling order and tries
+    to send it. Nothing is written when the message is switched off on LINE Message Maintenance. `image_url`: the QR
+    picture sent after the text (update 47)."""
     from . import line_msg
     if not line_msg.active(MSG_IDS.get(kind, "ML_FINISHED")):
         return None
@@ -165,7 +200,8 @@ def queue(order, kind, when):
     seq = Counter.next("NT-" + order["ORD_ID"])
     doc = {"NOTIFY_ID": "NT-%s-%02d" % (order["ORD_ID"], seq), "ORD_ID": order["ORD_ID"], "ORD_TYPE": "ML",
            "CUST_CODE": order["CUST_CODE"], "NOTIFY_KIND": kind, "NOTIFY_DATETIME": None, "NOTIFY_FLG": UNSENT,
-           "NOTIFY_MESSAGE": _message(kind, order, when), "ERROR": None, "REGIST_DATE": now, "LAST_UPDATE": now}
+           "NOTIFY_MESSAGE": _message(kind, order, when), "ERROR": None, "REGIST_DATE": now, "LAST_UPDATE": now,
+           "IMAGE_URL": image_url}
     col(COL).insert_one(dict(doc))
     return send(doc)
 
@@ -183,4 +219,36 @@ def resend(ord_id):
     doc = last_for([ord_id]).get(ord_id)
     if not doc or doc["NOTIFY_FLG"] == SENT:
         return doc
+    return send(doc)
+
+
+# ---------- update 48: the customer card (QR of the customer code) to the customer's LINE ----------
+def card_token(cust_code):
+    import hashlib
+    import hmac
+    from flask import current_app
+    key = (current_app.config.get("SECRET_KEY") or "aoi").encode("utf-8")
+    return hmac.new(key, ("card:" + cust_code).encode("utf-8"), hashlib.sha256).hexdigest()[:24]
+
+
+def card_image_url(cust_code, browser_origin=None):
+    from flask import url_for
+    base = public_base(browser_origin)
+    return base + url_for("line_api.customer_qr", code=cust_code, t=card_token(cust_code)) if base else None
+
+
+def send_card(customer, browser_origin=None):
+    """The customer card text (LN_CARD) and its QR picture; saved in AOITS_NOTIFY (kind card, ORD_TYPE CU)."""
+    from . import line_msg
+    from .tv import short_name
+    if not line_msg.active("LN_CARD"):
+        return {"NOTIFY_FLG": ERROR, "ERROR": "lnLabelOff"}
+    now = now_utc()
+    seq = Counter.next("NT-" + customer["CUST_CODE"])
+    doc = {"NOTIFY_ID": "NT-%s-%02d" % (customer["CUST_CODE"], seq), "ORD_ID": None, "ORD_TYPE": "CU",
+           "CUST_CODE": customer["CUST_CODE"], "NOTIFY_KIND": "card", "NOTIFY_DATETIME": None, "NOTIFY_FLG": UNSENT,
+           "NOTIFY_MESSAGE": line_msg.text("LN_CARD", name=short_name(customer.get("CUST_NAME", "")) or customer["CUST_CODE"],
+                                           code=customer["CUST_CODE"]),
+           "ERROR": None, "REGIST_DATE": now, "LAST_UPDATE": now, "IMAGE_URL": card_image_url(customer["CUST_CODE"], browser_origin)}
+    col(COL).insert_one(dict(doc))
     return send(doc)

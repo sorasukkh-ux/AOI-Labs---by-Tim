@@ -150,6 +150,7 @@
   function save() {
     confirmBtn.disabled = true;
     var data = new FormData(form);
+    data.set("PUBLIC_BASE", window.location.origin);      // update 47: the https address LINE fetches the QR picture from
     fetch(form.getAttribute("action") || window.location.pathname, {
       method: "POST", body: data, credentials: "same-origin",
       headers: { "Accept": "application/json", "X-CSRF-Token": data.get("csrf_token") } })

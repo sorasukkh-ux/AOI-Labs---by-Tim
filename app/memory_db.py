@@ -151,6 +151,10 @@ class _Collection:
             elif op == "$inc":
                 for k, v in values.items():
                     new[k] = (new.get(k) or 0) + v
+            elif op == "$max":
+                for k, v in values.items():
+                    if new.get(k) is None or v > new[k]:
+                        new[k] = v
             elif op == "$unset":
                 for k in values:
                     new.pop(k, None)

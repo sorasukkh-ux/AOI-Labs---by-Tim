@@ -4,6 +4,10 @@
 {% if not groups %}
   <p class="hint home-empty" id="home-empty">{{ t('homeNoAccess') }}</p>
 {% else %}
+  {% if health_alert %}{% set hf = health_alert.finding %}
+  <a class="health-banner {{ health_alert.level }}" id="health-banner" href="{{ url_for('automation.ai_screen', _anchor='ai-health') }}" role="alert">
+    <b>&#9888; {{ t('hlBanner' ~ health_alert.level|capitalize) }}</b> <span>{{ t(hf.key ~ 'Msg', **hf.params) }}</span> <u>{{ t('hlOpen') }} &rarr;</u></a>
+  {% endif %}
   <div class="group-toggle">
     {% for g in groups %}
     <a class="group-btn{% if g.code == active %} active{% endif %}{% if g.alert %} has-alert{% endif %}" href="{{ url_for('home.index', g=g.code) }}" data-group="{{ g.code }}">{{ t(g.label_key) }}</a>

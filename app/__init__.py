@@ -30,6 +30,8 @@ def create_app(overrides=None):
         app.logger.warning("AOI_SECRET_KEY is not set: using a temporary key, so everyone is signed out on restart.")
 
     init_db(app)
+    from .models import health                     # update 48: the app's warnings / errors also go to AOITS_SYSLOG
+    health.install(app)
     with app.app_context():
         ensure_indexes()
         if app.config["DB_BACKEND"] == "memory":
@@ -46,6 +48,16 @@ def create_app(overrides=None):
     # ---- helpers available in every template and macro (VIEW) ----
     from .controllers.common import branch_label
     from .models import variety, phone
+    def fmt_iso(text):                               # update 49: an ISO time from the health figures, shown local
+        if not text:
+            return "-"
+        from datetime import datetime as _dt
+        from .timeutil import fmt_datetime as _fd
+        try:
+            return _fd(_dt.fromisoformat(text))
+        except ValueError:
+            return text
+    app.jinja_env.globals["fmt_iso"] = fmt_iso
     app.jinja_env.globals.update(
         mat_name=variety.mat_name, varieties=variety.VARIETIES, var_keys=variety.VAR_KEYS, default_priority=variety.DEFAULT_PRIORITY,
         phone_of=phone.of, phone_countries=phone.COUNTRIES, phone_default=phone.DEFAULT, variety_of=variety.variety_of,
@@ -83,6 +95,12 @@ def create_app(overrides=None):
         return ("%.6f" % value).rstrip("0").rstrip(".") if isinstance(value, float) else ("" if value is None else value)
 
     @app.before_request
+    def start_timer():                                   # update 49: API monitoring (models/monitor.py)
+        from flask import g
+        import time as _t
+        g._aoi_t0 = _t.perf_counter()
+
+    @app.before_request
     def protect_forms():
         # the device API is used by machines with their own device key, not by a signed-in browser
         if request.endpoint != "static" and request.blueprint not in ("device_api", "line_api"):
@@ -100,6 +118,12 @@ def create_app(overrides=None):
                                     "style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com")
         if request.endpoint != "static":
             response.headers.setdefault("Cache-Control", "no-store")
+            from flask import g
+            import time as _t
+            t0 = getattr(g, "_aoi_t0", None)
+            if t0 is not None:
+                from .models import monitor
+                monitor.record_request(request.path, request.blueprint, response.status_code, (_t.perf_counter() - t0) * 1000.0)
         return response
 
     def error_page(code, key):
