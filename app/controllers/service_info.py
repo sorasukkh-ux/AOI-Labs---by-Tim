@@ -38,7 +38,8 @@ def tv():
 
 def _status_sections():
     """Finished, in process and queued orders of the branch (the former Service Status)."""
-    orders = MillingOrder.sort_for_list(MillingOrder.for_branch(operating_branch(), [s for s, _c, _k in TV_SECTIONS]))
+    orders = MillingOrder.sort_for_list(MillingOrder.for_branch(operating_branch(), [s for s, _c, _k in TV_SECTIONS]),
+                                        MillingOrder.list_base(operating_branch()))
     names = {}
     sections = []
     for status, css, key in TV_SECTIONS:

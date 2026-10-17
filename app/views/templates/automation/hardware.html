@@ -38,7 +38,23 @@
       </div>
     </div>
     {% endif %}
-    {% if can_command and m.CONTROL_FLG %}
+    {% if m.MACHINE_TYPE == 'MILL_SELECTOR' %}
+    {# update 43: the mill selector - one main motor at a time, switched only while they are stopped #}
+    <p class="mc-select-now">{{ t('scSelectorTo') }}: <b>{{ names.get(m.SELECT_TO, t('scSelectorNone')) if m.SELECT_TO else t('scSelectorNone') }}</b></p>
+    {% if can_command %}
+    <div class="btn-pair mt6 mc-select">
+      {% for tid in m.targets %}
+      <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="command">
+        <input type="hidden" name="MACHINE_ID" value="{{ m.MACHINE_ID }}"><input type="hidden" name="CMD" value="SELECT"><input type="hidden" name="CMD_VALUE" value="{{ tid }}">
+        <button class="action{% if m.SELECT_TO == tid %} primary{% endif %} full" type="submit" id="cmd-select-{{ tid }}" data-confirm="{{ t('scConfirmSwitch', name=names.get(tid, tid)) }}"
+          {% if not m.can_command or m.SELECT_TO == tid or running_motors %}disabled{% endif %}>{{ t('scSwitchTo', name=names.get(tid, tid)) }}</button>
+      </form>
+      {% endfor %}
+    </div>
+    {% endif %}
+    <p class="cap-note tight">{{ t('scSelectorNote') }}{% if not (m.CONTROL_FLG and m.DEVICE_KEY_HASH) %} {{ t('scSelectorManual') }}{% endif %}</p>
+    {% elif can_command and m.CONTROL_FLG %}
     <form method="post" class="btn-pair mt6{% if m.MACHINE_TYPE == 'MAIN_MOTOR' %} motor-onoff{% endif %}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="command">
       <input type="hidden" name="MACHINE_ID" value="{{ m.MACHINE_ID }}">
@@ -90,7 +106,7 @@
   <div class="inv-table-wrap"><table class="tv-table" id="cmd-table">
     <thead><tr><th>{{ t('colTime') }}</th><th>{{ t('mcMachine') }}</th><th>{{ t('mcCommand') }}</th><th>{{ t('colStatus') }}</th></tr></thead>
     <tbody>{% for c in commands %}<tr><td class="nowrap">{{ fmt_datetime(c.REQ_DATE) }}</td><td>{{ names.get(c.MACHINE_ID, c.MACHINE_ID) }}</td>
-      <td>{{ t('cmd' + c.CMD|capitalize) }}{% if c.CMD_VALUE is not none %} {{ c.CMD_VALUE|plain }} Hz{% endif %}<small class="inv-sub">{{ c.REQ_USER }}</small></td><td>{{ t(cmd_status_keys[c.CMD_STATUS]) }}{% if c.RESULT %}<small class="inv-sub">{{ c.RESULT }}</small>{% endif %}</td></tr>
+      <td>{{ t('cmd' + c.CMD|capitalize) }}{% if c.CMD == 'SELECT' %} &rarr; {{ c.CMD_VALUE }}{% elif c.CMD_VALUE is not none %} {{ c.CMD_VALUE|plain }} Hz{% endif %}<small class="inv-sub">{{ c.REQ_USER }}</small></td><td>{{ t(cmd_status_keys[c.CMD_STATUS]) }}{% if c.RESULT %}<small class="inv-sub">{{ c.RESULT }}</small>{% endif %}</td></tr>
     {% else %}<tr><td colspan="4" class="hint center">{{ t('autoNoData') }}</td></tr>{% endfor %}</tbody>
   </table></div>
 </div>

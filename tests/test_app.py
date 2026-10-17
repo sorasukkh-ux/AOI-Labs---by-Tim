@@ -2648,7 +2648,7 @@ class Update29(Base):
         self.assertFalse(self.machine("F2-SORT")["ACTIVE_FLG"])
         page = self.text("/automation/hardware")
         cards = re.findall(r'class="card machine-card[^"]*" data-machine="([^"]+)"', page)
-        self.assertEqual(cards, ["F2-MOTOR"])
+        self.assertEqual(cards, ["F2-MOTOR", "F2-SELECT", "F2-MOTOR2"])          # update 43: motor 2 and the selector in use
         self.assertIn("Mitsubishi SUPER LINE SF-J", page)
         self.assertIn('id="mc-not-used"', page)
         self.assertIn('disabled>&#9654; ON', page)                               # no device connected yet
@@ -2774,15 +2774,17 @@ class Update31(Base):
 
     def test_plant_machines(self):
         mine = {m["MACHINE_ID"]: m for m in self.db("AOIMS_MACHINE") if m["BRANCH_ID"] == "factory2"}
-        self.assertEqual(set(mine), {"F2-" + x for x in ("SILO1", "SILO2", "CONV1", "CONV2", "INBOUND", "SORT", "MOTOR", "MOTOR2", "PACK", "AMR")})
-        self.assertEqual([k for k, m in mine.items() if m.get("ACTIVE_FLG") is not False], ["F2-MOTOR"])
-        self.assertEqual((mine["F2-MOTOR"]["SHIFT"], mine["F2-MOTOR2"]["SHIFT"]), ("DAY", "NIGHT"))
-        self.assertEqual(mine["F2-INBOUND"]["FEEDS_TO"], "F2-MOTOR,F2-MOTOR2")
+        self.assertEqual(set(mine), {"F2-" + x for x in ("SILO1", "SILO2", "CONV1", "CONV2", "INBOUND", "SORT", "SELECT", "MOTOR", "MOTOR2", "PACK", "AMR")})
+        self.assertEqual(sorted(k for k, m in mine.items() if m.get("ACTIVE_FLG") is not False), ["F2-MOTOR", "F2-MOTOR2", "F2-SELECT"])
+        self.assertEqual((mine["F2-MOTOR"]["SHIFT"], mine["F2-MOTOR2"]["SHIFT"]), (None, None))          # update 43
+        self.assertEqual((mine["F2-MOTOR"]["MACHINE_NAME"], mine["F2-MOTOR2"]["MACHINE_NAME"]), ("มอเตอร์หลัก 1", "มอเตอร์หลัก 2"))
+        self.assertEqual(mine["F2-INBOUND"]["FEEDS_TO"], "F2-SELECT")
+        self.assertEqual((mine["F2-SELECT"]["FEEDS_TO"], mine["F2-SELECT"]["SELECT_TO"]), ("F2-MOTOR,F2-MOTOR2", "F2-MOTOR"))
         self.assertEqual(mine["F2-SORT"]["FEEDS_TO"], "F2-INBOUND")
         self.assertEqual(mine["F2-PACK"]["FEEDS_TO"], "F2-AMR")                     # update 34
         self.assertEqual(mine["F2-MOTOR2"]["RATED_AMP"], 30.0)
         self.assertNotIn("F2-HUSK", mine)                                       # the update 9 samples are gone
-        self.assertEqual(re.findall(r'data-machine="([^"]+)"', self.text("/automation/hardware")), ["F2-MOTOR"])
+        self.assertEqual(re.findall(r'data-machine="([^"]+)"', self.text("/automation/hardware")), ["F2-MOTOR", "F2-SELECT", "F2-MOTOR2"])
 
     def test_scada_screen_and_data(self):
         self.assertIn('data-menu="AT_SCADA"', self.text("/?g=AT"))
@@ -2796,7 +2798,7 @@ class Update31(Base):
         nodes = {n["id"]: n for n in data["nodes"]}
         self.assertEqual((nodes["F2-MOTOR"]["status"], nodes["F2-MOTOR"]["active"]), ("O", True))
         self.assertEqual((nodes["F2-SILO1"]["status"], nodes["F2-SILO1"]["col"], nodes["F2-SILO1"]["feeds"]), ("DIS", 0, ["F2-CONV1"]))
-        self.assertEqual((data["kpi"]["in_use"], data["kpi"]["planned"]), (1, 9))
+        self.assertEqual((data["kpi"]["in_use"], data["kpi"]["planned"]), (3, 8))
         self.assertIn(data["shift"], ("DAY", "NIGHT"))
         self.logout()
         self.login("wanida.s")                                                  # accountant: no SCADA
@@ -2925,6 +2927,123 @@ class Update40(Base):
         r = self.post("/automation/hardware", {"action": "command", "back": "scada", "MACHINE_ID": "F2-MOTOR", "CMD": "START"},
                       "/automation/scada")
         self.assertEqual(r.status_code, 302)                                   # the plain form still redirects
+
+
+class Update43(Base):
+    """Main motor 2 in use, the mill selector between the motors, one main motor at a time; quick links on Hardware."""
+    machine, issue_key, api = Update9.machine, Update9.issue_key, Update9.api
+
+    def setUp(self):
+        super().setUp()
+        self.login("admin")
+        self.client.get("/lang/en")
+
+    def online(self, mid):
+        key = self.issue_key("/automation/hardware", "MACHINE_ID", mid)
+        self.api("post", "/api/v1/machines/%s/telemetry" % mid, key, {"running": False, "set_hz": 50, "out_hz": 0, "amp": 0})
+        return key
+
+    def work(self, mid, key):
+        return self.api("get", "/api/v1/machines/%s/commands" % mid, key).get_json()["commands"]
+
+    def cmd(self, mid, cmd, value=None):
+        data = {"action": "command", "back": "scada", "MACHINE_ID": mid, "CMD": cmd}
+        if value:
+            data["CMD_VALUE"] = value
+        return self.post("/automation/hardware", data, "/automation/scada", headers={"X-AOI-Fetch": "1"}).get_json()
+
+    def test_one_motor_at_a_time_and_the_selector(self):
+        k1, k2 = self.online("F2-MOTOR"), self.online("F2-MOTOR2")
+        self.assertEqual(self.machine("F2-SELECT")["SELECT_TO"], "F2-MOTOR")
+        r = self.cmd("F2-MOTOR2", "START")                                      # the selector points at motor 1
+        self.assertFalse(r["ok"])
+        self.assertIn("is not switched to", r["message"])
+        self.assertTrue(self.cmd("F2-MOTOR", "START")["ok"])
+        w = self.work("F2-MOTOR", k1)
+        self.api("post", "/api/v1/commands/%s/ack" % w[0]["id"], k1, {"ok": True})
+        self.api("post", "/api/v1/machines/F2-MOTOR/telemetry", k1, {"running": True, "set_hz": 50, "out_hz": 50, "amp": 20})
+        r = self.cmd("F2-SELECT", "SELECT", "F2-MOTOR2")                        # cannot switch while motor 1 runs
+        self.assertFalse(r["ok"])
+        self.assertIn("Stop", r["message"])
+        self.assertEqual(self.machine("F2-SELECT")["SELECT_TO"], "F2-MOTOR")
+        nodes = {n["id"]: n for n in self.client.get("/automation/scada.json").get_json()["nodes"]}
+        self.assertEqual((nodes["F2-SELECT"]["status"], nodes["F2-SELECT"]["select_to"], nodes["F2-SELECT"]["control"]), ("R", "F2-MOTOR", True))
+        self.assertIsNone(nodes["F2-MOTOR"]["shift"])
+        # stop motor 1, switch by hand to motor 2, start motor 2; motor 1 is then refused
+        self.cmd("F2-MOTOR", "STOP")
+        w = self.work("F2-MOTOR", k1)
+        self.api("post", "/api/v1/commands/%s/ack" % w[0]["id"], k1, {"ok": True})
+        self.api("post", "/api/v1/machines/F2-MOTOR/telemetry", k1, {"running": False, "set_hz": 50, "out_hz": 0, "amp": 0})
+        r = self.cmd("F2-SELECT", "SELECT", "F2-MOTOR2")
+        self.assertTrue(r["ok"], r)
+        self.assertEqual(self.machine("F2-SELECT")["SELECT_TO"], "F2-MOTOR2")
+        self.assertFalse(self.cmd("F2-SELECT", "SELECT", "F2-PACK")["ok"])       # not one of its motors
+        self.assertTrue(self.cmd("F2-MOTOR2", "START")["ok"])
+        r = self.cmd("F2-MOTOR", "START")
+        self.assertFalse(r["ok"])
+        self.assertIn("Only one main motor", r["message"])
+        page = self.text("/automation/hardware")
+        self.assertIn('id="cmd-select-F2-MOTOR"', page)
+        self.assertIn("SELECT", page)
+
+    def test_selector_with_its_own_device(self):
+        k1 = self.online("F2-MOTOR")
+        ks = self.online("F2-SELECT")
+        self.assertTrue(self.cmd("F2-SELECT", "SELECT", "F2-MOTOR2")["ok"])
+        self.assertEqual(self.machine("F2-SELECT")["SELECT_TO"], "F2-MOTOR")      # moves when the device confirms
+        w = self.work("F2-SELECT", ks)
+        self.assertEqual((w[0]["command"], w[0]["value"]), ("SELECT", "F2-MOTOR2"))
+        self.api("post", "/api/v1/commands/%s/ack" % w[0]["id"], ks, {"ok": True})
+        self.assertEqual(self.machine("F2-SELECT")["SELECT_TO"], "F2-MOTOR2")
+        self.api("post", "/api/v1/machines/F2-SELECT/telemetry", ks, {"running": False, "position": "F2-MOTOR"})   # its sensor
+        self.assertEqual(self.machine("F2-SELECT")["SELECT_TO"], "F2-MOTOR")
+        self.assertFalse(self.cmd("F2-SELECT", "START")["ok"])                   # a selector has no start
+
+    def test_energy_counts_one_motor_and_quick_links(self):
+        with self.app.app_context():
+            from app.models import profit
+            kwh, source = profit.energy_per_kg("factory2")
+        self.assertAlmostEqual(kwh, 15.0 * 0.273 / 60, places=6)                # two 15 kW motors in use, one runs
+        self.assertIn("data-quick-jump", self.text("/automation/hardware"))
+
+
+class Update44(Base):
+    """Milling order list sequence per branch (Milling Maintenance): material type, order status or priority first."""
+
+    def setUp(self):
+        super().setUp()
+        self.login("admin")
+        self.client.get("/lang/en")
+
+    def settings(self, base):
+        data = {"branch": "factory2", "SYSP_MILLTIMEKG": "0.273", "SYSP_MILLORDGAP": "1", "SYSP_OPETIMESTART": "08:00",
+                "SYSP_OPETIMEEND": "18:00", "SYSP_QUEUEPERIOD": "10:00", "SYSP_DELIVERTIMEADD": "2", "SYSP_MILLFEEUNITKG": "50",
+                "SYSP_MILLFEEPERUNIT": "12", "SYSP_DELIVERYFEEKM": "0", "SYSP_QUEUEBASE": base}
+        self.assertEqual(self.post("/admin/milling/maintenance", data).status_code, 302)
+
+    def order_of(self):
+        page = self.text("/service/milling/")
+        return re.findall(r'class="status-card[^"]*" data-order="([^"]+)"', page)
+
+    def test_three_bases(self):
+        self.assertIn('name="SYSP_QUEUEBASE" value="STATUS" checked', self.text("/admin/milling/maintenance?branch=factory2"))
+        a = self.new_order(RICE_VARIETY="GL", MILL_PRIORITY="U")["ORD_ID"]       # glutinous, urgent, queue
+        b = self.new_order(RICE_VARIETY="HM", MILL_PRIORITY="L")["ORD_ID"]       # jasmine, low, queue
+        c = self.new_order(RICE_VARIETY="WH", MILL_PRIORITY="M")["ORD_ID"]       # white, medium -> in process
+        self.set_status(c, "I")
+        self.settings("STATUS")                                                  # status, variety, priority
+        self.assertEqual(self.order_of(), [c, b, a])
+        self.settings("VARIETY")                                                 # variety, status, priority
+        self.assertEqual(self.order_of(), [b, c, a])
+        self.settings("PRIORITY")                                                # priority, variety, status
+        self.assertEqual(self.order_of(), [a, c, b])
+        self.assertIn("Sorted by: Order priority base", self.text("/service/milling/"))
+        self.assertIn('value="PRIORITY" checked', self.text("/admin/milling/maintenance?branch=factory2"))
+        self.settings("nonsense")
+        self.assertEqual(self.branch_doc()["SYSP_QUEUEBASE"], "STATUS")
+
+    def branch_doc(self):
+        return next(b for b in self.db("AOIMS_SYSPARAM") if b["BRANCH_ID"] == "factory2")
 
 
 if __name__ == "__main__":

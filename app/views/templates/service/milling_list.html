@@ -33,6 +33,7 @@
   {% endfor %}
 </div>
 
+<p class="cap-note tight" id="ml-sort-note">{{ t('queueBaseNow', base=t('queueBase' ~ list_base|capitalize)) }}</p>
 <div id="status-update-list">
   {% for order in orders %}
   {% set editable = can_edit and order.is_open %}

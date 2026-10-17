@@ -22,15 +22,18 @@ from .base import col, NO_ID, ValidationError, audit_new, audit_update, clean_te
 from .counter import Counter
 from ..timeutil import local_tz, now_local, now_utc, to_local
 
-MACHINE_TYPES = ("MAIN_MOTOR", "SILO", "CONVEYOR", "INBOUND", "SORTER", "PACKER", "AMR", "HUSKER", "WHITENER", "POLISHER",
+MACHINE_TYPES = ("MAIN_MOTOR", "MILL_SELECTOR", "SILO", "CONVEYOR", "INBOUND", "SORTER", "PACKER", "AMR", "HUSKER", "WHITENER", "POLISHER",
                  "GRADER", "DRYER", "OTHER")
 SHIFTS = ("DAY", "NIGHT")
 DAY_SHIFT_HOURS = (6, 18)            # day shift 06:00-18:00, night shift 18:00-06:00 (SCADA highlight)
 RUNNING, IDLE, FAULT, MAINTENANCE, OFFLINE = "R", "I", "F", "M", "O"
 MACHINE_STATUSES = (RUNNING, IDLE, FAULT, MAINTENANCE, OFFLINE)
 SOURCE_USER, SOURCE_DEVICE = "USER", "DEVICE"
-CMD_START, CMD_STOP, CMD_RESET, CMD_SPEED = "START", "STOP", "RESET", "SPEED"
+CMD_START, CMD_STOP, CMD_RESET, CMD_SPEED, CMD_SELECT = "START", "STOP", "RESET", "SPEED", "SELECT"
 COMMANDS = (CMD_START, CMD_STOP, CMD_RESET, CMD_SPEED)
+# update 43: the mill selector (mechanical switch between main motor 1 and 2). Its FEEDS_TO are the motors it can switch
+# to; SELECT_TO is the one it points at. Only one main motor runs at a time, and only the one the selector points at.
+SELECTOR = "MILL_SELECTOR"
 TELE_COL = "AOITS_MACHINE_TELE"
 TELE_EVERY_SECONDS = 5             # one stored sample per 5 seconds (the machine record always has the latest)
 TELE_KEEP_DAYS = 7
@@ -228,6 +231,12 @@ class Machine:
                 raise ValidationError("errNumber")
             return round_half_up(value, 2)
         now = now_utc()
+        if machine.get("MACHINE_TYPE") == SELECTOR and body.get("position"):      # update 43: the selector's sensor
+            target = str(body.get("position")).strip().upper()
+            if target in cls.targets(machine) and target != machine.get("SELECT_TO"):
+                col(cls.COL).update_one({"MACHINE_ID": machine["MACHINE_ID"]}, {"$set": {"SELECT_TO": target, "SELECT_TIME": now,
+                                                                                       "SELECT_USER": "device:" + machine["MACHINE_ID"]}})
+                machine = dict(machine, SELECT_TO=target)
         fault = clean_text(body.get("fault"), 20) or None
         running = bool(body.get("running")) and not fault
         values = {"TEL_RUN": running, "TEL_SET_HZ": num("set_hz", 0, 400), "TEL_OUT_HZ": num("out_hz", 0, 400),
@@ -264,6 +273,60 @@ class Machine:
                 "rated_amp": machine.get("RATED_AMP"), "min_hz": low, "max_hz": high,
                 "updated": machine["TEL_TIME"].isoformat() if machine.get("TEL_TIME") else None,
                 "busy": busy["CMD"] if busy else None, "samples": samples}
+
+    # ---------- main motors and the mill selector (update 43) ----------
+    @staticmethod
+    def targets(selector):
+        return [x for x in (selector.get("FEEDS_TO") or "").split(",") if x]
+
+    @staticmethod
+    def is_running(machine):
+        fresh = bool(machine.get("TEL_TIME")) and (now_utc() - machine["TEL_TIME"]).total_seconds() <= TELE_FRESH_SECONDS
+        return machine.get("MACHINE_STATUS") == RUNNING or (fresh and bool(machine.get("TEL_RUN")))
+
+    @classmethod
+    def selector_for(cls, motor):
+        """The mill selector (in use) that switches between this motor and the other one, or None."""
+        for m in col(cls.COL).find({"BRANCH_ID": motor["BRANCH_ID"], "MACHINE_TYPE": SELECTOR}, NO_ID):
+            if m.get("ACTIVE_FLG") is not False and motor["MACHINE_ID"] in cls.targets(m):
+                return m
+        return None
+
+    @classmethod
+    def running_motors(cls, branch_id, except_id=None):
+        """Main motors that run, or are about to (a Start not done yet)."""
+        out = []
+        for m in col(cls.COL).find({"BRANCH_ID": branch_id, "MACHINE_TYPE": "MAIN_MOTOR"}, NO_ID):
+            if m["MACHINE_ID"] == except_id or m.get("ACTIVE_FLG") is False:
+                continue
+            starting = col(MachineCommand.COL).find_one({"MACHINE_ID": m["MACHINE_ID"], "CMD": CMD_START,
+                                                         "CMD_STATUS": {"$in": [CMD_PENDING, CMD_SENT]}}, NO_ID)
+            if cls.is_running(m) or starting:
+                out.append(m)
+        return out
+
+    @classmethod
+    def select(cls, selector, target, ope_user):
+        """Switch the mill selector to one main motor. Only while no main motor runs. With its own device (remote control,
+        key, online) a SELECT command goes to it and the position changes when the device confirms; without one the
+        operator switches it by hand and confirms here. Returns {"name": ..., "target": ..., "cmd": command or None}."""
+        if selector.get("MACHINE_TYPE") != SELECTOR or selector.get("ACTIVE_FLG") is False:
+            raise ValidationError("errMachineCommand")
+        target = (target or "").strip().upper()
+        if target not in cls.targets(selector):
+            raise ValidationError("errSelectorTarget")
+        busy = cls.running_motors(selector["BRANCH_ID"])
+        if busy:
+            raise ValidationError("errSelectorMotorRunning", name=busy[0]["MACHINE_NAME"])
+        motor = cls.find(selector["BRANCH_ID"], target) or {}
+        if selector.get("CONTROL_FLG") and selector.get("DEVICE_KEY_HASH"):
+            cmd = MachineCommand.request(selector, CMD_SELECT, ope_user, target)
+            return {"name": selector["MACHINE_NAME"], "target": motor.get("MACHINE_NAME", target), "cmd": cmd}
+        now = now_utc()
+        col(cls.COL).update_one({"MACHINE_ID": selector["MACHINE_ID"]}, {"$set": {"SELECT_TO": target, "SELECT_TIME": now,
+                                                                                "SELECT_USER": ope_user}})
+        cls.set_status(selector, IDLE, SOURCE_USER, ope_user, note="SELECT %s (by hand)" % target)
+        return {"name": selector["MACHINE_NAME"], "target": motor.get("MACHINE_NAME", target), "cmd": None}
 
     # ---------- usage statistics ----------
     @classmethod
@@ -311,7 +374,9 @@ class MachineCommand:
     def request(cls, machine, command, ope_user, value=None):
         """Start/stop/reset/speed from Hardware Control. Only for machines with remote control and a device connected.
         SPEED: `value` = Hz within the machine's range. START carries the last speed set."""
-        if command not in COMMANDS:
+        if command not in COMMANDS + (CMD_SELECT,):
+            raise ValidationError("errMachineCommand")
+        if (command == CMD_SELECT) != (machine.get("MACHINE_TYPE") == SELECTOR) and command != CMD_RESET:
             raise ValidationError("errMachineCommand")
         hz = None
         if command == CMD_SPEED:
@@ -326,6 +391,15 @@ class MachineCommand:
         elif command == CMD_START:
             low, high = Machine.speed_range(machine)
             hz = min(high, max(low, float(machine.get("SPEED_SET_HZ") or high)))
+            if machine.get("MACHINE_TYPE") == "MAIN_MOTOR":             # update 43: one main motor at a time
+                other = Machine.running_motors(machine["BRANCH_ID"], except_id=machine["MACHINE_ID"])
+                if other:
+                    raise ValidationError("errOtherMotorRunning", name=other[0]["MACHINE_NAME"])
+                selector = Machine.selector_for(machine)
+                if selector and selector.get("SELECT_TO") != machine["MACHINE_ID"]:
+                    raise ValidationError("errSelectorNotHere", selector=selector["MACHINE_NAME"], name=machine["MACHINE_NAME"])
+        elif command == CMD_SELECT:
+            hz = value                                                    # the motor ID the selector goes to
         if not machine.get("CONTROL_FLG") or not machine.get("DEVICE_KEY_HASH"):
             raise ValidationError("errMachineNoControl")
         if not Machine.is_online(machine):
@@ -366,6 +440,9 @@ class MachineCommand:
             raise ValidationError("errMachineCommand")
         col(cls.COL).update_one({"CMD_ID": cmd_id}, {"$set": {"CMD_STATUS": CMD_DONE if ok else CMD_FAILED, "ACK_DATE": now_utc(),
                                                              "RESULT": clean_text(result, 200) or None}})
+        if ok and cmd["CMD"] == CMD_SELECT:
+            col(Machine.COL).update_one({"MACHINE_ID": machine["MACHINE_ID"]}, {"$set": {"SELECT_TO": cmd.get("CMD_VALUE"),
+                                                                                       "SELECT_TIME": now_utc(), "SELECT_USER": cmd["REQ_USER"]}})
         if ok and cmd["CMD"] == CMD_SPEED:
             col(Machine.COL).update_one({"MACHINE_ID": machine["MACHINE_ID"]}, {"$set": {"SPEED_SET_HZ": cmd.get("CMD_VALUE")}})
         if ok and cmd["CMD"] in (CMD_START, CMD_STOP):
@@ -563,11 +640,19 @@ def scada(branch_id):
             "id": m["MACHINE_ID"], "name": m["MACHINE_NAME"], "type": m.get("MACHINE_TYPE") or "OTHER", "active": active,
             "status": m.get("MACHINE_STATUS") or OFFLINE if active else "DIS", "online": Machine.is_online(m) if active else False,
             "col": place[0], "row": place[1], "shift": m.get("SHIFT"), "on_shift": bool(m.get("SHIFT")) and m.get("SHIFT") == shift,
+            "select_to": m.get("SELECT_TO") if m.get("MACHINE_TYPE") == SELECTOR else None,
+            "manual": m.get("MACHINE_TYPE") == SELECTOR and not (m.get("CONTROL_FLG") and m.get("DEVICE_KEY_HASH")),
             "feeds": [f for f in (m.get("FEEDS_TO") or "").split(",") if f in ids], "kw": m.get("RATED_KW"),
             "control": bool(active and m.get("CONTROL_FLG") and m.get("DEVICE_KEY_HASH") and Machine.is_online(m)),
             "live": {k: live[k] for k in ("running", "fresh", "set_hz", "out_hz", "amp", "rpm", "fault", "rated_amp",
                                           "min_hz", "max_hz", "busy", "samples")} if live else None,
         })
+    running_ids = {n["id"] for n in nodes if n["type"] == "MAIN_MOTOR" and n["status"] == RUNNING}
+    for n in nodes:                                           # update 43: the selector follows the motor it points at
+        if n["type"] == SELECTOR and n["active"]:
+            n["control"] = bool(n["control"] or n["manual"])
+            if n["manual"]:
+                n["status"] = RUNNING if n["select_to"] in running_ids else IDLE
     in_use = [n for n in nodes if n["active"]]
     start = day_start_utc(now_local().date())
     since = now_utc() - timedelta(hours=24)

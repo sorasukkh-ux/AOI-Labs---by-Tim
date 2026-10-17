@@ -139,6 +139,11 @@ How one request travels, for example saving the output ratios:
   Prepared asks the kg received per line, one location. **Update 42:** a buying/selling order is prepared and closed on
   its own, without waiting for the milling order's status. Earlier orders (one per SKU, still Open) are merged once by
   `start.sh`.
+- **List sequence (update 44)**: Milling Maintenance > Milling order list sequence, per factory: *material type base*
+  (variety Jasmine, White, Glutinous > status > priority), *order status base* (status > variety > priority, the
+  default) or *order priority base* (priority > variety > status). Orders waiting for an answer stay on top; the
+  registration time decides last. It orders the Milling Order List, Current Services and the TV; receive times are
+  calculated as before.
 - **Numbers**: order ID `ML-YYYYMMDD-NNNN` (queue number `NNNN` restarts each day),
   customer code `C` + `YYMMDD` + 3 digits, QR text `AOI-ML-YYYYMMDD-NNNN`.
 
@@ -373,6 +378,18 @@ are kept but "not in use".
 inverter for Modbus RTU, its station number, reverse rotation prevention (Pr.78 = 1) and a communication check time.
 The emergency stop, the motor overload relay and the local/remote switch stay hard-wired; the app never replaces them.
 Device API for any other device: `POST /api/v1/machines/<id>/telemetry` (see `app/controllers/device_api.py`).
+
+## Two main motors and the mill selector (update 43)
+
+Main motor 1 and main motor 2 are both in use, with the **mill selector** (ชุดสลับเครื่องสี, `F?-SELECT`) between them:
+inbound -> selector -> motor 1 or motor 2 -> packing. **Only one main motor runs at a time**: ON is refused while the
+other one runs (or is starting), and only the motor the selector points at can start. The selector can be switched
+only while both motors are stopped - on the SCADA (tap the selector: "Switch to ...") or on Hardware Control. Without
+its own device it is switched **by hand**: move the mechanical switch, then confirm in the app. With a device later
+(remote control + key), the app sends `SELECT` (value = the motor's machine ID) and the position changes when the device
+confirms; the device can also report its sensor as `"position": "F2-MOTOR2"` in the telemetry. The motors have no day /
+night shift any more. Keep an electrical interlock in the panel too: the app's rule cannot stop a start at the inverter.
+Hardware Control has quick links (each machine, commands, history, Machine setup) like the Administration pages.
 
 ## SCADA and the plant plan (updates 31, 34)
 

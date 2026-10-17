@@ -6,6 +6,12 @@ from .base import col, NO_ID, ValidationError, audit_update, to_number, round_ha
 TIME_RE = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 
 
+# update 44: how the milling order list is sorted (Milling Maintenance). Orders waiting for an answer always come first;
+# the registration time decides last.
+QUEUE_STATUS, QUEUE_VARIETY, QUEUE_PRIORITY = "STATUS", "VARIETY", "PRIORITY"
+QUEUE_BASES = (QUEUE_VARIETY, QUEUE_STATUS, QUEUE_PRIORITY)
+DEFAULT_QUEUE_BASE = QUEUE_STATUS
+
 class Branch:
     COL = "AOIMS_SYSPARAM"
     ALL = "ALL"                     # AOIMS_USER.BRANCH_ID value meaning "every branch"
@@ -84,6 +90,8 @@ class Branch:
             "SYSP_LABORDAY": round_half_up(labour_day, 2), "SYSP_WORKERS": int(workers),
             "SYSP_PLANKGDAY": round_half_up(plan_kg, 1), "SYSP_ELECMONTH": round_half_up(elec_month, 2),
             "SYSP_WORKDAYS": round_half_up(workdays, 1),
+            # update 44: the sequence of the milling order list (status, variety or priority first)
+            "SYSP_QUEUEBASE": form.get("SYSP_QUEUEBASE") if form.get("SYSP_QUEUEBASE") in QUEUE_BASES else DEFAULT_QUEUE_BASE,
         }
         values.update(audit_update(ope_user))
         col(cls.COL).update_one({"BRANCH_ID": branch_id}, {"$set": values})

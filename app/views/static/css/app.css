@@ -1013,3 +1013,16 @@ html.qs-open, html.qs-open body { overflow: hidden; }
   box-shadow: 0 0 22px rgba(52,211,153,.35); opacity: 0; pointer-events: none; transition: opacity .25s, transform .25s; }
 .scada-toast.show { opacity: 1; transform: translate(-50%, 0); }
 .scada-toast.bad { background: rgba(60,10,16,.95); border-color: #f87171; color: #fecaca; box-shadow: 0 0 22px rgba(248,113,113,.4); }
+/* update 43: mill selector on the SCADA */
+.sc-link.off { stroke: rgba(148,163,184,.35); stroke-dasharray: 3 6; }
+.sc-switch { display: grid; gap: 8px; margin: 10px 0 4px; }
+.sc-switch .scada-cmd { margin: 0; }
+.sc-switch .sc-btn { width: 100%; }
+.sc-switch .sc-btn.chosen:disabled { opacity: 1; border-color: #34d399; color: #a7f3d0; box-shadow: 0 0 14px rgba(52,211,153,.3); }
+/* update 44: milling order list sequence (Milling Maintenance) */
+.queue-base { display: grid; gap: 8px; margin: 8px 0 4px; }
+.qb-opt { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; cursor: pointer; background: var(--surface); }
+.qb-opt input { flex: 0 0 auto; width: 18px; height: 18px; margin: 2px 0 0; }
+.qb-opt span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.qb-opt small { color: var(--text-secondary); font-size: 12.5px; line-height: 1.4; }
+.qb-opt:has(input:checked), .qb-opt.on { border-color: var(--accent); background: var(--accent-bg); }

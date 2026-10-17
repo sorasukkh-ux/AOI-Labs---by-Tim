@@ -37,6 +37,15 @@
       <label class="field-label" for="mt-deliver-time-add">{{ t('lblDeliverTimeAdd') }}</label>
       <input type="number" step="0.5" id="mt-deliver-time-add" name="SYSP_DELIVERTIMEADD" value="{{ values.get('SYSP_DELIVERTIMEADD', '')|plain }}">
     </div>
+    <p class="card-title section">{{ t('queueBaseTitle') }}</p>
+    {% set qb = values.get('SYSP_QUEUEBASE') or 'STATUS' %}
+    <div class="queue-base" role="radiogroup" aria-label="{{ t('queueBaseTitle') }}">
+      {% for code in ('VARIETY', 'STATUS', 'PRIORITY') %}
+      <label class="qb-opt{% if qb == code %} on{% endif %}"><input type="radio" name="SYSP_QUEUEBASE" value="{{ code }}"{% if qb == code %} checked{% endif %}>
+        <span><b>{{ t('queueBase' ~ code|capitalize) }}</b><small>{{ t('queueBase' ~ code|capitalize ~ 'Seq') }}</small></span></label>
+      {% endfor %}
+    </div>
+    <p class="cap-note after-row">{{ t('queueBaseNote') }}</p>
     <p class="card-title section">{{ t('millingFeeTitle') }}</p>
     <div class="two-col field-row">
       <div><label class="field-label" for="mt-fee-unit-kg">{{ t('lblFeeUnitKg') }}</label><input type="number" min="0" step="1" id="mt-fee-unit-kg" name="SYSP_MILLFEEUNITKG" value="{{ values.get('SYSP_MILLFEEUNITKG', '')|plain }}"></div>

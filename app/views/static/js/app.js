@@ -327,7 +327,11 @@
     a.href = "#" + tg.node.id; a.className = "qj-chip";
     a.textContent = tg.text.length > 28 ? tg.text.slice(0, 27) + "\u2026" : tg.text;
     a.title = tg.text;
-    a.addEventListener("click", function (e) { e.preventDefault(); tg.node.scrollIntoView({ behavior: "smooth", block: "start" }); history.replaceState(null, "", "#" + tg.node.id); });
+    a.addEventListener("click", function (e) {
+      e.preventDefault();
+      if (tg.node.tagName === "DETAILS") tg.node.open = true;          // update 43: e.g. Machine setup opens when jumped to
+      tg.node.scrollIntoView({ behavior: "smooth", block: "start" }); history.replaceState(null, "", "#" + tg.node.id);
+    });
     bar.appendChild(a);
     return a;
   });

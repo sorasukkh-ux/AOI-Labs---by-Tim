@@ -460,12 +460,26 @@ class MillingOrder:
 
     # ---------- list helpers ----------
     @staticmethod
-    def sort_for_list(orders):
-        """Orders needing attention first (a cancellation request to answer, a delivery time to confirm), then In-process, Hold, Queue, Finished,
-        Ready for Delivery, Closed, Cancelled; inside a status by priority, then registration time."""
+    def list_base(branch_id):
+        """Update 44: the branch's list sequence (Milling Maintenance): STATUS, VARIETY or PRIORITY first."""
+        from .branch import DEFAULT_QUEUE_BASE, QUEUE_BASES
+        base = (Branch.get(branch_id) or {}).get("SYSP_QUEUEBASE")
+        return base if base in QUEUE_BASES else DEFAULT_QUEUE_BASE
+
+    @staticmethod
+    def sort_for_list(orders, base=None):
+        """Orders needing attention first (a cancellation request to answer, a delivery time to confirm), then by the
+        branch's list sequence (update 44), then registration time:
+        STATUS:   status (In-process, Hold, Queue, Finished, Ready for Delivery, Closed, Cancelled), variety, priority
+        VARIETY:  variety (Jasmine, White, Glutinous), status, priority
+        PRIORITY: priority (Urgent, High, Medium, Low), variety, status"""
+        from .branch import QUEUE_PRIORITY, QUEUE_VARIETY
+        var_rank = {v: i for i, v in enumerate(var.VARIETIES)}
+
         def key(order):
-            return (0 if MillingOrder.needs_attention(order) else 1,
-                    flow.LIST_RANK.get(order["MILL_STATUS"], 9),
-                    receive_time.PRIORITY_RANK.get(order.get("MILL_PRIORITY"), 9),
-                    to_local(order["REGIST_DATE"]).timestamp())
+            status = flow.LIST_RANK.get(order["MILL_STATUS"], 9)
+            variety = var_rank.get(order.get("RICE_VARIETY") or var.DEFAULT, 9)
+            priority = receive_time.PRIORITY_RANK.get(order.get("MILL_PRIORITY"), 9)
+            parts = {QUEUE_VARIETY: (variety, status, priority), QUEUE_PRIORITY: (priority, variety, status)}.get(base, (status, variety, priority))
+            return (0 if MillingOrder.needs_attention(order) else 1,) + parts + (to_local(order["REGIST_DATE"]).timestamp(),)
         return sorted(orders, key=key)

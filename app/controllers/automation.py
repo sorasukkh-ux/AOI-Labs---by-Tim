@@ -83,6 +83,9 @@ def hardware():
                 abort(403)
 
             def send():
+                if request.form.get("CMD") == "SELECT":                   # update 43: the mill selector
+                    done = Machine.select(machine, request.form.get("CMD_VALUE"), _user_id())
+                    return {"cmd": t("cmdSelectTo", name=done["target"]), "name": done["name"]}
                 cmd = MachineCommand.request(machine, request.form.get("CMD"), _user_id(), request.form.get("CMD_VALUE"))
                 label = t("cmd" + cmd["CMD"].capitalize())
                 if cmd.get("CMD_VALUE") is not None:
@@ -113,12 +116,17 @@ def hardware():
         m["since"] = fmt_datetime(m.get("STATUS_TIME"))
         m["can_command"] = bool(m.get("CONTROL_FLG") and m.get("DEVICE_KEY_HASH") and m["online"])
         m["live"] = Machine.live(m) if m.get("DEVICE_KEY_HASH") and m["active"] else None
+        if m.get("MACHINE_TYPE") == "MILL_SELECTOR":                     # update 43: switched by hand or by its device
+            m["live"] = None
+            m["targets"] = Machine.targets(m)
+            m["can_command"] = m["active"] and (not (m.get("CONTROL_FLG") and m.get("DEVICE_KEY_HASH")) or m["online"])
+    running_motors = {x["MACHINE_ID"] for x in Machine.running_motors(branch)}
     events = Machine.events(branch, now_utc() - timedelta(days=7), limit=20)
     names = {m["MACHINE_ID"]: m["MACHINE_NAME"] for m in machines}
     edit = Machine.find(branch, request.args.get("edit")) if request.args.get("edit") else None
     return render_template("automation/hardware.html", machines=machines, in_use=[m for m in machines if m["active"]], events=events, names=names,
                            commands=MachineCommand.for_branch(branch, 10), edit=edit, setup=bool(request.args.get("setup") or edit),
-                           new_key=session.pop("device_key", None), meters=Meter.for_branch(branch),
+                           new_key=session.pop("device_key", None), meters=Meter.for_branch(branch), running_motors=running_motors,
                            status_keys=STATUS_KEYS, status_badge=STATUS_BADGE, type_keys=TYPE_KEYS, types=MACHINE_TYPES,
                            statuses=MACHINE_STATUSES, commands_all=COMMANDS, cmd_status_keys=CMD_STATUS_KEYS,
                            can_edit=can(HARDWARE, "edit"), can_command=can(HARDWARE, "approve"), can_setup=can(HARDWARE, "create"))

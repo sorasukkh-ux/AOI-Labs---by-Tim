@@ -88,7 +88,8 @@ def board(branch_id):
     branch = Branch.get(branch_id) or {}
     now = now_utc()
     today = now_local().date()
-    orders = MillingOrder.sort_for_list(MillingOrder.for_branch(branch_id, READY + (flow.IN_PROCESS, flow.QUEUE)))
+    orders = MillingOrder.sort_for_list(MillingOrder.for_branch(branch_id, READY + (flow.IN_PROCESS, flow.QUEUE)),
+                                        MillingOrder.list_base(branch_id))
     names = {}
 
     def name_of(code):
@@ -135,10 +136,12 @@ def board(branch_id):
     # update 36: the main motor on the header (the one on shift first), like the SCADA
     motor = None
     try:
-        from .automation import Machine, current_shift
-        shift = current_shift()
-        motors = [m for m in Machine.for_branch(branch_id, active_only=True) if m.get("MACHINE_TYPE") == "MAIN_MOTOR"]
-        motors.sort(key=lambda m: 0 if m.get("SHIFT") == shift else 1)
+        from .automation import Machine, SELECTOR
+        machines = Machine.for_branch(branch_id, active_only=True)
+        motors = [m for m in machines if m.get("MACHINE_TYPE") == "MAIN_MOTOR"]
+        chosen = {m.get("SELECT_TO") for m in machines if m.get("MACHINE_TYPE") == SELECTOR}
+        # update 43: the motor that runs, else the one the mill selector points at, else the first
+        motors.sort(key=lambda m: (0 if Machine.is_running(m) else 1, 0 if m["MACHINE_ID"] in chosen else 1))
         if motors:
             live = Machine.live(motors[0], minutes=0)
             motor = {"status": live["status"], "running": bool(live["running"]), "hz": live["out_hz"], "fault": live["fault"]}

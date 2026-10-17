@@ -46,8 +46,8 @@ PRICES = {
 }
 # update 29: the main milling motor (Tim's nameplate: Mitsubishi SUPER LINE SF-J, 20 HP / 15 kW, 4 pole, frame 160L,
 # 380 V 50 Hz 30 A 1450 rpm) is the one machine in use (update 31: main motor 1, day shift)
-MAIN_MOTOR = {"MACHINE_NAME": "มอเตอร์หลัก 1 (กะกลางวัน)", "MACHINE_TYPE": "MAIN_MOTOR", "RATED_KW": 15.0, "CAPACITY_KGH": None,
-              "MACHINE_SEQ": 7, "SCADA_COL": 3, "SCADA_ROW": 0, "SHIFT": "DAY", "CONTROL_FLG": True, "ACTIVE_FLG": True, "MOTOR_MODEL": "Mitsubishi SUPER LINE SF-J 20HP 4P 160L",
+MAIN_MOTOR = {"MACHINE_NAME": "มอเตอร์หลัก 1", "MACHINE_TYPE": "MAIN_MOTOR", "RATED_KW": 15.0, "CAPACITY_KGH": None,
+              "MACHINE_SEQ": 7, "SCADA_COL": 3, "SCADA_ROW": 0, "SHIFT": None, "CONTROL_FLG": True, "ACTIVE_FLG": True, "MOTOR_MODEL": "Mitsubishi SUPER LINE SF-J 20HP 4P 160L",
               "RATED_VOLT": 380.0, "RATED_AMP": 30.0, "RATED_RPM": 1450,
               "SPEED_MIN_HZ": 30.0, "SPEED_MAX_HZ": 50.0, "SPEED_SET_HZ": 50.0}      # update 30: speed by the inverter
 # update 31: Tim's plant plan (SCADA). (id suffix, name, type, rated kW, capacity kg/h, seq, SCADA column, row, feeds to, shift)
@@ -57,9 +57,11 @@ PLANT = [
     ("SILO2", "ไซโล 2", "SILO", 0.0, None, 2, 0, 1, "CONV2", None),
     ("CONV1", "สายพานลำเลียงเข้า 1", "CONVEYOR", 2.2, 3000.0, 3, 1, 0, "INBOUND", None),
     ("CONV2", "สายพานลำเลียงเข้า 2", "CONVEYOR", 2.2, 3000.0, 4, 1, 1, "INBOUND", None),
-    ("INBOUND", "ถังพักรอสี (คิวเข้าเครื่องสี)", "INBOUND", 0.75, None, 5, 2, 0, "MOTOR,MOTOR2", None),
+    ("INBOUND", "ถังพักรอสี (คิวเข้าเครื่องสี)", "INBOUND", 0.75, None, 5, 2, 0, "SELECT", None),
     ("SORT", "เครื่องคัดแยก", "SORTER", 1.5, None, 6, 2, 2, "INBOUND", None),
-    ("MOTOR2", "มอเตอร์หลัก 2 (กะกลางคืน)", "MAIN_MOTOR", 15.0, None, 8, 3, 1, "PACK", "NIGHT"),
+    # update 43: the mill selector between main motor 1 and 2 (only one runs at a time); main motor 2 in use
+    ("SELECT", "ชุดสลับเครื่องสี", "MILL_SELECTOR", 0.0, None, 7, 3, 1, "MOTOR,MOTOR2", None),
+    ("MOTOR2", "มอเตอร์หลัก 2", "MAIN_MOTOR", 15.0, None, 8, 3, 2, "PACK", None),
     ("PACK", "เครื่องบรรจุ", "PACKER", 3.0, None, 9, 4, 0, "AMR", None),           # update 34: packing -> AMR
     ("AMR", "หุ่นยนต์จัดเก็บ/เบิกสินค้า (AMR)", "AMR", 0.5, None, 10, 4, 2, None, None),
 ]
@@ -195,8 +197,10 @@ def seed(log=print, reset=False):
             ids = lambda text: ",".join(prefix + "-" + x for x in text.split(",")) if text else None
             add("AOIMS_MACHINE", {"MACHINE_ID": prefix + "-" + suffix}, {
                 "BRANCH_ID": branch_id, "MACHINE_NAME": name, "MACHINE_TYPE": mtype, "RATED_KW": kw, "CAPACITY_KGH": cap,
-                "MACHINE_SEQ": seq, "CONTROL_FLG": suffix == "MOTOR2", "METER_ID": None, "MACHINE_STATUS": "O", "STATUS_TIME": None,
-                "STATUS_SOURCE": "USER", "DEVICE_KEY_HASH": None, "LAST_SEEN": None, "ACTIVE_FLG": False,
+                "MACHINE_SEQ": seq, "CONTROL_FLG": suffix in ("MOTOR2", "SELECT"), "METER_ID": None,
+                "MACHINE_STATUS": "I" if suffix == "SELECT" else "O", "STATUS_TIME": None,
+                "STATUS_SOURCE": "USER", "DEVICE_KEY_HASH": None, "LAST_SEEN": None, "ACTIVE_FLG": suffix in ("MOTOR2", "SELECT"),
+                **({"SELECT_TO": prefix + "-MOTOR", "SELECT_TIME": None, "SELECT_USER": None} if suffix == "SELECT" else {}),
                 "SCADA_COL": col_, "SCADA_ROW": row_, "FEEDS_TO": ids(feeds), "SHIFT": shift,
                 **({k: MAIN_MOTOR[k] for k in ("MOTOR_MODEL", "RATED_VOLT", "RATED_AMP", "RATED_RPM", "SPEED_MIN_HZ", "SPEED_MAX_HZ",
                                                "SPEED_SET_HZ")} if mtype == "MAIN_MOTOR" else {})})
@@ -210,6 +214,16 @@ def seed(log=print, reset=False):
                                         {"$set": {"SCADA_COL": 3, "SCADA_ROW": 0, "FEEDS_TO": prefix + "-PACK", "SHIFT": "DAY"}})
         db["AOIMS_MACHINE"].update_many({"MACHINE_ID": prefix + "-MOTOR", "MACHINE_NAME": "มอเตอร์หลักเครื่องสีข้าว"},
                                         {"$set": {"MACHINE_NAME": MAIN_MOTOR["MACHINE_NAME"]}})
+        # update 43 (Tim): main motor 2 in use, the mill selector between the two motors, no day / night shift on them
+        db["AOIMS_MACHINE"].update_many({"MACHINE_ID": {"$in": [prefix + "-MOTOR", prefix + "-MOTOR2"]}}, {"$set": {"SHIFT": None}})
+        for mid, old, new in ((prefix + "-MOTOR", "มอเตอร์หลัก 1 (กะกลางวัน)", "มอเตอร์หลัก 1"),
+                              (prefix + "-MOTOR2", "มอเตอร์หลัก 2 (กะกลางคืน)", "มอเตอร์หลัก 2")):
+            db["AOIMS_MACHINE"].update_many({"MACHINE_ID": mid, "MACHINE_NAME": old}, {"$set": {"MACHINE_NAME": new}})
+        if db["AOIMS_MACHINE"].find_one({"MACHINE_ID": prefix + "-MOTOR2", "ACTIVE_FLG": False, "SCADA_COL": 3, "SCADA_ROW": 1}, {"_id": 0}):
+            db["AOIMS_MACHINE"].update_one({"MACHINE_ID": prefix + "-MOTOR2"},
+                                           {"$set": {"ACTIVE_FLG": True, "CONTROL_FLG": True, "SCADA_ROW": 2}})
+        db["AOIMS_MACHINE"].update_many({"MACHINE_ID": prefix + "-INBOUND", "FEEDS_TO": prefix + "-MOTOR," + prefix + "-MOTOR2"},
+                                        {"$set": {"FEEDS_TO": prefix + "-SELECT"}})
         # update 34: Tim's updated plan sends packing on to the storage robot (AMR)
         db["AOIMS_MACHINE"].update_many({"MACHINE_ID": prefix + "-PACK", "FEEDS_TO": None, "OPE_USER": SEED_USER},
                                         {"$set": {"FEEDS_TO": prefix + "-AMR"}})

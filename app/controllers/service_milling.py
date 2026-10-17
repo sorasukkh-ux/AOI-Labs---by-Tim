@@ -237,12 +237,13 @@ def order_list():
     if order_type:
         orders = [o for o in orders if o["ORDER_TYPE"] == order_type]
     q = (request.args.get("q") or "").strip()[:60]
-    orders = _decorate(MillingOrder.sort_for_list(orders))
+    base = MillingOrder.list_base(operating_branch())
+    orders = _decorate(MillingOrder.sort_for_list(orders, base))
     exact = False
     if q:                                                # update 37: search (typed, or the QR on the label scanned)
         orders = [o for o in orders if _matches(o, q)]
         exact = len(orders) == 1 and orders[0]["ORD_ID"].lower() == scan_text(q)
-    return render_template("service/milling_list.html", orders=orders, q=q, auto_open=exact,
+    return render_template("service/milling_list.html", orders=orders, q=q, auto_open=exact, list_base=base,
                            status=status, order_type=order_type, filters=LIST_FILTERS, **_context())
 
 
