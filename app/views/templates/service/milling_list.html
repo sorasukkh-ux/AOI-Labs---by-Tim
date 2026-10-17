@@ -6,34 +6,42 @@
 <input type="hidden" name="status_filter" value="{{ status or '' }}">
 <input type="hidden" name="type_filter" value="{{ order_type or '' }}">
 <input type="hidden" name="q_filter" value="{{ q or '' }}">
+<input type="hidden" name="view_filter" value="{{ view_arg or '' }}">
 {% endmacro %}
 {% block content %}
 <div id="tab-update-status">
 {{ page_head(t('updateStatusTitle'), url_for('home.index', g='SV')) }}
 <form method="get" action="{{ url_for('service_milling.order_list') }}" class="card mt14 bs-search" id="ml-search-form">
-  {% if status %}<input type="hidden" name="status" value="{{ status }}">{% endif %}{% if order_type %}<input type="hidden" name="type" value="{{ order_type }}">{% endif %}
+  {% if view_arg %}<input type="hidden" name="view" value="{{ view_arg }}">{% endif %}{% if status %}<input type="hidden" name="status" value="{{ status }}">{% endif %}{% if order_type %}<input type="hidden" name="type" value="{{ order_type }}">{% endif %}
   <label class="field-label" for="ml-search">{{ t('mlSearchLabel') }}</label>
   <div class="row-inline last">
     <input type="search" id="ml-search" name="q" value="{{ q }}" placeholder="{{ t('mlSearchPh') }}" autocapitalize="characters" spellcheck="false" autocomplete="off" data-scan="submit">
     <button type="submit" class="action primary" id="ml-search-btn">{{ t('btnSearch') }}</button>
-    {% if q %}<a class="action" href="{{ url_for('service_milling.order_list', status=status, type=order_type) }}" id="ml-search-clear">{{ t('btnClear') }}</a>{% endif %}
+    {% if q %}<a class="action" href="{{ url_for('service_milling.order_list', view=view_arg, status=status, type=order_type) }}" id="ml-search-clear">{{ t('btnClear') }}</a>{% endif %}
   </div>
   {% if q %}<p class="cap-note tight" id="ml-search-note">{{ t('bsSearchResult', n=orders|length, q=q) }}</p>{% endif %}
 </form>
-<div class="chips mt14" id="status-filter-chips">
-  <a class="chip status-chip{% if not status %} active{% endif %}" href="{{ url_for('service_milling.order_list', type=order_type, q=q or None) }}">{{ t('filterAll') }}</a>
+<div class="ml-views mt14" role="tablist" id="ml-views">
+  <a class="ml-view{% if view == 'active' %} on{% endif %}" role="tab" aria-selected="{{ 'true' if view == 'active' else 'false' }}" id="ml-view-active"
+     href="{{ url_for('service_milling.order_list', type=order_type, q=q or None) }}">{{ t('mlViewActive') }} <b>{{ counts.active }}</b></a>
+  <a class="ml-view{% if view == 'closed' %} on{% endif %}" role="tab" aria-selected="{{ 'true' if view == 'closed' else 'false' }}" id="ml-view-closed"
+     href="{{ url_for('service_milling.order_list', view='closed', type=order_type, q=q or None) }}">{{ t('mlViewClosed') }} <b>{{ counts.closed }}</b></a>
+</div>
+<div class="chips mt6" id="status-filter-chips">
+  <a class="chip status-chip{% if not status %} active{% endif %}" href="{{ url_for('service_milling.order_list', view=view_arg, type=order_type, q=q or None) }}">{{ t('filterAll') }}</a>
   {% for s in filters %}
-  <a class="chip status-chip{% if status == s %} active{% endif %}" href="{{ url_for('service_milling.order_list', status=s, type=order_type, q=q or None) }}" data-status-filter="{{ s }}">{{ t(status_keys[s]) }}</a>
+  <a class="chip status-chip{% if status == s %} active{% endif %}" href="{{ url_for('service_milling.order_list', view=view_arg, status=s, type=order_type, q=q or None) }}" data-status-filter="{{ s }}">{{ t(status_keys[s]) }} <small class="chip-n">{{ status_counts[s] }}</small></a>
   {% endfor %}
 </div>
 <div class="chips" id="order-type-filter-chips">
-  <a class="chip order-type-chip{% if not order_type %} active{% endif %}" href="{{ url_for('service_milling.order_list', status=status, q=q or None) }}">{{ t('filterAll') }}</a>
+  <a class="chip order-type-chip{% if not order_type %} active{% endif %}" href="{{ url_for('service_milling.order_list', view=view_arg, status=status, q=q or None) }}">{{ t('filterAll') }}</a>
   {% for code in ['T', 'D'] %}
-  <a class="chip order-type-chip{% if order_type == code %} active{% endif %}" href="{{ url_for('service_milling.order_list', status=status, type=code, q=q or None) }}" data-order-type-filter="{{ code }}">{{ t(type_keys[code]) }}</a>
+  <a class="chip order-type-chip{% if order_type == code %} active{% endif %}" href="{{ url_for('service_milling.order_list', view=view_arg, status=status, type=code, q=q or None) }}" data-order-type-filter="{{ code }}">{{ t(type_keys[code]) }}</a>
   {% endfor %}
 </div>
 
-<p class="cap-note tight" id="ml-sort-note">{{ t('queueBaseNow', base=t('queueBase' ~ list_base|capitalize)) }}</p>
+{% if view == 'closed' %}<p class="cap-note tight" id="ml-sort-note">{{ t('mlClosedNote', n=closed_limit) }}</p>
+{% else %}<p class="cap-note tight" id="ml-sort-note">{{ t('queueBaseNow', base=t('queueBase' ~ list_base|capitalize)) }}</p>{% endif %}
 <div id="status-update-list">
   {% for order in orders %}
   {% set editable = can_edit and order.is_open %}

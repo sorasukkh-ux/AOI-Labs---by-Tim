@@ -1026,3 +1026,11 @@ html.qs-open, html.qs-open body { overflow: hidden; }
 .qb-opt span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .qb-opt small { color: var(--text-secondary); font-size: 12.5px; line-height: 1.4; }
 .qb-opt:has(input:checked), .qb-opt.on { border-color: var(--accent); background: var(--accent-bg); }
+/* update 46: Milling Order List - active / closed views */
+.ml-views { display: flex; gap: 0; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--surface); }
+.ml-view { flex: 1; text-align: center; padding: 10px 8px; font-weight: 600; color: var(--text-secondary); text-decoration: none; }
+.ml-view + .ml-view { border-left: 1px solid var(--border); }
+.ml-view b { display: inline-block; min-width: 24px; padding: 0 7px; margin-left: 4px; border-radius: 999px; background: var(--surface-sunken); color: var(--text); font-size: 12px; }
+.ml-view.on { background: var(--accent); color: #fff; }
+.ml-view.on b { background: rgba(255,255,255,.25); color: #fff; }
+.chip .chip-n { opacity: .7; font-size: 11px; margin-left: 2px; }

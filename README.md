@@ -139,6 +139,9 @@ How one request travels, for example saving the output ratios:
   Prepared asks the kg received per line, one location. **Update 42:** a buying/selling order is prepared and closed on
   its own, without waiting for the milling order's status. Earlier orders (one per SKU, still Open) are merged once by
   `start.sh`.
+- **Two views (update 46)**: the Milling Order List has *Active* (Queue, In process, Hold, Finished, Ready for
+  delivery - in the list sequence below) and *Closed / cancelled* (newest first, the latest 200; search for older),
+  each with its status chips and counts. A scanned label of an order in the other view opens that view.
 - **List sequence (update 44)**: Milling Maintenance > Milling order list sequence, per factory: *material type base*
   (variety Jasmine, White, Glutinous > status > priority), *order status base* (status > variety > priority, the
   default) or *order priority base* (priority > variety > status). Orders waiting for an answer stay on top; the

@@ -31,6 +31,10 @@ TYPE_KEYS = {flow.TAKEAWAY: "deliveryTakeaway", flow.DELIVER: "deliveryDelivery"
 STATUS_CLASS = {flow.QUEUE: "queue", flow.IN_PROCESS: "inprocess", flow.HOLD: "hold", flow.FINISHED: "completed",
                 flow.DELIVERY: "ready_for_delivery", flow.CLOSED: "closed", flow.CANCELLED: "cancelled"}
 LIST_FILTERS = (flow.QUEUE, flow.IN_PROCESS, flow.HOLD, flow.FINISHED, flow.CLOSED)      # the prototype's status chips
+# update 46: the list in two views - active orders, and closed / cancelled ones
+ACTIVE_STATUSES = (flow.QUEUE, flow.IN_PROCESS, flow.HOLD, flow.FINISHED, flow.DELIVERY)
+ENDED_STATUSES = (flow.CLOSED, flow.CANCELLED)
+CLOSED_LIMIT = 200                                     # the closed view shows the newest ones
 
 
 def label_data(queue_no, qr_text, customer_name, pay_total, receive, registered, customer=None):
@@ -231,20 +235,34 @@ def _context():
 @bp.route("/")
 @require(STATUS)
 def order_list():
-    status = request.args.get("status") if request.args.get("status") in LIST_FILTERS else None
+    view = "closed" if request.args.get("view") == "closed" else "active"
+    statuses = ENDED_STATUSES if view == "closed" else ACTIVE_STATUSES
+    status = request.args.get("status") if request.args.get("status") in statuses else None
     order_type = request.args.get("type") if request.args.get("type") in (flow.TAKEAWAY, flow.DELIVER) else None
-    orders = MillingOrder.for_branch(operating_branch(), [status] if status else None)
-    if order_type:
-        orders = [o for o in orders if o["ORDER_TYPE"] == order_type]
     q = (request.args.get("q") or "").strip()[:60]
-    base = MillingOrder.list_base(operating_branch())
-    orders = _decorate(MillingOrder.sort_for_list(orders, base))
-    exact = False
+    branch = operating_branch()
+    every = MillingOrder.for_branch(branch, ACTIVE_STATUSES + ENDED_STATUSES)
+    if order_type:
+        every = [o for o in every if o["ORDER_TYPE"] == order_type]
     if q:                                                # update 37: search (typed, or the QR on the label scanned)
-        orders = [o for o in orders if _matches(o, q)]
-        exact = len(orders) == 1 and orders[0]["ORD_ID"].lower() == scan_text(q)
-    return render_template("service/milling_list.html", orders=orders, q=q, auto_open=exact, list_base=base,
-                           status=status, order_type=order_type, filters=LIST_FILTERS, **_context())
+        every = [o for o in every if _matches(dict(o, customer=Customer.find(o["CUST_CODE"]) or {}), q)]
+    counts = {"active": sum(1 for o in every if o["MILL_STATUS"] in ACTIVE_STATUSES),
+              "closed": sum(1 for o in every if o["MILL_STATUS"] in ENDED_STATUSES)}
+    orders = [o for o in every if o["MILL_STATUS"] in ((status,) if status else statuses)]
+    base = MillingOrder.list_base(branch)
+    if view == "closed":                                 # the most recently closed / cancelled first
+        orders = sorted(orders, key=lambda o: o.get("LAST_UPDATE") or o["REGIST_DATE"], reverse=True)[:CLOSED_LIMIT]
+    else:
+        orders = MillingOrder.sort_for_list(orders, base)
+    orders = _decorate(orders)
+    exact = bool(q) and len(orders) == 1 and orders[0]["ORD_ID"].lower() == scan_text(q)
+    # a scanned / typed order that is in the other view: open that view (the label of a closed order, say)
+    if q and not orders and counts["closed" if view == "active" else "active"]:
+        return redirect(url_for("service_milling.order_list", view=None if view == "closed" else "closed", type=order_type, q=q))
+    status_counts = {s: sum(1 for o in every if o["MILL_STATUS"] == s) for s in statuses}
+    return render_template("service/milling_list.html", orders=orders, q=q, auto_open=exact, list_base=base, view=view,
+                           view_arg="closed" if view == "closed" else None, counts=counts, status_counts=status_counts,
+                           closed_limit=CLOSED_LIMIT, status=status, order_type=order_type, filters=statuses, **_context())
 
 
 def scan_text(q):
@@ -286,7 +304,8 @@ def order_detail(ord_id):
 def _back(ord_id):
     if request.form.get("back") == "list":
         return redirect(url_for("service_milling.order_list", status=request.form.get("status_filter") or None,
-                                type=request.form.get("type_filter") or None, q=request.form.get("q_filter") or None))
+                                type=request.form.get("type_filter") or None, q=request.form.get("q_filter") or None,
+                                view=request.form.get("view_filter") or None))
     return redirect(url_for("service_milling.order_detail", ord_id=ord_id))
 
 

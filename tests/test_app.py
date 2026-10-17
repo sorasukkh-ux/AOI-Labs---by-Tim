@@ -634,8 +634,29 @@ class Update4(Base):
         self.post("/service/milling/%s/cancel-request" % orders["request"])
         page = self.text("/service/milling/")
         shown = re.findall(r'class="status-card[^"]*" data-order="([^"]+)"', page)
-        expected = ["request", "inproc", "hold", "queue_urgent", "queue_low", "finished", "closed", "cancelled"]
+        expected = ["request", "inproc", "hold", "queue_urgent", "queue_low", "finished"]       # update 46: active view
         self.assertEqual(shown, [orders[n] for n in expected])
+        closed = re.findall(r'class="status-card[^"]*" data-order="([^"]+)"', self.text("/service/milling/?view=closed"))
+        self.assertEqual(set(closed), {orders["closed"], orders["cancelled"]})
+
+    def test_active_and_closed_views(self):
+        """Update 46: Active (Queue, In process, Hold, Finished, Ready for delivery) and Closed / cancelled."""
+        a, b, c = (self.new_order()["ORD_ID"] for _ in range(3))
+        for st in ("I", "F", "C"):
+            self.set_status(b, st)
+        self.set_status(c, "CC")
+        cards = lambda path: re.findall(r'class="status-card[^"]*" data-order="([^"]+)"', self.text(path))
+        page = self.text("/service/milling/")
+        self.assertIn('id="ml-view-active"', page)
+        self.assertEqual(cards("/service/milling/"), [a])
+        self.assertEqual(cards("/service/milling/?view=closed"), [c, b])                         # newest change first
+        self.assertEqual(cards("/service/milling/?view=closed&status=C"), [b])
+        self.assertEqual(cards("/service/milling/?status=C"), [a])                               # not an active status
+        r = self.client.get("/service/milling/?q=AOI-" + b)                                      # a closed label scanned
+        self.assertIn("view=closed", r.headers["Location"])
+        self.assertEqual(cards(r.headers["Location"]), [b])
+        resp = self.set_status(a, "H", back="list", view_filter="closed")
+        self.assertIn("view=closed", resp.headers["Location"])
 
     def test_take_home_bran_and_broken_become_selling_orders(self):
         """Update 39: ONE selling order for the milling order, a line per SKU."""
