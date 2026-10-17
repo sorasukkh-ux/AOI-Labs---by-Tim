@@ -372,6 +372,17 @@ are kept but "not in use".
 5. Safety checks: stop the app while the motor runs - the gateway stops the motor after 30 seconds; stop the
    gateway - the virtual inverter stops by itself after 10 seconds without communication (E.SER).
 
+**All motors at once (update 45) - no keys to copy:** `bash start.sh sim` starts the app AND simulates every machine in
+use with remote control (main motor 1 and 2): `scripts/sim_all.py` gives each a device key straight in the database
+(kept in `.gateways.local.json`, private, not in git, reused next time) and runs one gateway for all. Or, with the app
+already running: `python3 scripts/sim_all.py` in a second terminal. Test commands there: `1 load 120`, `2 jam`,
+`1 clear`, `2 fault`, `status`. A machine whose key belongs to a real device that is online is left alone. (Needs
+MongoDB - not `start.sh demo`.)
+
+**One gateway for several machines:** `python3 scripts/aoi_gateway.py --config pi.json` - one Raspberry Pi, both
+inverters on the same RS-485 bus with station numbers 1 and 2. `python3 scripts/sim_all.py --export pi.json` writes that
+file with the keys; copy it to the Pi (keep it private), check the url, port and station numbers.
+
 **Later, the real inverter:** the same gateway on a Raspberry Pi with a USB-RS485 adapter:
 `pip install pyserial` then `--modbus rtu:/dev/ttyUSB0:19200:E:1` instead of `--simulate`. The register map (REG in
 `scripts/aoi_gateway.py`) follows the Mitsubishi Modbus map: check it against the inverter's manual, and set the

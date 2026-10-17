@@ -91,6 +91,24 @@ def hardware():
                 if cmd.get("CMD_VALUE") is not None:
                     label += " %g Hz " % cmd["CMD_VALUE"]
                 return {"cmd": label, "name": machine["MACHINE_NAME"]}
+            if request.form.get("CMD") == "SELECT":                   # update 45: by hand = switched now (no device)
+                def switch():
+                    done = Machine.select(machine, request.form.get("CMD_VALUE"), _user_id())
+                    key = "msgCommandSent" if done["cmd"] else "msgSelectorSwitched"
+                    return key, {"cmd": t("cmdSelectTo", name=done["target"]), "name": done["name"], "target": done["target"]}
+                if request.headers.get("X-AOI-Fetch") == "1":
+                    try:
+                        key, params = switch()
+                    except ValidationError as error:
+                        return jsonify({"ok": False, "message": t(error.key, **error.params)}), 422
+                    return jsonify({"ok": True, "message": t(key, **params)})
+                try:
+                    key, params = switch()
+                except ValidationError as error:
+                    flash_error(error)
+                else:
+                    flash_ok(key, **params)
+                return redirect(url_for("automation.scada" if request.form.get("back") == "scada" else "automation.hardware"))
             if request.headers.get("X-AOI-Fetch") == "1":     # update 40: the SCADA sends without leaving the page (full screen)
                 try:
                     result = send()

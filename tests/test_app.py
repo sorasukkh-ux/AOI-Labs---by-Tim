@@ -3046,5 +3046,42 @@ class Update44(Base):
         return next(b for b in self.db("AOIMS_SYSPARAM") if b["BRANCH_ID"] == "factory2")
 
 
+class Update45(Base):
+    """All machines at once: keys prepared by scripts/sim_all.py (reused, a live device kept), one gateway for several."""
+    machine, issue_key, api = Update9.machine, Update9.issue_key, Update9.api
+
+    def test_prepare_keys_reuse_and_skip_online(self):
+        import sys, os, tempfile, importlib
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts"))
+        import sim_all
+        import app as appmod
+        old = appmod.create_app
+        appmod.create_app = lambda *a, **k: self.app
+        sim_all.KEYS_FILE = os.path.join(tempfile.mkdtemp(), "keys.json")
+        try:
+            first = sim_all.prepare("factory2")
+            self.assertEqual([m["MACHINE_ID"] for m, _k in first], ["F2-MOTOR", "F2-MOTOR2"])     # not the selector
+            again = sim_all.prepare("factory2")
+            self.assertEqual([k for _m, k in first], [k for _m, k in again])                     # reused
+            self.assertEqual(oct(os.stat(sim_all.KEYS_FILE).st_mode & 0o777), "0o600")
+            self.login("admin")
+            real = self.issue_key("/automation/hardware", "MACHINE_ID", "F2-MOTOR2")             # a real device, online
+            self.api("post", "/api/v1/machines/F2-MOTOR2/telemetry", real, {"running": False})
+            third = sim_all.prepare("factory2")
+            self.assertEqual([m["MACHINE_ID"] for m, _k in third], ["F2-MOTOR"])                  # its key is not touched
+            self.assertEqual(self.api("post", "/api/v1/machines/F2-MOTOR2/telemetry", real, {"running": False}).status_code, 200)
+        finally:
+            appmod.create_app = old
+
+    def test_stations_share_one_bus(self):
+        import sys, os
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts"))
+        import aoi_gateway
+        a = aoi_gateway.connect("tcp:127.0.0.1:59999", 1)
+        b = aoi_gateway.connect("tcp:127.0.0.1:59999", 2)
+        self.assertIs(a.bus, b.bus)
+        self.assertEqual((a.unit, b.unit), (1, 2))
+
+
 if __name__ == "__main__":
     unittest.main()

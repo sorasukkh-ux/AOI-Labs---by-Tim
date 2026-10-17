@@ -2,6 +2,7 @@
 # Prepares everything and starts AOI Labs:   ./start.sh
 #   ./start.sh demo   run without MongoDB (sample data only, nothing is saved)
 #   ./start.sh test   run the automated tests (also against MongoDB when it is reachable)
+#   ./start.sh sim    the app and every motor simulated (no device keys to copy) - update 45
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -111,5 +112,19 @@ fi
 
 echo "== Adding the starting data (only what is missing)"
 "$PY" -m scripts.seed
+if [ "${1:-}" = "sim" ]; then
+  # update 45: the app AND every motor simulated (virtual inverters + one gateway), in this one terminal
+  echo "== Starting the server and simulating every machine with remote control (${2:-factory2})"
+  "$PY" run.py &
+  APP_PID=$!
+  trap 'kill $APP_PID 2>/dev/null' EXIT
+  for _ in $(seq 1 30); do
+    "$PY" -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:${AOI_PORT:-5000}/login', timeout=2)" >/dev/null 2>&1 && break
+    sleep 1
+  done
+  "$PY" scripts/sim_all.py --branch "${2:-factory2}"
+  exit 0
+fi
 echo "== Starting the server. Open the address shown below (port 5000)."
+echo "   (to also simulate every motor: bash start.sh sim)"
 exec "$PY" run.py

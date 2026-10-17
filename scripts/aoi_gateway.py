@@ -8,6 +8,14 @@ Codespace against the virtual inverter. Standard library only (pyserial is neede
 Try it without hardware (in a second terminal, while the app runs):
     python3 scripts/aoi_gateway.py --machine F2-MOTOR --key <device key> --simulate
   (the device key is issued on Hardware Control > Machine setup > New key; it is shown once)
+  Update 45 - all machines at once, no key copying:  python3 scripts/sim_all.py   (see that file)
+
+Several machines with ONE gateway (update 45), e.g. both main motors on one RS-485 bus (station 1 and 2):
+    python3 scripts/aoi_gateway.py --config gateways.json
+  gateways.json:  {"url": "https://<server>",
+                   "machines": [{"machine": "F2-MOTOR",  "key": "...", "modbus": "rtu:/dev/ttyUSB0:19200:E:1", "slave": 1},
+                                {"machine": "F2-MOTOR2", "key": "...", "modbus": "rtu:/dev/ttyUSB0:19200:E:1", "slave": 2}]}
+  Machines on the same port share it (one at a time on the wire). Keep the file private (chmod 600).
 
 Later, with the real inverter on RS-485 (USB adapter):
     pip install pyserial
@@ -34,6 +42,7 @@ import os
 import socket
 import struct
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -63,6 +72,7 @@ class ModbusTCP:
     def __init__(self, host, port, unit=1, timeout=2.0):
         self.host, self.port, self.unit, self.timeout = host, port, unit, timeout
         self.sock, self.tid = None, 0
+        self.lock = threading.Lock()
 
     def _call(self, pdu):
         for attempt in (1, 2):
@@ -118,6 +128,7 @@ class ModbusRTU(ModbusTCP):
         import serial
         self.serial = serial.Serial(port, baudrate=baud, parity=parity, stopbits=stop, bytesize=8, timeout=timeout)
         self.unit = unit
+        self.lock = threading.Lock()
 
     def _call(self, pdu):
         frame = bytes([self.unit]) + pdu
@@ -143,16 +154,40 @@ class ModbusRTU(ModbusTCP):
         pass
 
 
+class Station:
+    """One inverter (station number) on a bus; several stations can share one bus (update 45)."""
+
+    def __init__(self, bus, unit):
+        self.bus, self.unit = bus, unit
+
+    def read(self, addr, count):
+        with self.bus.lock:
+            self.bus.unit = self.unit
+            return self.bus.read(addr, count)
+
+    def write(self, addr, value):
+        with self.bus.lock:
+            self.bus.unit = self.unit
+            return self.bus.write(addr, value)
+
+
+_BUSES = {}
+
+
 def connect(spec, unit):
-    kind, _, rest = spec.partition(":")
-    if kind == "tcp":
-        host, _, port = rest.rpartition(":")
-        return ModbusTCP(host or "127.0.0.1", int(port or 502), unit)
-    if kind == "rtu":
-        parts = rest.split(":")
-        return ModbusRTU(parts[0], int(parts[1]) if len(parts) > 1 else 19200, parts[2] if len(parts) > 2 else "E",
-                         int(parts[3]) if len(parts) > 3 else 1, unit)
-    sys.exit("--modbus must be tcp:<host>:<port> or rtu:<port>:<baud>:<parity>:<stop>")
+    """The inverter at `unit` on the bus `spec` (tcp:<host>:<port> or rtu:<port>:<baud>:<parity>:<stop>)."""
+    if spec not in _BUSES:
+        kind, _, rest = spec.partition(":")
+        if kind == "tcp":
+            host, _, port = rest.rpartition(":")
+            _BUSES[spec] = ModbusTCP(host or "127.0.0.1", int(port or 502), unit)
+        elif kind == "rtu":
+            parts = rest.split(":")
+            _BUSES[spec] = ModbusRTU(parts[0], int(parts[1]) if len(parts) > 1 else 19200, parts[2] if len(parts) > 2 else "E",
+                                     int(parts[3]) if len(parts) > 3 else 1, unit)
+        else:
+            sys.exit("--modbus must be tcp:<host>:<port> or rtu:<port>:<baud>:<parity>:<stop>")
+    return Station(_BUSES[spec], unit)
 
 
 # ---------- the inverter ----------
@@ -211,8 +246,12 @@ class App:
         return self.call("/api/v1/machines/%s/status" % self.machine, {"status": status, "note": note})
 
 
-def log(text):
-    print(time.strftime("%H:%M:%S"), text, flush=True)
+_PRINT = threading.Lock()
+
+
+def log(text, tag=None):
+    with _PRINT:
+        print(time.strftime("%H:%M:%S"), ("[%s] " % tag if tag else "") + text, flush=True)
 
 
 def carry_out(inverter, cmd):
@@ -234,11 +273,98 @@ def carry_out(inverter, cmd):
     raise ModbusError("unknown command %s" % kind)
 
 
+def run(machine, key, url, modbus, slave=1, min_hz=30.0, max_hz=50.0, poll=1.0, tele=2.0, link_loss=30.0,
+        keep_running=False, stop=None, tag=None):
+    """The gateway loop for one machine, until `stop` (a threading.Event) is set."""
+    stop = stop or threading.Event()
+    say = lambda text: log(text, tag)
+    app = App(url, machine, key)
+    inverter = Inverter(connect(modbus, slave), min_hz, max_hz)
+    say("gateway for %s: app %s, inverter %s station %d (speed %.0f-%.0f Hz)" % (app.machine, app.base, modbus, slave, min_hz, max_hz))
+    last_app_ok, last_post, last_sent, inverter_down = time.monotonic(), 0.0, None, False
+    values = {"running": False}
+    while not stop.is_set():
+        now = time.monotonic()
+        # 1. read the inverter
+        try:
+            values = inverter.read()
+            if inverter_down:
+                say("inverter answers again")
+            inverter_down = False
+        except ModbusError as error:
+            if not inverter_down:
+                say("inverter: %s" % error)
+                try:
+                    app.status("F", "inverter not answering: %s" % error)
+                except (urllib.error.URLError, OSError, ValueError):
+                    pass
+            inverter_down = True
+        # 2. commands from the app
+        try:
+            for cmd in app.commands():
+                try:
+                    if inverter_down:
+                        raise ModbusError("inverter not answering")
+                    result = carry_out(inverter, cmd)
+                    app.ack(cmd["id"], True, result)
+                    say("%s %s -> %s" % (cmd["id"], cmd["command"], result))
+                except ModbusError as error:
+                    app.ack(cmd["id"], False, str(error))
+                    say("%s %s FAILED: %s" % (cmd["id"], cmd["command"], error))
+            last_app_ok = now
+            # 3. live values
+            state = (values.get("running"), values.get("fault"))
+            if not inverter_down and (now - last_post >= tele or state != last_sent):
+                reply = app.telemetry(values)
+                inverter.min_hz, inverter.max_hz = reply.get("min_hz", inverter.min_hz), reply.get("max_hz", inverter.max_hz)
+                last_post, last_sent = now, state
+        except urllib.error.HTTPError as error:
+            if error.code in (401, 403):
+                say("the app refused the device key (%s): issue a new key on Hardware Control and update the key" % error.code)
+            if now - last_app_ok > link_loss and values.get("running") and not keep_running and not inverter_down:
+                inverter.stop()
+                say("app unreachable for %.0f s: motor STOPPED for safety (%s)" % (now - last_app_ok, error))
+                last_app_ok = now
+        except (urllib.error.URLError, OSError, ValueError) as error:
+            if now - last_app_ok > link_loss and values.get("running") and not keep_running and not inverter_down:
+                inverter.stop()
+                say("app unreachable for %.0f s: motor STOPPED for safety (%s)" % (now - last_app_ok, error))
+                last_app_ok = now                           # log once per period
+        stop.wait(poll)
+    return 0
+
+
+def run_many(url, machines, simulate=False, poll=1.0, tele=2.0, link_loss=30.0, keep_running=False, sim_port=5020):
+    """Update 45: one gateway process for several machines (a thread each). `machines`: dicts with machine, key,
+    modbus (default: simulated tcp:127.0.0.1:<sim_port + n>), slave, min_hz, max_hz. Returns {machine: virtual inverter}
+    when simulating (for test commands) and the stop event."""
+    stop, sims, threads = threading.Event(), {}, []
+    for n, m in enumerate(machines):
+        modbus, slave = m.get("modbus"), int(m.get("slave") or 1)
+        if simulate:
+            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+            import vfd_sim
+            port = sim_port + n
+            modbus = "tcp:127.0.0.1:%d" % port
+            sims[m["machine"].upper()] = vfd_sim.start("127.0.0.1", port, slave, console=False,
+                                                       **({"rated_amp": float(m["rated_amp"])} if m.get("rated_amp") else {}))
+        if not modbus:
+            sys.exit("%s: no modbus given" % m["machine"])
+        t = threading.Thread(target=run, daemon=True, kwargs=dict(
+            machine=m["machine"], key=m["key"], url=url, modbus=modbus, slave=slave, min_hz=float(m.get("min_hz") or 30),
+            max_hz=float(m.get("max_hz") or 50), poll=poll, tele=tele, link_loss=link_loss, keep_running=keep_running,
+            stop=stop, tag=m["machine"].upper()))
+        t.start()
+        threads.append(t)
+    return sims, stop, threads
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--url", default=os.environ.get("AOI_URL", "http://127.0.0.1:5000"))
-    parser.add_argument("--machine", required=True, help="machine ID on Hardware Control, e.g. F2-MOTOR")
+    parser.add_argument("--machine", help="machine ID on Hardware Control, e.g. F2-MOTOR")
     parser.add_argument("--key", default=os.environ.get("AOI_DEVICE_KEY"), help="device key (or AOI_DEVICE_KEY)")
+    parser.add_argument("--config", help="update 45: a JSON file with several machines (see the top of this file)")
     parser.add_argument("--modbus", default="tcp:127.0.0.1:5020")
     parser.add_argument("--slave", type=int, default=1, help="inverter station number")
     parser.add_argument("--simulate", action="store_true", help="start the virtual inverter (scripts/vfd_sim.py) here")
@@ -249,6 +375,24 @@ def main():
     parser.add_argument("--link-loss", type=float, default=30.0, help="stop the motor when the app is unreachable this long")
     parser.add_argument("--keep-running", action="store_true", help="do not stop the motor when the app is unreachable")
     args = parser.parse_args()
+    if args.config:
+        with open(args.config, encoding="utf-8") as fh:
+            cfg = json.load(fh)
+        machines = cfg.get("machines") or []
+        if not machines:
+            sys.exit("%s: no machines" % args.config)
+        sims, stop, _threads = run_many(cfg.get("url") or args.url, machines, simulate=bool(cfg.get("simulate") or args.simulate),
+                                        poll=args.poll, tele=args.tele, link_loss=args.link_loss, keep_running=args.keep_running)
+        log("%d machine(s) on one gateway. Ctrl+C to stop." % len(machines))
+        try:
+            while True:
+                time.sleep(3600)
+        except KeyboardInterrupt:
+            stop.set()
+            log("gateway stopped")
+            return 0
+    if not args.machine:
+        sys.exit("--machine (or --config) is required")
     if not args.key:
         sys.exit("--key is required (Hardware Control > Machine setup > New key)")
     if args.simulate:
@@ -256,53 +400,10 @@ def main():
         import vfd_sim
         host, _, port = args.modbus.partition(":")[2].rpartition(":")
         vfd_sim.start(host or "127.0.0.1", int(port or 5020), args.slave)
-    app = App(args.url, args.machine, args.key)
-    inverter = Inverter(connect(args.modbus, args.slave), args.min_hz, args.max_hz)
-    log("gateway for %s: app %s, inverter %s (speed %.0f-%.0f Hz). Ctrl+C to stop." % (app.machine, app.base, args.modbus, args.min_hz, args.max_hz))
-    last_app_ok, last_post, last_sent, inverter_down = time.monotonic(), 0.0, None, False
-    values = {"running": False}
+    log("Ctrl+C to stop.")
     try:
-        while True:
-            now = time.monotonic()
-            # 1. read the inverter
-            try:
-                values = inverter.read()
-                if inverter_down:
-                    log("inverter answers again")
-                inverter_down = False
-            except ModbusError as error:
-                if not inverter_down:
-                    log("inverter: %s" % error)
-                    try:
-                        app.status("F", "inverter not answering: %s" % error)
-                    except (urllib.error.URLError, OSError, ValueError):
-                        pass
-                inverter_down = True
-            # 2. commands from the app
-            try:
-                for cmd in app.commands():
-                    try:
-                        if inverter_down:
-                            raise ModbusError("inverter not answering")
-                        result = carry_out(inverter, cmd)
-                        app.ack(cmd["id"], True, result)
-                        log("%s %s -> %s" % (cmd["id"], cmd["command"], result))
-                    except ModbusError as error:
-                        app.ack(cmd["id"], False, str(error))
-                        log("%s %s FAILED: %s" % (cmd["id"], cmd["command"], error))
-                last_app_ok = now
-                # 3. live values
-                state = (values.get("running"), values.get("fault"))
-                if not inverter_down and (now - last_post >= args.tele or state != last_sent):
-                    reply = app.telemetry(values)
-                    inverter.min_hz, inverter.max_hz = reply.get("min_hz", inverter.min_hz), reply.get("max_hz", inverter.max_hz)
-                    last_post, last_sent = now, state
-            except (urllib.error.URLError, OSError, ValueError) as error:
-                if now - last_app_ok > args.link_loss and values.get("running") and not args.keep_running and not inverter_down:
-                    inverter.stop()
-                    log("app unreachable for %.0f s: motor STOPPED for safety (%s)" % (now - last_app_ok, error))
-                    last_app_ok = now                       # log once per period
-            time.sleep(args.poll)
+        return run(args.machine, args.key, args.url, args.modbus, args.slave, args.min_hz, args.max_hz, args.poll, args.tele,
+                   args.link_loss, args.keep_running)
     except KeyboardInterrupt:
         log("gateway stopped (the inverter keeps its last state; it stops by itself after its communication check time)")
         return 0

@@ -1078,6 +1078,7 @@
  "msgOrderUpdated": "Order #{id} updated.",
  "msgPromoSaved": "Promotion saved. It applies to milling orders registered from now on.",
  "msgReadingSaved": "Reading saved.",
+ "msgSelectorSwitched": "{name} is now switched to {target}.",
  "msgTvKey": "New TV key issued. Set the new link on the TV.",
  "mtAdd": "Add a test",
  "mtAllVarieties": "All varieties",
