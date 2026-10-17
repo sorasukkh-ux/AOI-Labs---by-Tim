@@ -49,6 +49,8 @@ COLLECTIONS = {
     "AOITS_MACHINE_TELE": [(["MACHINE_ID", "TEL_DATE"], False)],
     "AOITS_HEALTH": [(["CHECK_DATE"], False)],                       # update 48
     "AOITS_SYSLOG": [(["LAST_DATE"], False), (["MESSAGE", "LEVEL"], False)],
+    "AOITS_EXPRICE": [(["PRICE_DATE", "ITEM_KEY"], True), (["ITEM_KEY"], False)],   # update 50
+    "AOIMS_PRICESIG": [(["CFG_ID"], True)],
     "AOITS_MONITOR": [(["KEY"], True), (["LAST_DATE"], False)],     # update 49
     "AOILOG_MACHINE": [(["MACHINE_ID", "LOG_DATE"], False), (["BRANCH_ID", "LOG_DATE"], False)],
     "AOIMS_MKMAP": [(["MAT_CODE"], True)],

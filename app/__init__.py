@@ -58,6 +58,8 @@ def create_app(overrides=None):
         except ValueError:
             return text
     app.jinja_env.globals["fmt_iso"] = fmt_iso
+    from .views import charts                        # update 50: dashboard SVG helpers
+    charts.register(app)
     app.jinja_env.globals.update(
         mat_name=variety.mat_name, varieties=variety.VARIETIES, var_keys=variety.VAR_KEYS, default_priority=variety.DEFAULT_PRIORITY,
         phone_of=phone.of, phone_countries=phone.COUNTRIES, phone_default=phone.DEFAULT, variety_of=variety.variety_of,

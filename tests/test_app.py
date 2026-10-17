@@ -3289,5 +3289,109 @@ class Update49(Base):
             self.assertIn(text, page)
 
 
+class Update50(Base):
+    """AI dashboard; Price analysis: the rice exporters' FOB prices, sources, trend, buy / sell points, TP / SL."""
+    PAGE = (b"<html><head><meta charset='utf-8'></head><body><p>\xe0\xb8\xa3\xe0\xb8\xb2\xe0\xb8\x84\xe0\xb8\xb2 15 Oct 2026</p><table>"
+            b"<tr><th>Type</th><th>01 Oct 2026</th><th>08 Oct 2026</th><th>15 Oct 2026</th></tr>"
+            b"<tr><td>Hom Mali Rice 100% (New crop)</td><td>1,105</td><td>1,110</td><td>1,120</td></tr>"
+            b"<tr><td>White Rice 5%</td><td>375</td><td>378</td><td>380-384</td></tr>"
+            b"<tr><td>A1 Super</td><td>320</td><td>322</td><td>325</td></tr></table></body></html>")
+
+    def setUp(self):
+        super().setUp()
+        self.login("admin")
+        self.client.get("/lang/en")
+
+    def _history(self, days=200, start=12000.0, step=-4.0):
+        from datetime import timedelta
+        from app.timeutil import today_local, now_utc
+        with self.app.app_context():
+            today = today_local()
+            col("AOITS_NABC_PRICE").insert_many([{"PRODUCT_NAME": "ข้าวเปลือกเจ้าหอมมะลิ 105", "DATA_DATE": (today - timedelta(days=i)).isoformat(),
+                                                   "MARKET_NAME": "m", "PROVINCE": "p", "DAY_PRICE": start + step * i, "UNIT": "บาท/ตัน",
+                                                   "FETCH_DATE": now_utc()} for i in range(days)])
+
+    def test_export_page_is_read(self):
+        from datetime import date
+        from app.models import export_price
+        rows, _links = export_price.parse_html(self.PAGE.decode("utf-8"))
+        got = {(r["key"], r["day"]): r["usd"] for r in rows}
+        self.assertEqual(got[("whiterice5%", date(2026, 10, 15))], 382.0)          # a range: the middle
+        self.assertEqual(got[("hommalirice100%(newcrop)", date(2026, 10, 1))], 1105.0)
+        self.assertEqual(len(rows), 9)
+        self.assertEqual(export_price.find_date("ราคา ณ วันที่ 14 ต.ค. 2569"), date(2026, 10, 14))
+        self.assertEqual(export_price.find_date("14/10/69"), date(2026, 10, 14))
+        title, _ = export_price.parse_html("<table><tr><td>ราคา ณ วันที่ 15 ต.ค. 2569</td></tr><tr><td>ข้าวขาว 5%</td><td>380</td><td>12,500</td></tr></table>")
+        self.assertEqual([(r["day"], r["usd"]) for r in title], [(date(2026, 10, 15), 380.0)])   # baht/ton column ignored
+
+    def test_import_settings_and_mapping(self):
+        r = self.client.post("/automation/ai/prices", data={"csrf_token": self.token("/automation/ai/prices"), "action": "import",
+                                                            "PAGE_FILE": (io.BytesIO(self.PAGE), "price.htm")}, content_type="multipart/form-data")
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(len(self.db("AOITS_EXPRICE")), 9)
+        self.post("/automation/ai/prices", {"action": "settings", "FX_USD_THB": "33.5", "SMA_SHORT": "7", "SMA_LONG": "30", "TP_PCT": "8",
+                                            "SL_PCT": "5", "BASE__RICE_W5": "TREA", "TREA__RICE_W5": "whiterice5%"}, "/automation/ai/prices")
+        cfg = self.db("AOIMS_PRICESIG")[0]
+        self.assertEqual((cfg["FX_USD_THB"], cfg["BASE"]["RICE_W5"], cfg["TREA_KEYS"]["RICE_W5"]), (33.5, "TREA", "whiterice5%"))
+        from app.models import price_signal
+        with self.app.test_request_context():
+            a = price_signal.analyse("factory2", "RICE_W5")
+            self.assertEqual(a["base"], "TREA")
+            self.assertEqual(a["latest"]["TREA"]["last"], round(382 * 33.5 / 1000, 2))
+            self.assertEqual(price_signal.trea_key("RICE_HM", price_signal.settings()), "hommalirice100%(newcrop)")   # first guess
+        bad = self.post("/automation/ai/prices", {"action": "settings", "FX_USD_THB": "33", "SMA_SHORT": "30", "SMA_LONG": "7", "TP_PCT": "8", "SL_PCT": "5"},
+                        "/automation/ai/prices")
+        self.assertEqual(bad.status_code, 302)
+        self.assertEqual(self.db("AOIMS_PRICESIG")[0]["SMA_SHORT"], 7)                 # refused: short must be shorter
+
+    def test_indicators(self):
+        from datetime import date, timedelta
+        from app.models import price_signal as ps
+        self.assertEqual(ps.sma([1, 2, 3, 4], 2), [None, 1.5, 2.5, 3.5])
+        self.assertEqual(ps.rsi([float(i) for i in range(20)])[-1], 100.0)
+        self.assertLess(ps.rsi([float(20 - i) for i in range(20)])[-1], 1)
+        days = [(date(2026, 1, 1) + timedelta(days=i), v) for i, v in enumerate([10] * 10 + [9] * 5 + [12] * 10)]
+        kinds = [c[1] for c in ps.crosses(days, ps.sma([v for _d, v in days], 3), ps.sma([v for _d, v in days], 8))]
+        self.assertEqual(kinds, ["S", "B"])
+        filled = ps.daily([("2026-01-01", 10.0), ("2026-01-08", 11.0)], date(2026, 1, 10))
+        self.assertEqual((len(filled), filled[6][1], filled[7][1], filled[-1][1]), (10, 10.0, 11.0, 11.0))
+
+    def test_signal_and_position(self):
+        from app.models import price_signal
+        self._history(200, 11000.0, 8.0)        # older is dearer: the price has fallen all the way
+        with self.app.test_request_context():
+            a = price_signal.analyse("factory2", "PADDY_HM", "6M")
+            s = a["signal"]
+            self.assertEqual(a["base"], "NABC")
+            self.assertEqual(s["last"], 11.0)
+            self.assertLess(s["trend_pct"], 0)
+            self.assertIn(s["label"], ("hold", "sell", "strong_sell", "buy", "strong_buy"))
+            self.assertTrue(any(r["key"] == "psWhyDown" for r in s["reasons"]))
+            pos = price_signal.position("factory2", "PADDY_HM", 11.0, price_signal.settings(), entry=12.0)
+            self.assertEqual((pos["cost"], pos["tp"], pos["sl"], pos["state"]), (12.0, 12.96, 11.4, "nostock"))
+            from unittest import mock
+            from app.models.inventory import Inventory
+            with mock.patch.object(Inventory, "free_qty", return_value=1000.0):
+                pos = price_signal.position("factory2", "PADDY_HM", 11.0, price_signal.settings(), entry=12.0)
+            self.assertEqual((pos["state"], pos["pl_total"]), ("sl", -1000.0))
+            self.assertIsNotNone(price_signal.for_ai("factory2"))
+
+    def test_dashboard_pages(self):
+        self._history(120)
+        page = self.text("/automation/ai")
+        for text in ('id="dash-kpis"', 'id="ai-signals"', 'data-sku="PADDY_HM"', 'class="dash-gauge', 'id="hl-devices"', "AI command centre"):
+            self.assertIn(text, page)
+        ps = self.text("/automation/ai/prices?sku=PADDY_HM&entry=12")
+        for text in ('id="ps-svg"', 'id="ps-verdict"', 'id="ps-position"', 'id="ps-src-table"', "NABC farm price", "Take profit (+8 %)"):
+            self.assertIn(text, ps)
+        self.assertNotRegex(ps, r">\s*ps[A-Z]\w+\s*<")
+        r = self.post("/automation/ai/prices", {"action": "ask", "sku": "PADDY_HM"}, "/automation/ai/prices")
+        self.assertEqual(r.status_code, 302)
+        self.assertIn("switched off", self.text("/automation/ai/prices"))       # no AI key: the reason is shown
+        with self.app.test_request_context():
+            from app.models import ai
+            self.assertIn("price_signals", ai.snapshot("factory2"))
+
+
 if __name__ == "__main__":
     unittest.main()

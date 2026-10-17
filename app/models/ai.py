@@ -201,8 +201,14 @@ def snapshot(branch_id):
                          for e in profit.evaluate_all(branch_id)],
         "yields": {v: MillYield.ratios(branch_id, v) for v in ("HM", "WH", "GL")},
         "supply_indicator_nabc_agri_production_index": _supply(),
-        "server_health": _health(),                       # update 48: disk, memory, CPU, database, log
+        "server_health": _health(),
+        "price_signals": _signals(branch_id),             # update 50: price sources, trend, buy / sell points                       # update 48: disk, memory, CPU, database, log
     }
+
+
+def _signals(branch_id):
+    from . import price_signal
+    return price_signal.for_ai(branch_id)
 
 
 def _health():
@@ -249,6 +255,11 @@ def ask(branch_id, user_id, question, lang):
               "Milling statuses: Q queue, I in process, H hold, F finished, D ready for delivery. "
               "server_health holds the server's disk / memory / CPU use, the database answer time and the app's warnings and "
               "errors of the last hour (levels ok, warn, crit); when asked about it, say what the risk is and the next step. "
+              "price_signals gives per SKU the base price source (NABC farm price, TRMA rice millers' report, TREA export FOB "
+              "price converted at fx_usd_thb, APPLIED market price, own BUY / SELL prices), the latest price, the signal "
+              "(strong_buy .. strong_sell from RSI, Bollinger bands and moving-average crosses), the buy / sell points, the "
+              "stock (qty kg), its cost and profit / loss, take profit (tp) and stop loss (sl) prices. Export prices are FOB at "
+              "the port, above mill-gate prices: use them for direction. Say clearly that signals are not a guarantee. "
               "Never invent numbers." % ("Thai" if lang == "th" else "English"))
     body = {"model": config["AI_MODEL"], "max_tokens": 600, "system": system,
             "messages": [{"role": "user", "content": "Figures of the branch (JSON):\n%s\n\nQuestion: %s"

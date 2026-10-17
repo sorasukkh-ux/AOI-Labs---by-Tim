@@ -1,7 +1,7 @@
 """Automation: AI, Hardware Control, Electricity, Machine Usage Statistics (branch signed in to)."""
 from datetime import timedelta
 
-from flask import Blueprint, abort, jsonify, redirect, render_template, request, session, url_for
+from flask import Blueprint, abort, current_app, jsonify, redirect, render_template, request, session, url_for
 
 from ..i18n import t
 from ..models import ai, supply
@@ -46,13 +46,13 @@ def _run(action, ok_key, endpoint, **values):
     return redirect(url_for(endpoint, **values))
 
 
-def _bars(values, w=360, h=190, pt=20, pb=34, pl=14):
+def _bars(values, w=360, h=190, pt=20, pb=34, pl=14, max_bw=26):
     """Bar geometry for a simple one-series chart: [(label, value, title)] -> list of dicts."""
     if not values:
         return []
     plot_h = h - pt - pb
     slot = (w - 2 * pl) / len(values)
-    bw = min(26, slot * 0.55)
+    bw = min(max_bw, slot * 0.55)
     top = max([v for _l, v, _t in values] + [0.0001])
     out = []
     for i, (label, value, title) in enumerate(values):
@@ -320,7 +320,7 @@ def ai_screen():
         d["when"] = fmt_datetime(d.get("LAST_DATE"))
     fc = ai.forecast(branch)
     bars = _bars([(f["day"].strftime("%d/%m"), f["kg"], "%s · %.0f kg · %.1f %s" % (f["day"].strftime("%d/%m"), f["kg"], f["orders"], t("aiOrders")))
-                  for f in fc])
+                  for f in fc], w=640, max_bw=44)
     advice = ai.price_advice(branch)
     for a in advice:
         a["name"] = mat_name(a["mat"])
@@ -330,9 +330,83 @@ def ai_screen():
             a["params"] = dict(a["params"], mat=mat_name(a["params"]["mat"]))
     sp = supply.summary()
     sp_bars = _bars([("%s/%s" % (d["PERIOD"][5:], str(d["YEAR_TH"])[2:]), d["INDEX_VALUE"],
-                      "%s/%s · %.1f" % (d["PERIOD"][5:], d["YEAR_TH"], d["INDEX_VALUE"])) for d in supply.series(sp["scope"] if sp else None, 24)])
-    return render_template("automation/ai.html", health=hl, health_logs=hl_logs, health_time=fmt_datetime(hl["CHECK_DATE"]),
+                      "%s/%s · %.1f" % (d["PERIOD"][5:], d["YEAR_TH"], d["INDEX_VALUE"])) for d in supply.series(sp["scope"] if sp else None, 24)], w=640, max_bw=22)
+    from ..models import monitor, price_signal
+    signals = price_signal.overview(branch)
+    hist = health.history(24)
+    health_hist = {"disk": [h["METRICS"]["disk"]["used_pct"] for h in hist if h.get("METRICS", {}).get("disk")],
+                   "memory": [h["METRICS"]["memory"]["used_pct"] for h in hist if h.get("METRICS", {}).get("memory")],
+                   "cpu": [(h["METRICS"].get("cpu") or {}).get("used_pct") for h in hist if h.get("METRICS")]}
+    counts = {"buy": sum(1 for o in signals if o["label"] in ("buy", "strong_buy")),
+              "sell": sum(1 for o in signals if o["label"] in ("sell", "strong_sell")),
+              "hold": sum(1 for o in signals if o["label"] == "hold")}
+    return render_template("automation/ai.html", signals=signals, sig_counts=counts, health_hist=health_hist,
+                           api_hourly=monitor.api_hourly(24), fc_total=round(sum(f["kg"] for f in fc)), health=hl, health_logs=hl_logs, health_time=fmt_datetime(hl["CHECK_DATE"]),
                            health_q=t("hlAskQuestion"), supply=sp, supply_bars=sp_bars, can_ask_fetch=can(AI_MENU, "create"), forecast=fc, bars=bars, queue=ai.queue_load(branch), advice=advice,
                            alerts=alerts, configured=ai.ai_configured(), last=session.pop("ai_answer", None),
                            recent=ai.recent_questions(branch, _user_id()), can_ask=can(AI_MENU, "create"),
                            basis=min((f["basis"] for f in fc), default=0))
+
+
+# ---------- AI > Price analysis (update 50) ----------
+@bp.route("/ai/prices", methods=["GET", "POST"])
+@require(AI_MENU)
+def ai_prices():
+    from ..models import export_price, price_signal, variety as var
+    branch = operating_branch()
+    code = request.values.get("sku") if request.values.get("sku") in var.TRADED else "PADDY_HM"
+    period = request.values.get("p") if request.values.get("p") in price_signal.PERIODS else "12M"
+    back = lambda anchor=None: redirect(url_for("automation.ai_prices", sku=code, p=period, _anchor=anchor))
+    if request.method == "POST":
+        if not can(AI_MENU, "create"):
+            abort(403)
+        action = request.form.get("action")
+        try:
+            if action == "fetch":
+                r = export_price.fetch(_user_id())
+                flash_ok("psFetched", rows=r["rows"], new=r["new"], day=r["newest"])
+                return back("ps-sources")
+            if action == "import":
+                upload = request.files.get("PAGE_FILE")
+                data = upload.read(15 * 1024 * 1024) if upload else b""
+                if not data:
+                    raise ValidationError("psErrNoFile")
+                r = export_price.import_data(data, "upload:" + (upload.filename or "file")[:80], _user_id())
+                flash_ok("psFetched", rows=r["rows"], new=r["new"], day=r["newest"])
+                return back("ps-sources")
+            if action == "settings":
+                if not can(AI_MENU, "edit"):
+                    abort(403)
+                price_signal.save_settings(request.form, _user_id())
+                flash_ok("psSaved")
+                return back("ps-settings")
+            if action == "ask":
+                a = price_signal.analyse(branch, code, period)
+                s = a["signal"] or {}
+                q = t("psAskQuestion", name=a["name"], label=t("psLabel_" + (s.get("label") or "hold")))
+                answer = ai.ask(branch, _user_id(), q, session.get("lang", "th"))
+                session["ps_answer"] = {"q": q, "a": answer, "sku": code}
+                return back("ps-ask")
+        except ValidationError as error:
+            flash_error(error)
+            return back()
+        abort(400)
+    cfg = price_signal.settings()
+    entry = request.args.get("entry")
+    try:
+        entry = float(entry) if entry and float(entry) > 0 else None
+    except ValueError:
+        entry = None
+    items = export_price.items()
+    keys = [i["key"] for i in items]
+    a = price_signal.analyse(branch, code, period, cfg, entry, keys)
+    answer = session.get("ps_answer")
+    if answer and answer.get("sku") != code:
+        answer = None
+    last_fetch = export_price.latest_fetch()
+    return render_template("automation/ai_prices.html", a=a, code=code, period=period, periods=list(price_signal.PERIODS),
+                           cfg=cfg, overview=price_signal.overview(branch, cfg), src_names={x: t("psSrc_" + x) for x in price_signal.SOURCES}, items=items, sources=price_signal.SOURCES,
+                           trea_keys={c: price_signal.trea_key(c, cfg, keys) for c in var.TRADED}, traded=var.TRADED,
+                           last_fetch=fmt_datetime(last_fetch["FETCH_DATE"]) if last_fetch else None, entry=entry,
+                           export_url=current_app.config["EXPORT_URL"], answer=answer,
+                           configured=ai.ai_configured(), can_fetch=can(AI_MENU, "create"), can_edit=can(AI_MENU, "edit"))

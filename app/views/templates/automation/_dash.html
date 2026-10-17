@@ -1,0 +1,16 @@
+{# update 50: dashboard pieces shared by AI and Price analysis #}
+{% macro sparkline(values, cls='', w=120, h=34) %}{% set sp = svg_spark(values, w, h) %}{% if sp %}
+<svg class="dash-spark {{ cls }}" viewBox="0 0 {{ w }} {{ h }}" preserveAspectRatio="none" aria-hidden="true"><path d="{{ sp.area }}" class="a"/><path d="{{ sp.line }}" class="l"/><circle cx="{{ sp.x }}" cy="{{ sp.y }}" r="2.6" class="p"/></svg>{% endif %}{% endmacro %}
+
+{% macro sig_card(o, period=none, active=false) %}
+    <a class="dash-sig ps-{{ o.label or 'none' }}{% if active %} active{% endif %}" data-sku="{{ o.code }}" href="{{ url_for('automation.ai_prices', sku=o.code, p=period, _anchor='ps-chart') if period else url_for('automation.ai_prices', sku=o.code, _anchor='ps-chart') }}">
+      <div class="top"><span class="nm">{{ o.name }}</span>{% if o.label %}<span class="ps-sig ps-{{ o.label }}">{{ t('psLabel_' ~ o.label) }}</span>{% endif %}</div>
+      <div class="mid"><b>{{ '%.2f'|format(o.last) if o.last is not none else '-' }}</b><small>{{ t('mkhUnit') }}</small>
+        {% if o.change_30d is not none %}<span class="chg {{ 'up' if o.change_30d > 0 else ('down' if o.change_30d < 0 else '') }}">{{ '%+.1f%%'|format(o.change_30d) }}</span>{% endif %}</div>
+      {{ sparkline(o.spark, 'tone-' ~ ('up' if (o.change_30d or 0) > 0 else ('down' if (o.change_30d or 0) < 0 else 'flat')), 220, 44) }}
+      {% if o.support is not none and o.resistance is not none and o.resistance > o.support %}{% set posn = ((o.last - o.support) / (o.resistance - o.support) * 100)|round(1) %}
+      <div class="dash-range"><svg viewBox="0 0 220 10" aria-hidden="true"><rect x="0" y="3" width="220" height="4" rx="2" class="bg"/><circle cx="{{ ([[posn, 2]|max, 98]|min) * 2.2 }}" cy="5" r="4" class="pt"/></svg>
+        <div class="lbl"><span>{{ t('psBuyZone') }} {{ '%.2f'|format(o.buy_zone) }}</span><span>{{ t('psSellZone') }} {{ '%.2f'|format(o.sell_zone) }}</span></div></div>{% endif %}
+      <div class="foot"><span>{{ t('psSrc_' ~ o.base) }}</span>{% if o.pl_pct is not none %}<span class="{{ 'gain' if o.pl_pct > 0 else 'loss' }}">{{ t('psPl') }} {{ '%+.1f%%'|format(o.pl_pct) }}</span>{% endif %}</div>
+    </a>
+{% endmacro %}

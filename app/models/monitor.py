@@ -92,6 +92,19 @@ def api_stats(hours=1):
     return out
 
 
+def api_hourly(hours=24):
+    """[{'hour': 'HH', 'calls', 'errors'}] per hour, oldest first (all areas; errors = 5xx + rejected device keys)."""
+    now = now_utc()
+    keys = [(now - timedelta(hours=h)) for h in range(hours - 1, -1, -1)]
+    by = {k.strftime("%Y%m%d%H"): {"hour": to_local(k).strftime("%H"), "calls": 0, "errors": 0} for k in keys}
+    for d in col(COL).find({"KEY": {"$regex": "^api\\|"}}, NO_ID):
+        b = by.get(d.get("HOUR"))
+        if b is not None:
+            b["calls"] += d.get("COUNT") or 0
+            b["errors"] += (d.get("ERR5XX") or 0) + (d.get("REJECTED") or 0)
+    return [by[k.strftime("%Y%m%d%H")] for k in keys]
+
+
 # ---------- LINE ----------
 def _bot_info():
     """Token check with LINE, at most every 30 minutes: "ok", "invalid", "unreachable" or None (not checked)."""

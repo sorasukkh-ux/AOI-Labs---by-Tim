@@ -1,60 +1,81 @@
 {% extends "base.html" %}
 {% from "_macros.html" import page_head %}
 {% from "automation/_chart.html" import bar_chart %}
+{% from "automation/_dash.html" import sparkline, sig_card %}
+{# update 50: AI as a dashboard - KPI strip, gauges, trend lines, signal cards (was tables of numbers) #}
+
+{% macro gauge(key, pct, level, sub) %}{% set g = svg_donut(pct or 0) %}
+<div class="dash-gauge hl-{{ level }}" data-hl="{{ key }}">
+  <svg viewBox="0 0 {{ g.size }} {{ g.size }}" role="img" aria-label="{{ t(key) }} {{ pct|plain if pct is not none else '-' }} %">
+    <circle cx="{{ g.cx }}" cy="{{ g.cx }}" r="{{ g.r }}" class="track" stroke-width="{{ g.w }}"/>
+    <circle cx="{{ g.cx }}" cy="{{ g.cx }}" r="{{ g.r }}" class="fill" stroke-width="{{ g.w }}" stroke-dasharray="{{ g.dash }}" transform="rotate(-90 {{ g.cx }} {{ g.cx }})"/>
+    <text x="{{ g.cx }}" y="{{ g.cx + 5 }}" text-anchor="middle" class="v">{{ '%.0f'|format(pct) if pct is not none else '-' }}<tspan class="u">%</tspan></text>
+  </svg>
+  <span class="k">{{ t(key) }}</span><span class="s">{{ sub }}</span>
+</div>{% endmacro %}
+
+{% set ICONS = {"server": '<path d="M4 5h16v5H4zM4 14h16v5H4z"/><circle cx="8" cy="7.5" r="1"/><circle cx="8" cy="16.5" r="1"/>', "queue": '<path d="M4 6h16M4 12h16M4 18h10"/>', "cal": '<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/>', "trend": '<path d="M4 17l5-5 4 3 7-8"/><path d="M15 7h5v5"/>', "bell": '<path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4z"/><path d="M10 20a2 2 0 0 0 4 0"/>', "api": '<path d="M8 8l-4 4 4 4M16 8l4 4-4 4M13 6l-2 12"/>'} %}
+{% macro icon(name) %}<span class="dash-ic ic-{{ name }}" aria-hidden="true"><svg viewBox="0 0 24 24">{{ ICONS[name]|safe }}</svg></span>{% endmacro %}
 {% block content %}
-<div id="tab-ai" class="auto-page">
-{{ page_head(t('tabAi'), url_for('home.index', g='AT')) }}
-<div class="card gap"><p class="desc-text">{{ t('aiDesc') }}</p></div>
-<div class="chips">
+{% set m = health.METRICS %}
+{% set bad = health.FINDINGS|rejectattr('level', 'equalto', 'ok')|list %}
+{% set lv = {} %}{% for f in health.FINDINGS %}{% set _ = lv.update({f.key: f.level}) %}{% endfor %}
+{% set api_calls = api_hourly|sum(attribute='calls') %}{% set api_err = api_hourly|sum(attribute='errors') %}
+<div id="tab-ai" class="auto-page dash">
+{{ page_head(none, url_for('home.index', g='AT')) }}
+<header class="dash-banner">
+  <div><p class="dash-title">{{ t('dashTitle') }}</p><p class="dash-subtitle">{{ branch_label(op_branch) }} &middot; {{ t('hlChecked', level='') }} {{ health_time }}</p></div>
+  <span class="dash-live lvl-{{ health.LEVEL }}"><i></i>{{ t('hlLevel_' ~ health.LEVEL) }}</span>
+</header>
+<p class="desc-text dash-desc">{{ t('aiDesc') }}</p>
+<nav class="chips dash-nav">
   <a class="chip{% if health.LEVEL != 'ok' %} hl-chip-{{ health.LEVEL }}{% endif %}" href="#ai-health">{{ t('hlTitle') }}{% if health.LEVEL != 'ok' %} &#9888;{% endif %}</a>
-  <a class="chip" href="#ai-forecast">{{ t('aiForecast') }}</a><a class="chip" href="#ai-price">{{ t('aiPrice') }}</a>
+  <a class="chip" href="#ai-forecast">{{ t('aiForecast') }}</a><a class="chip" href="#ai-signals">{{ t('psChip') }}</a><a class="chip" href="#ai-price">{{ t('aiPrice') }}</a>
   <a class="chip" href="#ai-supply">{{ t('spChip') }}</a><a class="chip" href="#ai-alerts">{{ t('aiAlerts') }} ({{ alerts|length }})</a><a class="chip" href="#ai-ask">{{ t('aiAsk') }}</a>
+</nav>
+
+{# ---- KPI strip ---- #}
+<div class="dash-kpis" id="dash-kpis">
+  <a class="dash-kpi lvl-{{ health.LEVEL }}" href="#ai-health"><span class="k">{{ t('dashServer') }}</span>{{ icon('server') }}
+    <b class="dash-status"><i class="dot"></i>{{ t('hlLevel_' ~ health.LEVEL) }}</b>
+    <span class="s">{{ t('dashFindings', n=bad|length) if bad else t('dashAllGood') }}</span></a>
+  <a class="dash-kpi" href="#ai-forecast"><span class="k">{{ t('aiQueueNow') }}</span>{{ icon('queue') }}<b>{{ queue.orders }}<small> {{ t('dashOrders') }}</small></b>
+    <span class="s">{{ "{:,.0f}".format(queue.kg) }} kg &middot; {{ queue.hours }} h</span></a>
+  <a class="dash-kpi" href="#ai-forecast"><span class="k">{{ t('dashNext7') }}</span>{{ icon('cal') }}<b>{{ "{:,.0f}".format(fc_total) }}<small> kg</small></b>
+    {% set fb = svg_bars(forecast|map(attribute='kg')|list, 120, 26) %}<svg class="dash-minibars" viewBox="0 0 120 26" preserveAspectRatio="none" aria-hidden="true">{% for x, y, w, h, v in fb %}<rect x="{{ x }}" y="{{ y }}" width="{{ w }}" height="{{ h }}" rx="1.5"/>{% endfor %}</svg></a>
+  <a class="dash-kpi" href="#ai-signals"><span class="k">{{ t('psAiCard') }}</span>{{ icon('trend') }}
+    <b class="dash-sigs"><span class="up">&#9650; {{ sig_counts.buy }}</span><span class="hold">&#9679; {{ sig_counts.hold }}</span><span class="down">&#9660; {{ sig_counts.sell }}</span></b>
+    <span class="s">{{ t('dashSigLegend') }}</span></a>
+  <a class="dash-kpi{% if alerts %} lvl-warn{% endif %}" href="#ai-alerts"><span class="k">{{ t('aiAlerts') }}</span>{{ icon('bell') }}<b>{{ alerts|length }}</b>
+    <span class="s">{{ t('dashAlertsSub', n=alerts|selectattr('severity', 'equalto', 'serious')|list|length) }}</span></a>
+  <a class="dash-kpi{% if api_err %} lvl-warn{% endif %}" href="#hl-api"><span class="k">{{ t('dashApi24') }}</span>{{ icon('api') }}<b>{{ "{:,}".format(api_calls) }}<small> {{ t('dashCalls') }}</small></b>
+    {% set ab = svg_bars(api_hourly|map(attribute='calls')|list, 120, 26, 1) %}<svg class="dash-minibars" viewBox="0 0 120 26" preserveAspectRatio="none" aria-hidden="true">{% for x, y, w, h, v in ab %}<rect x="{{ x }}" y="{{ y }}" width="{{ w }}" height="{{ h }}" rx="1"/>{% endfor %}</svg></a>
 </div>
 
-{% set m = health.METRICS %}
-<div class="card hl-card hl-{{ health.LEVEL }}" id="ai-health">
-  <div class="hl-head">
-    <p class="card-title sub">{{ t('hlTitle') }}</p>
-    <span class="badge hl-badge-{{ health.LEVEL }}" id="hl-level">{{ t('hlLevel_' ~ health.LEVEL) }}</span>
-  </div>
-  <div class="hl-grid">
-    {% set tiles = [('hlDisk', m.disk.used_pct, '%', t('hlFreeGb', n=m.disk.free_gb)), ('hlMemory', m.memory.used_pct, '%', t('hlTotalMb', n=m.memory.total_mb)),
-                    ('hlCpu', m.cpu.used_pct if m.cpu.used_pct is not none else m.cpu.load1, '%' if m.cpu.used_pct is not none else '', t('hlLoad', load=m.cpu.load1, cores=m.cpu.cores)),
-                    ('hlDb', m.db.ms if m.db.ok else none, 'ms', (m.db.kind ~ (' · ' ~ m.db.size_mb ~ ' MB' if m.db.size_mb else '')) if m.db.ok else t('hlDbDown')),
-                    ('hlErrors', m.logs.errors, '', t('hlLastHour')), ('hlWarnings', m.logs.warnings, '', t('hlLastHour'))] %}
-    {% for key, val, unit, sub in tiles %}{% set f = (health.FINDINGS|selectattr('key', 'in', [key, key ~ 'Down'])|list or [{'level': 'ok'}])[0] %}
-    <div class="hl-tile hl-{{ f.level }}" data-hl="{{ key }}"><span class="hl-k">{{ t(key) }}</span><b>{{ (val|plain if val is not none else '-') }}{% if val is not none %}<small>{{ unit }}</small>{% endif %}</b><span class="hl-sub">{{ sub }}</span></div>
-    {% endfor %}
-  </div>
-  {% set bad = health.FINDINGS|rejectattr('level', 'equalto', 'ok')|list %}
-  {% for f in bad %}<p class="alert-row hl-row {{ f.level }}"><span class="badge {{ 'blocked' if f.level == 'crit' else 'pending' }}">&#9888; {{ t('hlLevel_' ~ f.level) }}</span> {{ t(f.key ~ 'Msg', **f.params) }} <small class="hl-todo">{{ t(f.key ~ 'Todo') }}</small></p>
-  {% else %}<p class="hint">&#10003; {{ t('hlAllOk') }}</p>{% endfor %}
-  {# update 49: the app's API, the LINE interface, the hardware devices #}
-  <div class="hl-mon">
-    <p class="card-title section">{{ t('hlApiTitle') }}</p>
-    <div class="inv-table-wrap"><table class="tv-table hl-api"><thead><tr><th>{{ t('hlArea') }}</th><th class="num">{{ t('hlCalls') }}</th><th class="num">4xx</th><th class="num">5xx</th><th class="num">{{ t('hlSlow') }}</th><th class="num">{{ t('hlAvgMs') }}</th><th class="num">{{ t('hlMaxMs') }}</th></tr></thead><tbody>
-    {% for area in ('web', 'device', 'line', 'public') %}{% set a = (m.api or {}).get(area) or {} %}
-    <tr data-area="{{ area }}"><td>{{ t('hlArea_' ~ area) }}</td><td class="num">{{ a.calls or 0 }}</td><td class="num">{{ a.err4xx or 0 }}{% if a.rejected %} <small>({{ t('hlRejected', n=a.rejected) }})</small>{% endif %}</td>
-      <td class="num{% if a.err5xx %} bad{% endif %}">{{ a.err5xx or 0 }}</td><td class="num{% if a.slow %} warnc{% endif %}">{{ a.slow or 0 }}</td><td class="num">{{ a.avg_ms if a.avg_ms is not none else '-' }}</td><td class="num">{{ a.max_ms if a.max_ms is not none else '-' }}</td></tr>
-    {% endfor %}</tbody></table></div>
-    <p class="card-title section">{{ t('hlLineTitle') }}</p>{% set ln = m.line or {} %}
-    <div class="hl-line" id="hl-line">
-      <span class="hl-pill {{ 'ok' if ln.token else 'off' }}">{{ t('hlLineTokenSet') if ln.token else t('hlLineTokenNone') }}</span>
-      <span class="hl-pill {{ 'ok' if ln.secret else ('warn' if ln.token else 'off') }}">{{ t('hlLineSecretSet') if ln.secret else t('hlLineSecretNone') }}</span>
-      {% if ln.bot %}<span class="hl-pill {{ 'ok' if ln.bot == 'ok' else ('crit' if ln.bot == 'invalid' else 'warn') }}">{{ t('hlLineBot_' ~ ln.bot) }}</span>{% endif %}
-      <span class="hl-kv">{{ t('hlLineLastHook') }}: <b>{{ fmt_iso(ln.last_webhook) }}</b></span>
-      <span class="hl-kv">{{ t('hlLineLastSent') }}: <b>{{ fmt_iso(ln.last_sent) }}</b></span>
-      <span class="hl-kv{% if ln.failed_24h %} bad{% endif %}">{{ t('hlLineFailed24') }}: <b>{{ ln.failed_24h or 0 }}</b></span>
-      <span class="hl-kv">{{ t('hlLineWaiting') }}: <b>{{ ln.waiting_24h or 0 }}</b></span>
+{# ---- System health ---- #}
+<p class="dash-sec">{{ t('dashSecSystem') }}</p>
+<div class="dash-grid">
+<section class="card dash-card span2 hl-card hl-{{ health.LEVEL }}" id="ai-health">
+  <div class="dash-head"><p class="card-title sub">{{ t('hlTitle') }}</p><span class="badge hl-badge-{{ health.LEVEL }}" id="hl-level">{{ t('hlLevel_' ~ health.LEVEL) }}</span></div>
+  <div class="dash-gauges">
+    {{ gauge('hlDisk', m.disk.used_pct, lv.get('hlDisk', 'ok'), t('hlFreeGb', n=m.disk.free_gb)) }}
+    {{ gauge('hlMemory', m.memory.used_pct, lv.get('hlMemory', 'ok'), t('hlTotalMb', n=m.memory.total_mb)) }}
+    {{ gauge('hlCpu', m.cpu.used_pct if m.cpu.used_pct is not none else 0, lv.get('hlCpu', 'ok'), t('hlLoad', load=m.cpu.load1, cores=m.cpu.cores)) }}
+    <div class="dash-minis">
+      <div class="dash-mini hl-{{ lv.get('hlDb', lv.get('hlDbDown', 'ok')) }}" data-hl="hlDb"><span>{{ t('hlDb') }}</span><b>{{ m.db.ms|plain if m.db.ok else '-' }}<small>ms</small></b></div>
+      <div class="dash-mini hl-{{ lv.get('hlErrors', 'ok') }}" data-hl="hlErrors"><span>{{ t('hlErrors') }}</span><b>{{ m.logs.errors }}</b></div>
+      <div class="dash-mini hl-{{ lv.get('hlWarnings', 'ok') }}" data-hl="hlWarnings"><span>{{ t('hlWarnings') }}</span><b>{{ m.logs.warnings }}</b></div>
     </div>
-    <p class="card-title section">{{ t('hlDevTitle') }}</p>
-    {% if m.devices %}<div class="inv-table-wrap"><table class="tv-table hl-dev"><thead><tr><th>{{ t('hlDevice') }}</th><th>{{ t('colStatus') }}</th><th>{{ t('hlLastSeen') }}</th><th class="num">{{ t('hlFailedCmds') }}</th><th class="num">{{ t('hlFaults24') }}</th></tr></thead><tbody>
-    {% for d in m.devices %}<tr data-device="{{ d.id }}"><td>{{ d.name }}<small class="inv-sub">{{ d.id }}</small></td>
-      <td><span class="hl-pill {{ 'ok' if d.online else ('warn' if d.recent else 'off') }}">{{ t('hlOnline') if d.online else (t('hlNoKey') if not d.has_key else t('hlOffline')) }}</span>{% if d.online and d.fresh is not none %} <small>{{ t('hlLive') if d.fresh else t('hlNoLive') }}</small>{% endif %}</td>
-      <td>{{ d.last_seen or '-' }}</td><td class="num{% if d.failed_cmds %} warnc{% endif %}">{{ d.failed_cmds }}</td><td class="num{% if d.faults %} warnc{% endif %}">{{ d.faults }}</td></tr>{% endfor %}
-    </tbody></table></div>{% else %}<p class="hint">{{ t('hlNoDevices') }}</p>{% endif %}
   </div>
-  <p class="cap-note">{{ t('hlChecked', level='') }} {{ health_time }} &middot; {{ t('hlUptime', h=m.uptime_h) }}{% if m.app_mb %} &middot; {{ t('hlAppMb', n=m.app_mb) }}{% endif %} &middot; {{ t('hlEvery') }}</p>
+  {% set ch = svg_lines([('disk', health_hist.disk), ('memory', health_hist.memory), ('cpu', health_hist.cpu)], 560, 140) %}
+  <div class="dash-chart-head"><span class="card-title">{{ t('dash24h') }}</span>
+    <span class="dash-legend"><i class="sw s-disk"></i>{{ t('hlDisk') }} <i class="sw s-memory"></i>{{ t('hlMemory') }} <i class="sw s-cpu"></i>{{ t('hlCpu') }}</span></div>
+  {% if ch and ch.paths %}<svg class="dash-lines" viewBox="0 0 {{ ch.w }} {{ ch.h }}" role="img" aria-label="{{ t('dash24h') }}">
+    {% for y, g in ch.grid %}<line x1="{{ ch.x0 }}" x2="{{ ch.x1 }}" y1="{{ y }}" y2="{{ y }}" class="grid"/><text x="{{ ch.x0 - 6 }}" y="{{ y + 4 }}" text-anchor="end" class="ax">{{ g }}%</text>{% endfor %}
+    {% for key, d in ch.paths %}<path d="{{ d }}" class="ln s-{{ key }}"/>{% endfor %}
+  </svg>{% else %}<p class="hint">{{ t('dashNoHistory') }}</p>{% endif %}
+  {% for f in bad %}<p class="alert-row hl-row {{ f.level }}"><span class="badge {{ 'blocked' if f.level == 'crit' else 'pending' }}">&#9888; {{ t('hlLevel_' ~ f.level) }}</span> {{ t(f.key ~ 'Msg', **f.params) }} <small class="hl-todo">{{ t(f.key ~ 'Todo') }}</small></p>
+  {% else %}<p class="dash-ok">&#10003; {{ t('hlAllOk') }}</p>{% endfor %}
   <div class="btn-pair mt6">
     {% if can_ask %}<form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="health">
       <button class="action full" type="submit" id="hl-check">&#8635; {{ t('hlCheckNow') }}</button></form>{% endif %}
@@ -62,67 +83,135 @@
       <button class="action primary full" type="submit" id="hl-ask">&#129302; {{ t('hlAskAi') }}</button></form>{% endif %}
   </div>
   <details class="mt6 hl-log"{% if m.logs.errors %} open{% endif %}><summary class="cap-note">{{ t('hlLogTitle', n=health_logs|length) }}</summary>
-    {% if health_logs %}<div class="inv-table-wrap"><table class="tv-table hl-log-table"><thead><tr><th>{{ t('colTime') }}</th><th>{{ t('hlLevelCol') }}</th><th>{{ t('hlMessage') }}</th><th class="num">&times;</th></tr></thead><tbody>
-    {% for d in health_logs %}<tr class="lv-{{ d.LEVEL|lower }}"><td>{{ d.when }}</td><td>{{ d.LEVEL }}</td><td>{{ d.MESSAGE }}</td><td class="num">{{ d.COUNT }}</td></tr>{% endfor %}
-    </tbody></table></div>{% else %}<p class="hint">{{ t('hlNoLog') }}</p>{% endif %}
+    {% if health_logs %}<ul class="dash-log">{% for d in health_logs %}<li class="lv-{{ d.LEVEL|lower }}"><span class="lvl">{{ d.LEVEL }}</span><span class="msg">{{ d.MESSAGE }}</span><span class="when">{{ d.when }}{% if d.COUNT > 1 %} &middot; &times;{{ d.COUNT }}{% endif %}</span></li>{% endfor %}</ul>
+    {% else %}<p class="hint">{{ t('hlNoLog') }}</p>{% endif %}
   </details>
+</section>
+
+<section class="card dash-card hl-mon" id="hl-api">
+  <div class="dash-head"><p class="card-title sub">{{ t('hlApiTitle') }}</p>{% set e5 = (m.api or {}).values()|map(attribute='err5xx')|sum %}<span class="badge {{ 'blocked' if e5 else 'approved' }}">{{ e5 }} &times; 5xx</span></div>
+  {% set api_max = [1] + (m.api or {}).values()|map(attribute='calls')|list %}{% set api_max = api_max|max %}
+  <div class="dash-api">
+  {% for area in ('web', 'device', 'line', 'public') %}{% set a = (m.api or {}).get(area) or {} %}{% set calls = a.calls or 0 %}
+    <div class="dash-api-row" data-area="{{ area }}">
+      <div class="top"><span class="nm">{{ t('hlArea_' ~ area) }}</span><span class="nums"><b>{{ calls }}</b> {{ t('dashCalls') }}{% if a.avg_ms is not none %} &middot; {{ a.avg_ms }} ms{% endif %}</span></div>
+      <svg class="dash-stack" viewBox="0 0 100 8" preserveAspectRatio="none" aria-hidden="true"><rect x="0" y="0" width="100" height="8" rx="4" class="bg"/>
+        {% set ok = calls - (a.err4xx or 0) - (a.err5xx or 0) %}{% set sc = 100.0 * calls / api_max %}
+        {% if calls %}<rect x="0" y="0" width="{{ sc * ok / calls }}" height="8" class="ok"/><rect x="{{ sc * ok / calls }}" y="0" width="{{ sc * (a.err4xx or 0) / calls }}" height="8" class="e4"/><rect x="{{ sc * (ok + (a.err4xx or 0)) / calls }}" y="0" width="{{ sc * (a.err5xx or 0) / calls }}" height="8" class="e5"/>{% endif %}</svg>
+      <div class="tags">{% if a.err4xx %}<span class="tag e4">4xx {{ a.err4xx }}</span>{% endif %}{% if a.err5xx %}<span class="tag e5">5xx {{ a.err5xx }}</span>{% endif %}{% if a.slow %}<span class="tag e4">{{ t('hlSlow') }} {{ a.slow }}</span>{% endif %}{% if a.rejected %}<span class="tag e5">{{ t('hlRejected', n=a.rejected) }}</span>{% endif %}{% if a.max_ms %}<span class="tag">max {{ a.max_ms }} ms</span>{% endif %}</div>
+    </div>
+  {% endfor %}
+  </div>
+  <p class="card-title mt14">{{ t('dashApiHourly') }}</p>
+  {% set hb = svg_bars(api_hourly|map(attribute='calls')|list, 300, 54, 2) %}
+  <svg class="dash-hourly" viewBox="0 0 300 70" role="img" aria-label="{{ t('dashApiHourly') }}">{% for x, y, w, h, v in hb %}<g><title>{{ api_hourly[loop.index0].hour }}:00 &middot; {{ v|int }}</title><rect x="{{ x }}" y="{{ y }}" width="{{ w }}" height="{{ h }}" rx="1.5" class="{{ 'err' if api_hourly[loop.index0].errors else '' }}"/></g>{% if loop.index0 % 6 == 0 %}<text x="{{ x }}" y="68" class="ax">{{ api_hourly[loop.index0].hour }}</text>{% endif %}{% endfor %}</svg>
+</section>
+
+<section class="card dash-card" id="hl-line-card">{% set ln = m.line or {} %}
+  <div class="dash-head"><p class="card-title sub">{{ t('hlLineTitle') }}</p><span class="badge {{ 'approved' if ln.token and ln.secret and ln.bot != 'invalid' else ('blocked' if ln.bot == 'invalid' else 'pending') }}">{{ 'LINE OA' }}</span></div>
+  <ul class="dash-checks" id="hl-line">
+    <li class="{{ 'ok' if ln.token else 'off' }}"><i></i>{{ t('hlLineTokenSet') if ln.token else t('hlLineTokenNone') }}</li>
+    <li class="{{ 'ok' if ln.secret else ('warn' if ln.token else 'off') }}"><i></i>{{ t('hlLineSecretSet') if ln.secret else t('hlLineSecretNone') }}</li>
+    {% if ln.bot %}<li class="{{ 'ok' if ln.bot == 'ok' else ('crit' if ln.bot == 'invalid' else 'warn') }}"><i></i>{{ t('hlLineBot_' ~ ln.bot) }}</li>{% endif %}
+  </ul>
+  <div class="dash-minis two">
+    <div class="dash-mini"><span>{{ t('hlLineLastHook') }}</span><b class="sm">{{ fmt_iso(ln.last_webhook) }}</b></div>
+    <div class="dash-mini"><span>{{ t('hlLineLastSent') }}</span><b class="sm">{{ fmt_iso(ln.last_sent) }}</b></div>
+    <div class="dash-mini{% if ln.failed_24h %} hl-warn{% endif %}"><span>{{ t('hlLineFailed24') }}</span><b>{{ ln.failed_24h or 0 }}</b></div>
+    <div class="dash-mini"><span>{{ t('hlLineWaiting') }}</span><b>{{ ln.waiting_24h or 0 }}</b></div>
+  </div>
+</section>
+
+<section class="card dash-card span2" id="hl-devices">
+  <div class="dash-head"><p class="card-title sub">{{ t('hlDevTitle') }}</p>{% set online = (m.devices or [])|selectattr('online')|list|length %}<span class="badge {{ 'approved' if online else 'neutral' }}">{{ online }} / {{ (m.devices or [])|length }} {{ t('hlOnline') }}</span></div>
+  {% if m.devices %}<div class="dash-devs">
+  {% for d in m.devices %}{% set st = 'ok' if d.online else ('warn' if d.recent else 'off') %}
+    <div class="dash-dev st-{{ st }}" data-device="{{ d.id }}">
+      <div class="top"><i class="dot"></i><b>{{ d.name }}</b></div>
+      <span class="id">{{ d.id }} &middot; {{ t('hlOnline') if d.online else (t('hlNoKey') if not d.has_key else t('hlOffline')) }}{% if d.online and d.fresh is not none %} &middot; {{ t('hlLive') if d.fresh else t('hlNoLive') }}{% endif %}</span>
+      <div class="row"><span>{{ t('hlLastSeen') }}</span><b>{{ d.last_seen or '-' }}</b></div>
+      <div class="row"><span>{{ t('hlFailedCmds') }}</span><b class="{{ 'warnc' if d.failed_cmds }}">{{ d.failed_cmds }}</b></div>
+      <div class="row"><span>{{ t('hlFaults24') }}</span><b class="{{ 'warnc' if d.faults }}">{{ d.faults }}</b></div>
+    </div>
+  {% endfor %}</div>{% else %}<p class="hint">{{ t('hlNoDevices') }}</p>{% endif %}
+</section>
 </div>
 
-<div class="card mt14" id="ai-forecast">
-  <p class="card-title sub">{{ t('aiForecast') }}</p>
-  <div class="auto-kpis">
-    <div><p class="card-title">{{ t('aiQueueNow') }}</p><p class="kpi-value">{{ queue.orders }} &middot; {{ "{:,.0f}".format(queue.kg) }} kg</p></div>
-    <div><p class="card-title">{{ t('aiQueueHours') }}</p><p class="kpi-value">{{ queue.hours }} h</p></div>
-    <div><p class="card-title">{{ t('aiLastReceive') }}</p><p class="kpi-value small">{{ fmt_datetime(queue.last_receive) if queue.last_receive else '-' }}</p></div>
+{# ---- Operations ---- #}
+<p class="dash-sec">{{ t('dashSecOps') }}</p>
+<div class="dash-grid">
+<section class="card dash-card span2" id="ai-forecast">
+  <div class="dash-head"><p class="card-title sub">{{ t('aiForecast') }}</p></div>
+  <div class="dash-minis three">
+    <div class="dash-mini"><span>{{ t('aiQueueNow') }}</span><b>{{ queue.orders }} &middot; {{ "{:,.0f}".format(queue.kg) }} <small>kg</small></b></div>
+    <div class="dash-mini"><span>{{ t('aiQueueHours') }}</span><b>{{ queue.hours }} <small>h</small></b></div>
+    <div class="dash-mini"><span>{{ t('aiLastReceive') }}</span><b class="sm">{{ fmt_datetime(queue.last_receive) if queue.last_receive else '-' }}</b></div>
   </div>
   <p class="card-title mt14">{{ t('aiNext7') }}</p>
-  {{ bar_chart(bars, 'chart-forecast', t('aiNext7'), t('aiForecastUnit'), '%.0f') }}
+  <div class="dash-bigchart">{{ bar_chart(bars, 'chart-forecast', t('aiNext7'), t('aiForecastUnit'), '%.0f', 640) }}</div>
   <p class="cap-note">{{ t('aiForecastNote', weeks=8) }}{% if basis < 2 %} <b>{{ t('aiForecastThin') }}</b>{% endif %}</p>
+</section>
+<section class="card dash-card" id="ai-alerts">
+  <div class="dash-head"><p class="card-title sub">{{ t('aiAlerts') }}</p><span class="badge {{ 'pending' if alerts else 'approved' }}">{{ alerts|length }}</span></div>
+  <ul class="dash-alerts">
+  {% for a in alerts %}<li class="{{ a.severity }}"><span class="ic">&#9888;</span><div><b>{{ t('aiSev_' + a.severity) }}</b><span>{{ t(a.key, **a.params) }}</span></div></li>
+  {% else %}<li class="none"><span class="ic">&#10003;</span><div><span>{{ t('aiNoAlerts') }}</span></div></li>{% endfor %}
+  </ul>
+  <p class="cap-note">{{ t('aiAlertsNote') }}</p>
+</section>
 </div>
 
-<div class="card mt14" id="ai-price">
-  <p class="card-title sub">{{ t('aiPrice') }}</p>
-  <div class="inv-table-wrap"><table class="tv-table" id="advice-table">
-    <thead><tr><th>{{ t('colProduct') }}</th><th class="num">{{ t('aiStock') }}</th><th class="num">{{ t('aiSoldDay') }}</th><th class="num">{{ t('aiCover') }}</th><th>{{ t('aiAdvice') }}</th></tr></thead>
-    <tbody>{% for a in advice %}<tr><td>{{ a.name }}<small class="inv-sub">{{ t('lblBuy') }} {{ '%.2f'|format(a.price_buy or 0) }} &middot; {{ t('lblSell') }} {{ '%.2f'|format(a.price_sell or 0) }}</small></td>
-      <td class="num">{{ "{:,.0f}".format(a.stock) }}</td><td class="num">{{ a.sold_per_day }}</td><td class="num">{{ a.cover if a.cover is not none else '-' }}</td>
-      <td class="advice {{ a.advice }}">{{ t('aiAdv_' + a.advice) }}{% if a.advice in ('raise_buy', 'lower_buy') and a.advised_buy %}<small class="inv-sub">{{ t('aiAdvisedBuy', price='%.2f'|format(a.advised_buy)) }}</small>{% endif %}</td></tr>
-    {% endfor %}</tbody>
-  </table></div>
-  <p class="cap-note">{{ t('aiPriceNote') }}{% if can('FN_PRICING') %} <a href="{{ url_for('finance.pricing') }}">{{ t('tabPricing') }} &rarr;</a>{% endif %}</p>
-</div>
+{# ---- Market and prices ---- #}
+<p class="dash-sec">{{ t('dashSecMarket') }}</p>
+<section class="card dash-card" id="ai-signals">
+  <div class="dash-head"><p class="card-title sub">{{ t('psAiCard') }}</p><a class="action small" href="{{ url_for('automation.ai_prices') }}" id="ps-open">{{ t('psOpen') }} &rarr;</a></div>
+  {% set with_data = signals|selectattr('label')|list %}
+  {% if with_data %}<div class="dash-sig-grid">
+  {% for o in with_data %}
+    {{ sig_card(o) }}
+  {% endfor %}</div>
+  {% else %}<p class="hint">{{ t('psNoData') }} {{ t('psNoDataTodo') }}</p>{% endif %}
+</section>
 
-<div class="card mt14" id="ai-supply">
-  <p class="card-title sub">{{ t('spTitle') }}</p>
+<div class="dash-grid mt14">
+<section class="card dash-card span2" id="ai-price">
+  <div class="dash-head"><p class="card-title sub">{{ t('aiPrice') }}</p>{% if can('FN_PRICING') %}<a class="action small" href="{{ url_for('finance.pricing') }}">{{ t('tabPricing') }} &rarr;</a>{% endif %}</div>
+  <div class="dash-adv-grid" id="advice-table">
+  {% for a in advice %}{% set cov = a.cover if a.cover is not none else none %}
+    <div class="dash-adv adv-{{ a.advice }}">
+      <div class="top"><span class="nm">{{ a.name }}</span><span class="pill">{{ t('aiAdv_' + a.advice) }}</span></div>
+      <div class="prices"><span>{{ t('lblBuy') }} <b>{{ '%.2f'|format(a.price_buy or 0) }}</b></span><span>{{ t('lblSell') }} <b>{{ '%.2f'|format(a.price_sell or 0) }}</b></span></div>
+      <svg class="dash-cover" viewBox="0 0 100 6" preserveAspectRatio="none" aria-hidden="true"><rect x="0" y="0" width="100" height="6" rx="3" class="bg"/>{% if cov is not none %}<rect x="0" y="0" width="{{ [cov / 30 * 100, 100]|min }}" height="6" rx="3" class="{{ 'low' if cov < 3 else ('high' if cov > 30 else 'mid') }}"/>{% endif %}</svg>
+      <div class="meta"><span>{{ t('aiStock') }} {{ "{:,.0f}".format(a.stock) }}</span><span>{{ t('aiCover') }} {{ a.cover if a.cover is not none else '-' }}</span></div>
+      {% if a.advice in ('raise_buy', 'lower_buy') and a.advised_buy %}<p class="adv">{{ t('aiAdvisedBuy', price='%.2f'|format(a.advised_buy)) }}</p>{% endif %}
+    </div>
+  {% endfor %}</div>
+  <p class="cap-note">{{ t('aiPriceNote') }}</p>
+</section>
+
+<section class="card dash-card" id="ai-supply">
+  <div class="dash-head"><p class="card-title sub">{{ t('spTitle') }}</p></div>
   {% if supply %}
-  <div class="auto-kpis mt6">
-    <div class="card"><p class="card-title">{{ t('spLatest', month='%02d/%d'|format(supply.month, supply.year_th)) }}</p><p class="kpi-value">{{ '%.1f'|format(supply.value) }}</p></div>
-    <div class="card"><p class="card-title">{{ t('spYoy') }}</p><p class="kpi-value">{{ ('%+.1f%%'|format(supply.yoy)) if supply.yoy is not none else '-' }}</p></div>
-    <div class="card"><p class="card-title">{{ t('spMom') }}</p><p class="kpi-value">{{ ('%+.1f%%'|format(supply.mom)) if supply.mom is not none else '-' }}</p></div>
+  <div class="dash-minis three">
+    <div class="dash-mini"><span>{{ t('spLatest', month='%02d/%d'|format(supply.month, supply.year_th)) }}</span><b>{{ '%.1f'|format(supply.value) }}</b></div>
+    <div class="dash-mini"><span>{{ t('spYoy') }}</span><b class="{{ 'up' if (supply.yoy or 0) > 0 else 'down' }}">{{ ('%+.1f%%'|format(supply.yoy)) if supply.yoy is not none else '-' }}</b></div>
+    <div class="dash-mini"><span>{{ t('spMom') }}</span><b>{{ ('%+.1f%%'|format(supply.mom)) if supply.mom is not none else '-' }}</b></div>
   </div>
   <p class="alert-row {{ 'warning' if supply.signal != 'flat' }}" id="sp-signal">{{ t('spSignal_' ~ supply.signal) }}</p>
-  {{ bar_chart(supply_bars, 'chart-supply', t('spChart'), t('spChartUnit'), '%.0f') }}
+  <div class="dash-bigchart">{{ bar_chart(supply_bars, 'chart-supply', t('spChart'), t('spChartUnit'), '%.0f', 640) }}</div>
   <p class="cap-note">{{ t('spNote', scope=supply.scope) }}{% if supply.fetched %} &middot; {{ t('mkFetchedAt', time=fmt_datetime(supply.fetched)) }}{% endif %}</p>
   {% else %}<p class="hint">{{ t('spNone') }}</p>{% endif %}
   {% if can_ask_fetch %}
   <form method="post" class="mt6"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="supply">
     <button class="action" type="submit" id="sp-fetch-btn">{{ t('mkFetchNow') }}</button></form>
   {% endif %}
+</section>
 </div>
 
-<div class="card mt14" id="ai-alerts">
-  <p class="card-title sub">{{ t('aiAlerts') }}</p>
-  {% for a in alerts %}
-  <p class="alert-row {{ a.severity }}"><span class="badge {{ 'blocked' if a.severity == 'serious' else 'pending' }}">{{ '&#9888;'|safe }} {{ t('aiSev_' + a.severity) }}</span> {{ t(a.key, **a.params) }}</p>
-  {% else %}<p class="hint">&#10003; {{ t('aiNoAlerts') }}</p>{% endfor %}
-  <p class="cap-note">{{ t('aiAlertsNote') }}</p>
-</div>
-
-<div class="card mt14" id="ai-ask">
-  <p class="card-title sub">{{ t('aiAsk') }}</p>
-  {% if last %}
-  <div class="ai-answer"><p class="ai-q">{{ last.q }}</p><p class="ai-a">{{ last.a }}</p></div>
-  {% endif %}
+{# ---- Ask ---- #}
+<section class="card dash-card mt14 dash-ask" id="ai-ask">
+  <div class="dash-head"><p class="card-title sub">&#129302; {{ t('aiAsk') }}</p></div>
+  {% if last %}<div class="ai-answer"><p class="ai-q">{{ last.q }}</p><p class="ai-a">{{ last.a }}</p></div>{% endif %}
   {% if not configured %}
   <p class="notice warn">{{ t('aiNotConfigured') }}</p>
   {% elif can_ask %}
@@ -138,6 +227,6 @@
     {% for r in recent %}<div class="ai-answer"><p class="ai-q">{{ r.QUESTION }} <small>{{ fmt_datetime(r.LOG_DATE) }}</small></p><p class="ai-a">{{ r.ANSWER }}</p></div>{% endfor %}
   </details>
   {% endif %}
-</div>
+</section>
 </div>
 {% endblock %}

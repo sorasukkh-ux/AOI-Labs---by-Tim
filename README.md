@@ -340,6 +340,24 @@ are kept in `AOITS_SYSLOG` (14 days), the checks in `AOITS_HEALTH` (7 days).
 customer's LINE when "Also send to the customer's LINE" is ticked (shown for customers linked to LINE); "Send to LINE
 only" sends without printing. The same public https address is needed as for the queue QR (update 47).
 
+## AI dashboard and Price analysis (update 50)
+
+**Automation > AI** is a dashboard: a KPI strip (server, queue, paddy expected in 7 days, price signals, alerts, API
+calls), gauges and a 24-hour line for disk / memory / CPU, API traffic bars and calls per hour, LINE status, device
+tiles, the forecast chart, price-signal cards with sparklines, price-advice cards and the supply index.
+
+**Automation > AI > Price analysis** puts every price source of a product on one chart (THB/kg):
+NABC farm prices, the rice millers' report, the **rice exporters' weekly FOB prices**
+(`AOI_EXPORT_URL`, default http://www.thairiceexporters.or.th/price.htm, US$/ton x the exchange rate), the applied
+market price and your own buying / selling prices. On the base source it works out, like a stock chart: moving
+averages (7 / 30 days), Bollinger bands, RSI 14, support / resistance, golden / death crosses (B / S on the chart), a
+score (strong buy .. strong sell) with the reasons, the buy point and sell point, and for the stock on hand the cost
+(average buying price of 90 days, or the price you type), profit / loss, **take profit** and **stop loss** (8 % / 5 %,
+set on the screen). "Ask AI" explains it (the figures are part of what the AI sees). The exporters' page has no API:
+the server reads the table every day with the other market prices; "Import" takes a saved copy of the page (HTML or
+PDF) if the page cannot be downloaded. Set the exchange rate (THB per US$) once on Settings (or `AOI_USD_THB`).
+Signals are statistics on past prices, not a promise: prices still change only on Pricing Maintenance.
+
 ## API, LINE and hardware monitoring (update 49)
 
 The Server health card also shows:

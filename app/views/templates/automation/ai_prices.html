@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% from "_macros.html" import page_head %}
+{% from "automation/_dash.html" import sparkline, sig_card %}
+{% block content %}
+{% set s = a.signal or {} %}{% set pos = a.position %}
+<div id="tab-ps" class="auto-page dash">
+{{ page_head(none, url_for('automation.ai_screen')) }}
+<header class="dash-banner ps-banner">
+  <div><p class="dash-title">{{ t('psTitle') }}</p><p class="dash-subtitle">{{ branch_label(op_branch) }} &middot; {{ a.name }}{% if a.base %} &middot; {{ t('psSrc_' ~ a.base) }}{% endif %}</p></div>
+  {% if s.label %}<span class="dash-live ps-live-{{ s.label }}"><i></i>{{ t('psLabel_' ~ s.label) }}</span>{% endif %}
+</header>
+<p class="desc-text dash-desc">{{ t('psDesc') }}</p><p class="cap-note dash-desc">{{ t('psDisclaimer') }}</p>
+<nav class="chips dash-nav">
+  <a class="chip" href="#ps-chart">{{ t('psChart') }}</a><a class="chip" href="#ps-overview">{{ t('psOverview') }}</a>
+  <a class="chip" href="#ps-sources">{{ t('psSources') }}</a><a class="chip" href="#ps-settings">{{ t('psSettings') }}</a><a class="chip" href="#ps-ask">{{ t('aiAsk') }}</a>
+</nav>
+
+<section class="card dash-card" id="ps-chart">
+  <div class="ps-toolbar">
+    <form method="get" class="ps-pick" action="{{ url_for('automation.ai_prices') }}">
+      <label class="field"><span>{{ t('colProduct') }}</span><select name="sku" id="ps-sku" data-autosubmit>{% for c in traded %}<option value="{{ c }}"{% if c == code %} selected{% endif %}>{{ mat_name(c) }}</option>{% endfor %}</select></label>
+      <input type="hidden" name="p" value="{{ period }}">
+      <label class="field"><span>{{ t('psEntry') }}</span><input type="number" name="entry" step="0.01" min="0" inputmode="decimal" value="{{ entry|plain if entry else '' }}" placeholder="{{ t('psEntryPh') }}"></label>
+      <button class="action" type="submit">{{ t('psShow') }}</button>
+    </form>
+    <div class="mkh-periods" role="group">{% for p in periods %}<a class="chip{% if p == period %} active{% endif %}" href="{{ url_for('automation.ai_prices', sku=code, p=p, entry=entry or None, _anchor='ps-chart') }}">{{ t('psP_' ~ p) }}</a>{% endfor %}</div>
+  </div>
+
+  {% if s %}
+  <div class="ps-top">
+    <div class="ps-verdict ps-{{ s.label }}" id="ps-verdict"><span class="ps-v-k">{{ t('psSignal') }} &middot; {{ t('psSrc_' ~ a.base) }}</span><b>{{ t('psLabel_' ~ s.label) }}</b>
+      <svg class="ps-meter" viewBox="0 0 200 14" aria-hidden="true"><defs><linearGradient id="psg" x1="0" x2="1"><stop offset="0" stop-color="#d03b3b"/><stop offset=".5" stop-color="#cbd5e1"/><stop offset="1" stop-color="#0ca30c"/></linearGradient></defs>
+        <rect x="0" y="4" width="200" height="6" rx="3" fill="url(#psg)"/><circle cx="{{ (([[s.score, -6]|max, 6]|min) + 6) / 12 * 192 + 4 }}" cy="7" r="6" class="pt"/></svg>
+      <span class="ps-v-sub">{{ t('psScore', n='%+d'|format(s.score)) }} &middot; {{ t('psLabel_strong_sell') }} &larr; &rarr; {{ t('psLabel_strong_buy') }}</span></div>
+    {% set g = svg_donut(s.rsi or 0, 30, 8) %}
+    <div class="dash-gauge ps-rsi {{ 'hl-crit' if (s.rsi or 50) > 70 else ('hl-ok' if (s.rsi or 50) < 30 else 'hl-warn') }}">
+      <svg viewBox="0 0 {{ g.size }} {{ g.size }}" role="img" aria-label="RSI {{ s.rsi }}"><circle cx="{{ g.cx }}" cy="{{ g.cx }}" r="{{ g.r }}" class="track" stroke-width="{{ g.w }}"/>
+        <circle cx="{{ g.cx }}" cy="{{ g.cx }}" r="{{ g.r }}" class="fill" stroke-width="{{ g.w }}" stroke-dasharray="{{ g.dash }}" transform="rotate(-90 {{ g.cx }} {{ g.cx }})"/>
+        <text x="{{ g.cx }}" y="{{ g.cx + 5 }}" text-anchor="middle" class="v">{{ '%.0f'|format(s.rsi) if s.rsi is not none else '-' }}</text></svg>
+      <span class="k">RSI 14</span><span class="s">{{ t('psRsiScale') }}</span></div>
+    <ul class="ps-why">{% for r in s.reasons %}<li class="{{ 'up' if r.points > 0 else 'down' }}"><b>{{ '%+d'|format(r.points) }}</b> {{ t(r.key, **r.params) }}</li>{% else %}<li>{{ t('psWhyNone') }}</li>{% endfor %}</ul>
+  </div>
+  {% else %}<p class="hint mt14" id="ps-empty-signal">{{ t('psNoData') }} {{ t('psNoDataTodo') }}</p>{% endif %}
+
+  <div class="ps-legend" id="ps-legend">{% for src in sources %}{% if src in a.chart.sources %}
+    <label class="mkh-sku"><input type="checkbox" data-ps-line="{{ src }}" checked><i class="mkh-sw ps-c-{{ src }}{% if src == a.base %} ps-base{% endif %}"></i>{{ t('psSrc_' ~ src) }}{% if src == a.base %} <small>({{ t('psBase') }})</small>{% endif %}</label>{% endif %}{% endfor %}
+    {% if a.chart.lines %}<label class="mkh-sku"><input type="checkbox" data-ps-line="sma" checked><i class="mkh-sw ps-c-sma"></i>{{ t('psSmaLegend', s=cfg.SMA_SHORT, l=cfg.SMA_LONG) }}</label>
+    <label class="mkh-sku"><input type="checkbox" data-ps-line="band" checked><i class="mkh-sw ps-c-band"></i>{{ t('psBands') }}</label>
+    <label class="mkh-sku"><input type="checkbox" data-ps-line="marks" checked><i class="ps-mk-sw">B/S</i>{{ t('psMarks') }}</label>{% endif %}
+    {% if a.chart.levels %}<label class="mkh-sku"><input type="checkbox" data-ps-line="levels" checked><i class="mkh-sw ps-c-levels"></i>{{ t('psLevels') }}</label>{% endif %}
+  </div>
+  <div class="mkh-wrap"><div id="ps-svg" data-chart='{{ a.chart|tojson }}' data-text='{{ {"unit": t("mkhUnit"), "cost": t("psCost"), "tp": t("psTpShort"), "sl": t("psSlShort"), "names": src_names}|tojson }}'></div><div class="mkh-tip" id="ps-tip" hidden></div></div>
+  <p class="hint" id="ps-empty" hidden>{{ t('psNoData') }}</p>
+
+  {% if s %}<div class="ps-kpis">
+    {% for k, v in [('psLast', s.last), ('psSmaS', s.sma_short), ('psSmaL', s.sma_long), ('psSupport', s.support), ('psResistance', s.resistance), ('psBuyZone', s.buy_zone), ('psSellZone', s.sell_zone)] %}
+    <div class="ps-kpi{% if k in ('psBuyZone', 'psSellZone') %} {{ 'buyz' if k == 'psBuyZone' else 'sellz' }}{% endif %}"><span>{{ t(k, n=cfg.SMA_SHORT if k == 'psSmaS' else cfg.SMA_LONG) }}</span><b>{{ '%.2f'|format(v) if v is not none else '-' }}</b></div>{% endfor %}
+    <div class="ps-kpi"><span>{{ t('psTrend') }}</span><b class="{{ 'gain' if (s.trend_pct or 0) > 0 else 'loss' }}">{{ ('%+.1f%%'|format(s.trend_pct)) if s.trend_pct is not none else '-' }}</b></div>
+    <div class="ps-kpi"><span>{{ t('psChange30') }}</span><b class="{{ 'gain' if (s.change_30d or 0) > 0 else 'loss' }}">{{ ('%+.1f%%'|format(s.change_30d)) if s.change_30d is not none else '-' }}</b></div>
+  </div>
+  <div class="ps-pos ps-st-{{ pos.state or 'none' }}" id="ps-position">
+    <p class="card-title">{{ t('psPosition') }}</p>
+    {% if pos.cost %}
+    {% set lo_, hi_ = [pos.sl, s.last]|min, [pos.tp, s.last]|max %}
+    {% set span = (hi_ - lo_) or 1 %}{% set L, W = 70, 860 %}
+    <svg class="ps-ladder" viewBox="0 0 1000 58" role="img" aria-label="{{ t('psLevels') }}">
+      <rect x="{{ L }}" y="24" width="{{ W }}" height="8" rx="4" class="bg"/>
+      <rect x="{{ L + (pos.sl - lo_) / span * W }}" y="24" width="{{ (pos.cost - pos.sl) / span * W }}" height="8" class="red"/>
+      <rect x="{{ L + (pos.cost - lo_) / span * W }}" y="24" width="{{ (pos.tp - pos.cost) / span * W }}" height="8" class="green"/>
+      {% for key, val in [('psSlShort', pos.sl), ('psCost', pos.cost), ('psTpShort', pos.tp)] %}<line x1="{{ L + (val - lo_) / span * W }}" x2="{{ L + (val - lo_) / span * W }}" y1="19" y2="37" class="tick"/><text x="{{ L + (val - lo_) / span * W }}" y="52" text-anchor="middle" class="tl">{{ t(key) }} {{ '%.2f'|format(val) }}</text>{% endfor %}
+      <circle cx="{{ L + (s.last - lo_) / span * W }}" cy="28" r="8" class="now"/><text x="{{ L + (s.last - lo_) / span * W }}" y="12" text-anchor="middle" class="nl">{{ t('psLast') }} {{ '%.2f'|format(s.last) }}</text>
+    </svg>
+    <div class="ps-kpis">
+      <div class="ps-kpi"><span>{{ t('psStock') }}</span><b>{{ "{:,.0f}".format(pos.qty) }} kg</b></div>
+      <div class="ps-kpi"><span>{{ t('psCost') }}</span><b>{{ '%.2f'|format(pos.cost) }}</b><small>{{ t('psCost_' ~ pos.cost_src) }}</small></div>
+      <div class="ps-kpi"><span>{{ t('psPlKg') }}</span><b class="{{ 'gain' if pos.pl_kg > 0 else ('loss' if pos.pl_kg < 0 else '') }}">{{ '%+.2f'|format(pos.pl_kg) }} ({{ '%+.1f%%'|format(pos.pl_pct) }})</b></div>
+      <div class="ps-kpi"><span>{{ t('psPlTotal') }}</span><b class="{{ 'gain' if pos.pl_total > 0 else ('loss' if pos.pl_total < 0 else '') }}">{{ "{:+,.0f}".format(pos.pl_total) }} THB</b></div>
+      <div class="ps-kpi buyz"><span>{{ t('psTp', n=cfg.TP_PCT|plain) }}</span><b>{{ '%.2f'|format(pos.tp) }}</b></div>
+      <div class="ps-kpi sellz"><span>{{ t('psSl', n=cfg.SL_PCT|plain) }}</span><b>{{ '%.2f'|format(pos.sl) }}</b></div>
+    </div>
+    <p class="ps-state">{{ t('psState_' ~ pos.state, tp='%.2f'|format(pos.tp), sl='%.2f'|format(pos.sl)) }}</p>
+    {% else %}<p class="hint">{{ t('psNoCost') }}</p>{% endif %}
+  </div>{% endif %}
+
+  <p class="card-title mt14">{{ t('psSources') }}</p>
+  <div class="ps-src-grid" id="ps-src-table">
+    {% for src in sources %}{% set l = a.latest.get(src) %}
+    <div class="ps-src-card{% if not l %} none{% endif %}{% if src == a.base %} base{% endif %}" data-src="{{ src }}">
+      <div class="top"><i class="mkh-sw ps-c-{{ src }}"></i><span class="nm">{{ t('psSrc_' ~ src) }}</span></div>
+      <b>{{ '%.2f'|format(l.last) if l else '-' }}</b>
+      <div class="foot"><span>{{ l.day if l else t('psNoSource') }}</span>{% if l and l.change_30d is not none %}<span class="chg {{ 'up' if l.change_30d > 0 else 'down' }}">{{ '%+.1f%%'|format(l.change_30d) }}</span>{% endif %}</div>
+      <small>{{ t('psSrcNote_' ~ src) }}</small>
+    </div>{% endfor %}
+  </div>
+</section>
+
+<section class="card dash-card mt14" id="ps-overview">
+  <div class="dash-head"><p class="card-title sub">{{ t('psOverview') }}</p></div>
+  <div class="dash-sig-grid">
+  {% for o in overview %}{% if o.label %}{{ sig_card(o, period, o.code == code) }}{% else %}
+    <a class="dash-sig ps-none{% if o.code == code %} active{% endif %}" data-sku="{{ o.code }}" href="{{ url_for('automation.ai_prices', sku=o.code, p=period, _anchor='ps-chart') }}">
+      <div class="top"><span class="nm">{{ o.name }}</span></div><p class="hint">{{ t('psNoData') }}</p></a>{% endif %}
+  {% endfor %}</div>
+  <p class="cap-note">{{ t('psUnitNote') }}</p>
+</section>
+
+<div class="card dash-card mt14" id="ps-sources">
+  <p class="card-title sub">{{ t('psSrc_TREA') }}</p>
+  <p class="desc-text">{{ t('psTreaDesc') }}</p>
+  <p class="cap-note">{{ t('psTreaUrl') }} <a href="{{ export_url }}" rel="noopener" target="_blank">{{ export_url }}</a> &middot; {{ t('psLastFetch') }}: <b>{{ last_fetch or '-' }}</b> &middot; {{ t('psFx') }}: <b>{{ cfg.FX_USD_THB|plain if cfg.FX_USD_THB else t('psFxNone') }}</b></p>
+  {% if can_fetch %}<div class="ps-actions">
+    <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="fetch"><input type="hidden" name="sku" value="{{ code }}"><input type="hidden" name="p" value="{{ period }}">
+      <button class="action primary" type="submit" id="ps-fetch">{{ t('psFetchNow') }}</button></form>
+    <form method="post" enctype="multipart/form-data" class="ps-upload"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="import"><input type="hidden" name="sku" value="{{ code }}"><input type="hidden" name="p" value="{{ period }}">
+      <label class="field"><span>{{ t('psUpload') }}</span><input type="file" name="PAGE_FILE" accept=".htm,.html,.pdf,text/html,application/pdf"></label><button class="action" type="submit">{{ t('psImport') }}</button></form>
+  </div>{% endif %}
+  {% if items %}<div class="inv-table-wrap mt14"><table class="tv-table" id="ps-items"><thead><tr><th>{{ t('psItem') }}</th><th>{{ t('colDate') }}</th><th class="num">US$/ton</th><th class="num">{{ t('mkhUnit') }}</th></tr></thead><tbody>
+    {% for i in items %}<tr><td>{{ i.label }}</td><td>{{ i.last_date }}</td><td class="num">{{ "{:,.2f}".format(i.usd) }}</td><td class="num">{{ '%.2f'|format(i.usd * cfg.FX_USD_THB / 1000) if cfg.FX_USD_THB else '-' }}</td></tr>{% endfor %}
+  </tbody></table></div>{% else %}<p class="hint">{{ t('psNoItems') }}</p>{% endif %}
+</div>
+
+<div class="card mt14" id="ps-settings">
+  <p class="card-title sub">{{ t('psSettings') }}</p>
+  <form method="post" class="ps-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="settings"><input type="hidden" name="sku" value="{{ code }}"><input type="hidden" name="p" value="{{ period }}">
+    <div class="ps-set-grid">
+      <label class="field"><span>{{ t('psFx') }}</span><input type="number" name="FX_USD_THB" step="0.0001" min="1" max="200" inputmode="decimal" required value="{{ cfg.FX_USD_THB|plain if cfg.FX_USD_THB else '' }}" placeholder="33.50"{% if not can_edit %} disabled{% endif %}></label>
+      <label class="field"><span>{{ t('psSmaShortDays') }}</span><input type="number" name="SMA_SHORT" min="2" max="60" required value="{{ cfg.SMA_SHORT }}"{% if not can_edit %} disabled{% endif %}></label>
+      <label class="field"><span>{{ t('psSmaLongDays') }}</span><input type="number" name="SMA_LONG" min="5" max="250" required value="{{ cfg.SMA_LONG }}"{% if not can_edit %} disabled{% endif %}></label>
+      <label class="field"><span>{{ t('psTpPct') }}</span><input type="number" name="TP_PCT" step="0.1" min="0.5" max="100" required value="{{ cfg.TP_PCT|plain }}"{% if not can_edit %} disabled{% endif %}></label>
+      <label class="field"><span>{{ t('psSlPct') }}</span><input type="number" name="SL_PCT" step="0.1" min="0.5" max="100" required value="{{ cfg.SL_PCT|plain }}"{% if not can_edit %} disabled{% endif %}></label>
+    </div>
+    <div class="inv-table-wrap mt14"><table class="tv-table" id="ps-map"><thead><tr><th>{{ t('colProduct') }}</th><th>{{ t('psBase') }}</th><th>{{ t('psTreaRow') }}</th></tr></thead><tbody>
+      {% for c in traded %}<tr><td>{{ mat_name(c) }}</td>
+        <td><select name="BASE__{{ c }}"{% if not can_edit %} disabled{% endif %}><option value="">{{ t('psBaseAuto') }}</option>{% for src in sources %}<option value="{{ src }}"{% if (cfg.BASE or {}).get(c) == src %} selected{% endif %}>{{ t('psSrc_' ~ src) }}</option>{% endfor %}</select></td>
+        <td><select name="TREA__{{ c }}"{% if not can_edit %} disabled{% endif %}><option value="">{{ t('psTreaNone') }}</option>{% for i in items %}<option value="{{ i.key }}"{% if trea_keys[c] == i.key %} selected{% endif %}>{{ i.label }}</option>{% endfor %}</select></td></tr>{% endfor %}
+    </tbody></table></div>
+    {% if can_edit %}<button class="action primary full mt6" type="submit" id="ps-save">{{ t('btnSave') }}</button>{% endif %}
+  </form>
+  <p class="cap-note">{{ t('psMethod') }}</p>
+</div>
+
+<div class="card mt14" id="ps-ask">
+  <p class="card-title sub">{{ t('psAskTitle') }}</p>
+  {% if answer %}<div class="ai-answer"><p class="ai-q">{{ answer.q }}</p><p class="ai-a">{{ answer.a }}</p></div>{% endif %}
+  {% if configured and can_fetch %}<form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="ask"><input type="hidden" name="sku" value="{{ code }}"><input type="hidden" name="p" value="{{ period }}">
+    <button class="action primary full" type="submit" id="ps-ask-btn">{{ t('psAskBtn', name=a.name) }}</button></form>
+  {% elif not configured %}<p class="hint">{{ t('aiNotConfigured') }}</p>{% endif %}
+</div>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/price_signal.js') }}" defer></script>{% endblock %}

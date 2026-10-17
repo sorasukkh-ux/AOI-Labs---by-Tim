@@ -71,6 +71,11 @@ def start(app):
                         for error in result["errors"]:
                             app.logger.warning("Daily market price fetch: %s", error.key)
                         _history_once(app)
+                        from .models import export_price          # update 50: the rice exporters' weekly FOB prices
+                        try:
+                            app.logger.info("Export prices: %s", export_price.fetch("system:market"))
+                        except ValidationError as error:
+                            app.logger.warning("Daily export price fetch: %s", error.key)
                     from .models import supply
                     if supply.daily_due():
                         try:
