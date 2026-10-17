@@ -54,7 +54,7 @@ def _decorate(orders):
                 millings[ref] = MillingOrder.find(ref) or {}
             milling = millings[ref]
         order["milling"] = milling
-        order["milling_ready"] = not milling or milling.get("MILL_STATUS") in bs.MILL_READY
+        order["milling_ready"] = True                     # update 42: independent of the milling order's status
         if bs.PREPARED in order["next_statuses"]:
             if milling and milling.get("REF_INV_LOC"):
                 order["suggest_loc"] = milling["REF_INV_LOC"]       # next to the customer's rice

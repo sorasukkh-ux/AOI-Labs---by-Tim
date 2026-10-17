@@ -460,9 +460,14 @@ table.tv-table.wide { margin-bottom: 6px; min-width: 520px; }
 .order-details .od-actions { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
 .order-details .od-actions .cap-note { margin: 0 0 8px; }
 
-@media print {   /* the app's pages print only the QR label; the stand-alone print pages (customer card, LINE poster) print whole */
-  body:not(.cust-card-page):not(.line-poster) * { visibility: hidden; }
+@media print {   /* the app's pages print only the QR label; the stand-alone print pages (customer card, LINE poster) print whole.
+                    Keep these selectors simple: a stronger "hidden" rule here hid the label too (update 41 fix) */
+  body * { visibility: hidden; }
   .qr-label, .qr-label * { visibility: visible; }
+  body.cust-card-page *, body.line-poster * { visibility: visible; }
+  /* no extra blank pages: the parts of the page without the label (or receipt) take no room */
+  body:not(.cust-card-page):not(.line-poster) *:not(:has(.qr-label)):not(:has(.receipt)):not(.qr-label):not(.qr-label *):not(.receipt):not(.receipt *) { display: none !important; }
+  body:not(.cust-card-page):not(.line-poster) { min-height: 0 !important; height: auto !important; }
   .qr-label { position: absolute !important; top: 0 !important; left: 0 !important; box-shadow: none; }
 }
 

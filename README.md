@@ -136,7 +136,8 @@ How one request travels, for example saving the output ratios:
   with a line per SKU (`ORD_ITEMS`). **Edit items** on the Buying/Selling Order List changes the kg per line while
   the order is Open or Prepared (charged as at registration: milling discount up to the customer's own output); at
   Prepared the stock kept for the customer is corrected; the milling order's take-home kg and charges follow.
-  Prepared asks the kg received per line, one location. Earlier orders (one per SKU, still Open) are merged once by
+  Prepared asks the kg received per line, one location. **Update 42:** a buying/selling order is prepared and closed on
+  its own, without waiting for the milling order's status. Earlier orders (one per SKU, still Open) are merged once by
   `start.sh`.
 - **Numbers**: order ID `ML-YYYYMMDD-NNNN` (queue number `NNNN` restarts each day),
   customer code `C` + `YYMMDD` + 3 digits, QR text `AOI-ML-YYYYMMDD-NNNN`.

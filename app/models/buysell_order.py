@@ -296,13 +296,9 @@ class BuySellOrder:
             return inbound["loc"]
         if not cls.is_linked(order):
             return None
-        lot = None
-        if order.get("REF_ORD_TYPE") == "ML":
-            from .milling_order import MillingOrder              # imported here: milling orders also create these orders
-            milling = MillingOrder.find(order["REF_ORD_ID"])
-            if not milling or milling["MILL_STATUS"] not in MILL_READY:
-                raise ValidationError("errMillingNotFinished", id=(milling or {}).get("QR_ID", order["REF_ORD_ID"]))
-            lot = lot_of(milling["ORD_ID"])
+        # update 42 (Tim): the buying/selling order is prepared and closed on its own - it does not wait for the
+        # milling order's status. The lot still names the milling order it came from.
+        lot = lot_of(order["REF_ORD_ID"]) if order.get("REF_ORD_TYPE") == "ML" and order.get("REF_ORD_ID") else None
         lines = [l for l in cls.items_of(order) if l["ORD_QTY"] > 0]
         received = []
         for line in lines:                                   # checked first: one location for the customer's goods

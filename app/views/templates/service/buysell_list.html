@@ -62,9 +62,6 @@
       </select>
     </form>
     {% if order.REF_INV_LOC %}<p class="bs-note">{{ t('lblLocation') }}: {{ order.REF_INV_LOC }}</p>{% endif %}
-    {% if 'P' in order.next_statuses and not order.milling_ready %}
-    <p class="bs-note">{{ t('bsWaitMillingNote', id=order.milling.get('QR_ID', order.REF_ORD_ID)) }}</p>
-    {% endif %}
 
     <a class="action bs-billing-btn" href="{{ url_for('service_buysell.billing', ids=order.ORD_ID) }}" data-popup>{{ t('btnPrintBilling') }}</a>
     {% if can_edit and order.can_maintain %}

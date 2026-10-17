@@ -655,10 +655,8 @@ class Update4(Base):
         page = self.text("/service/buysell/")
         self.assertIn("From Milling #%s" % order["QR_ID"], page)
         self.assertIn("Rice bran 2 kg, Broken rice (White) 1 kg", page)
-        self.assertIn("Can be prepared when milling order #%s is finished" % order["QR_ID"], page)
-        # cannot be prepared before the milling is finished
-        self.bs_status(sl["ORD_ID"], "P", LOC_ID="01-002-005")
-        self.assertEqual(self.bs(sl["ORD_ID"])["ORD_STATUS"], "O")
+        self.assertNotIn("Can be prepared when milling order", page)          # update 42: independent of the milling
+        self.assertIn('data-form="prepare-%s"' % sl["ORD_ID"], page)
         self.set_status(ord_id, "I")
         self.set_status(ord_id, "F", LOC_ID="01-002-005")
         page = self.text("/service/buysell/")
@@ -707,6 +705,19 @@ class Update4(Base):
         self.assertEqual(({l["MAT_CODE"]: l["ORD_QTY"] for l in merged["ORD_ITEMS"]}, merged["ORD_AMOUNT"]), ({"BRAN": 2.0, "BROKEN": 1.0}, 32.67))
         self.assertEqual(self.bs("SL-OLD-0002")["ORD_STATUS"], "CC")
         self.assertEqual(self.order(order["ORD_ID"])["REF_BUYING_ORDER"], sl["ORD_ID"])
+
+    def test_take_home_order_is_prepared_and_closed_on_its_own(self):
+        """Update 42 (Tim): buying/selling orders do not wait for the milling order's status."""
+        order = self.new_order(BRAN_ORDER="2")
+        sl = self.bs()[0]
+        self.assertEqual(self.order(order["ORD_ID"])["MILL_STATUS"], "Q")
+        self.bs_status(sl["ORD_ID"], "P", LOC_ID="01-002-007", INV_QTY="2")
+        self.assertEqual(self.bs(sl["ORD_ID"])["ORD_STATUS"], "P")
+        stock = [x for x in self.onhand() if x["SUB_2"] == sl["ORD_ID"]]
+        self.assertEqual((stock[0]["INV_QTY"], stock[0]["SUB_1"]), (2.0, "LOT-" + order["ORD_ID"]))
+        self.bs_status(sl["ORD_ID"], "C")
+        self.assertEqual(self.bs(sl["ORD_ID"])["ORD_STATUS"], "C")
+        self.assertEqual(self.order(order["ORD_ID"])["MILL_STATUS"], "Q")      # the milling order is not touched
 
     def test_take_home_order_can_be_maintained_until_unpaid(self):
         """Update 39: Edit items changes the kg (and the amount) of each line; the milling order follows."""
@@ -2890,8 +2901,8 @@ class Update39(Base):
 
     def test_card_page_is_not_hidden_in_print(self):
         css = self.text("/static/css/app.css")
-        self.assertIn("body:not(.cust-card-page):not(.line-poster) * { visibility: hidden; }", css)
-        self.assertNotIn("\n  body * { visibility: hidden; }", css)
+        self.assertIn("body.cust-card-page *, body.line-poster * { visibility: visible; }", css)
+        self.assertIn(".qr-label, .qr-label * { visibility: visible; }", css)
 
 
 class Update40(Base):
