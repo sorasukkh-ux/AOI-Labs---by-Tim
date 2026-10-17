@@ -41,6 +41,7 @@ TELE_FRESH_SECONDS = 15            # live values older than this are shown as "n
 DEFAULT_MIN_HZ, DEFAULT_MAX_HZ = 30.0, 50.0
 CMD_PENDING, CMD_SENT, CMD_DONE, CMD_FAILED, CMD_EXPIRED = "P", "S", "D", "F", "X"
 CMD_TIMEOUT_SECONDS = 120          # a command nobody picked up in time is dropped (never runs late)
+SENT_TIMEOUT_SECONDS = 300         # update 51: a command the device took but never answered (gateway stopped) is failed
 ONLINE_SECONDS = 300               # a device that reported within 5 minutes is shown as connected
 ID_PATTERN = re.compile(r"^[A-Z0-9][A-Z0-9_-]{1,19}$")
 
@@ -264,6 +265,7 @@ class Machine:
         samples = [{"t": s["TEL_DATE"].isoformat(), "hz": s.get("OUT_HZ"), "amp": s.get("AMP")}
                    for s in col(TELE_COL).find({"MACHINE_ID": machine["MACHINE_ID"], "TEL_DATE": {"$gte": since}}, NO_ID).sort([("TEL_DATE", 1)])]
         low, high = cls.speed_range(machine)
+        MachineCommand._expire(machine["BRANCH_ID"])
         busy = col(MachineCommand.COL).find_one({"MACHINE_ID": machine["MACHINE_ID"], "CMD_STATUS": {"$in": [CMD_PENDING, CMD_SENT]}}, NO_ID)
         return {"id": machine["MACHINE_ID"], "status": machine.get("MACHINE_STATUS"), "online": cls.is_online(machine), "fresh": fresh,
                 "running": bool(machine.get("TEL_RUN")) if fresh else machine.get("MACHINE_STATUS") == RUNNING,
@@ -282,7 +284,9 @@ class Machine:
     @staticmethod
     def is_running(machine):
         fresh = bool(machine.get("TEL_TIME")) and (now_utc() - machine["TEL_TIME"]).total_seconds() <= TELE_FRESH_SECONDS
-        return machine.get("MACHINE_STATUS") == RUNNING or (fresh and bool(machine.get("TEL_RUN")))
+        if fresh:                                   # update 51: the inverter's live value wins over a stale status
+            return bool(machine.get("TEL_RUN"))
+        return machine.get("MACHINE_STATUS") == RUNNING
 
     @classmethod
     def selector_for(cls, motor):
@@ -294,7 +298,9 @@ class Machine:
 
     @classmethod
     def running_motors(cls, branch_id, except_id=None):
-        """Main motors that run, or are about to (a Start not done yet)."""
+        """Main motors that run, or are about to (a Start not done yet). A Start that was never picked up or never
+        answered no longer counts (update 51: it used to block the selector forever after a gateway stopped)."""
+        MachineCommand._expire(branch_id)
         out = []
         for m in col(cls.COL).find({"BRANCH_ID": branch_id, "MACHINE_TYPE": "MAIN_MOTOR"}, NO_ID):
             if m["MACHINE_ID"] == except_id or m.get("ACTIVE_FLG") is False:
@@ -365,15 +371,31 @@ class MachineCommand:
     @classmethod
     def _expire(cls, branch_id=None):
         limit = now_utc() - timedelta(seconds=CMD_TIMEOUT_SECONDS)
-        flt = {"CMD_STATUS": CMD_PENDING, "REQ_DATE": {"$lt": limit}}
+        flt = {"CMD_STATUS": CMD_PENDING, "REQ_DATE": {"$lt": limit}, "AFTER_CMD": None}
         if branch_id:
             flt["BRANCH_ID"] = branch_id
+        wait = {"CMD_STATUS": CMD_PENDING, "AFTER_CMD": {"$ne": None}}
+        if branch_id:
+            wait["BRANCH_ID"] = branch_id
+        for w in col(cls.COL).find(wait, NO_ID):                     # update 51: a Start waiting for the selector
+            first = col(cls.COL).find_one({"CMD_ID": w["AFTER_CMD"]}, NO_ID) or {}
+            if first.get("CMD_STATUS") in (CMD_FAILED, CMD_EXPIRED) or not first:
+                col(cls.COL).update_one({"CMD_ID": w["CMD_ID"]}, {"$set": {"CMD_STATUS": CMD_FAILED, "ACK_DATE": now_utc(),
+                                                                          "RESULT": "The mill selector did not switch"}})
+            elif first.get("CMD_STATUS") == CMD_DONE and (first.get("ACK_DATE") or now_utc()) < limit:
+                col(cls.COL).update_one({"CMD_ID": w["CMD_ID"]}, {"$set": {"CMD_STATUS": CMD_EXPIRED, "ACK_DATE": now_utc(),
+                                                                          "RESULT": "Not picked up in time"}})
         col(cls.COL).update_many(flt, {"$set": {"CMD_STATUS": CMD_EXPIRED, "ACK_DATE": now_utc(), "RESULT": "Not picked up in time"}})
+        sent = {"CMD_STATUS": CMD_SENT, "SENT_DATE": {"$lt": now_utc() - timedelta(seconds=SENT_TIMEOUT_SECONDS)}}
+        if branch_id:
+            sent["BRANCH_ID"] = branch_id
+        col(cls.COL).update_many(sent, {"$set": {"CMD_STATUS": CMD_FAILED, "ACK_DATE": now_utc(), "RESULT": "No answer from the device"}})
 
     @classmethod
     def request(cls, machine, command, ope_user, value=None):
         """Start/stop/reset/speed from Hardware Control. Only for machines with remote control and a device connected.
         SPEED: `value` = Hz within the machine's range. START carries the last speed set."""
+        after = None                                                    # update 51: the selector switch a Start waits for
         if command not in COMMANDS + (CMD_SELECT,):
             raise ValidationError("errMachineCommand")
         if (command == CMD_SELECT) != (machine.get("MACHINE_TYPE") == SELECTOR) and command != CMD_RESET:
@@ -397,7 +419,11 @@ class MachineCommand:
                     raise ValidationError("errOtherMotorRunning", name=other[0]["MACHINE_NAME"])
                 selector = Machine.selector_for(machine)
                 if selector and selector.get("SELECT_TO") != machine["MACHINE_ID"]:
-                    raise ValidationError("errSelectorNotHere", selector=selector["MACHINE_NAME"], name=machine["MACHINE_NAME"])
+                    # update 51: the selector switches by itself first when it has its own device; by hand it must be
+                    # switched first (somebody has to turn it)
+                    if not (selector.get("CONTROL_FLG") and selector.get("DEVICE_KEY_HASH") and Machine.is_online(selector)):
+                        raise ValidationError("errSelectorNotHere", selector=selector["MACHINE_NAME"], name=machine["MACHINE_NAME"])
+                    after = selector
         elif command == CMD_SELECT:
             hz = value                                                    # the motor ID the selector goes to
         if not machine.get("CONTROL_FLG") or not machine.get("DEVICE_KEY_HASH"):
@@ -407,11 +433,17 @@ class MachineCommand:
         cls._expire(machine["BRANCH_ID"])
         if col(cls.COL).find_one({"MACHINE_ID": machine["MACHINE_ID"], "CMD_STATUS": {"$in": [CMD_PENDING, CMD_SENT]}}, NO_ID):
             raise ValidationError("errMachineBusy")
+        sel = None
+        if after is not None:                                        # update 51: the selector's switch goes first
+            if col(cls.COL).find_one({"MACHINE_ID": after["MACHINE_ID"], "CMD_STATUS": {"$in": [CMD_PENDING, CMD_SENT]}}, NO_ID):
+                raise ValidationError("errMachineBusy")
+            sel = cls.request(after, CMD_SELECT, ope_user, machine["MACHINE_ID"])
         today = now_local()
         day = "%04d%02d%02d" % (today.year, today.month, today.day)
         cmd = {"CMD_ID": "MC-%s-%04d" % (day, Counter.next("MC-" + day)), "BRANCH_ID": machine["BRANCH_ID"],
                "MACHINE_ID": machine["MACHINE_ID"], "CMD": command, "CMD_VALUE": hz, "CMD_STATUS": CMD_PENDING, "REQ_USER": ope_user,
-               "REQ_DATE": now_utc(), "SENT_DATE": None, "ACK_DATE": None, "RESULT": None}
+               "REQ_DATE": now_utc(), "SENT_DATE": None, "ACK_DATE": None, "RESULT": None,
+               "AFTER_CMD": sel["CMD_ID"] if sel else None}
         col(cls.COL).insert_one(dict(cmd))
         return cmd
 
@@ -429,6 +461,8 @@ class MachineCommand:
         """The device asks for work: pending commands are handed over (status Sent)."""
         cls._expire(machine["BRANCH_ID"])
         pending = list(col(cls.COL).find({"MACHINE_ID": machine["MACHINE_ID"], "CMD_STATUS": CMD_PENDING}, NO_ID).sort([("REQ_DATE", 1)]))
+        pending = [c for c in pending if not c.get("AFTER_CMD")                   # update 51: only once the selector is there
+                   or (col(cls.COL).find_one({"CMD_ID": c["AFTER_CMD"]}, NO_ID) or {}).get("CMD_STATUS") == CMD_DONE]
         for cmd in pending:
             col(cls.COL).update_one({"CMD_ID": cmd["CMD_ID"]}, {"$set": {"CMD_STATUS": CMD_SENT, "SENT_DATE": now_utc()}})
         return pending

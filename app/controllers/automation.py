@@ -88,6 +88,8 @@ def hardware():
                     return {"cmd": t("cmdSelectTo", name=done["target"]), "name": done["name"]}
                 cmd = MachineCommand.request(machine, request.form.get("CMD"), _user_id(), request.form.get("CMD_VALUE"))
                 label = t("cmd" + cmd["CMD"].capitalize())
+                if cmd.get("AFTER_CMD"):                                   # update 51: the selector turns first
+                    label = t("cmdSelectThenStart")
                 if cmd.get("CMD_VALUE") is not None:
                     label += " %g Hz " % cmd["CMD_VALUE"]
                 return {"cmd": label, "name": machine["MACHINE_NAME"]}

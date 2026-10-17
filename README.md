@@ -340,6 +340,26 @@ are kept in `AOITS_SYSLOG` (14 days), the checks in `AOITS_HEALTH` (7 days).
 customer's LINE when "Also send to the customer's LINE" is ticked (shown for customers linked to LINE); "Send to LINE
 only" sends without printing. The same public https address is needed as for the queue QR (update 47).
 
+## The whole card on LINE (update 52)
+
+Print QR (queue) and Print QR card (customer) now send the **whole card** to the customer's LINE as a LINE Flex
+Message, not only the QR picture: the customer card with the logo, AOI Labs, "โรงสีข้าว · บัตรลูกค้า", name,
+customer code, mobile, the note and the QR; the queue card with MILLING + queue number, address, customer, payment,
+receive time, the QR, the order code, phone / e-mail and the date. LINE draws the card (Thai text always right) and
+fetches the logo and the QR from the public https address (as before: AOI_PUBLIC_URL or the browser address; the
+Codespace port must be Public). The message text is the notification preview. Without an https address the text is
+sent alone, as before.
+
+## Mill selector turns by itself (update 51)
+
+ON for the main motor the mill selector does not point at now **turns the selector first** (when the selector has
+its own device: remote control, key, online), then the motor starts: the Start waits (AFTER_CMD) until the selector
+reports it is there, and fails if the selector fails. A selector without a device must still be switched by hand first.
+Only while no main motor runs. `bash start.sh sim` now also simulates the selector (it takes about 4 seconds to
+turn). A command a gateway took but never answered (gateway stopped) fails after 5 minutes, so it no longer blocks
+the selector; the inverter's live value wins over an old "running" status. On the SCADA the arrow of main motor 2
+ends in packing (it looked like it went to the AMR).
+
 ## AI dashboard and Price analysis (update 50)
 
 **Automation > AI** is a dashboard: a KPI strip (server, queue, paddy expected in 7 days, price signals, alerts, API

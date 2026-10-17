@@ -224,6 +224,8 @@ def seed(log=print, reset=False):
                                            {"$set": {"ACTIVE_FLG": True, "CONTROL_FLG": True, "SCADA_ROW": 2}})
         db["AOIMS_MACHINE"].update_many({"MACHINE_ID": prefix + "-INBOUND", "FEEDS_TO": prefix + "-MOTOR," + prefix + "-MOTOR2"},
                                         {"$set": {"FEEDS_TO": prefix + "-SELECT"}})
+        # update 51: main motor 2 sends its rice to packing like main motor 1
+        db["AOIMS_MACHINE"].update_many({"MACHINE_ID": prefix + "-MOTOR2", "FEEDS_TO": {"$in": [None, ""]}}, {"$set": {"FEEDS_TO": prefix + "-PACK"}})
         # update 34: Tim's updated plan sends packing on to the storage robot (AMR)
         db["AOIMS_MACHINE"].update_many({"MACHINE_ID": prefix + "-PACK", "FEEDS_TO": None, "OPE_USER": SEED_USER},
                                         {"$set": {"FEEDS_TO": prefix + "-AMR"}})

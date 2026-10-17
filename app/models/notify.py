@@ -43,10 +43,15 @@ def configured():
     return bool(_token())
 
 
-def _push(user_id, text, image_url=None):
+def _push(user_id, text, image_url=None, flex=None):
     """Sends one text message (update 47: and the QR picture when `image_url`); returns None when LINE accepted it,
-    otherwise the error text."""
-    messages = [{"type": "text", "text": text[:5000]}]
+    otherwise the error text. Update 52: with `flex` the card (a Flex Message) is sent instead, the text as its
+    alternative text (notification preview)."""
+    if flex:
+        messages = [{"type": "flex", "altText": text[:400] or "AOI Labs", "contents": flex}]
+        image_url = None
+    else:
+        messages = [{"type": "text", "text": text[:5000]}]
     if image_url:
         messages.append({"type": "image", "originalContentUrl": image_url, "previewImageUrl": image_url})
     body = json.dumps({"to": user_id, "messages": messages}).encode("utf-8")
@@ -178,7 +183,7 @@ def send(doc):
         if not USER_ID.match(user_id):
             flag, error = ERROR, "lnNoUser"
         else:
-            problem = _push(user_id, doc["NOTIFY_MESSAGE"], doc.get("IMAGE_URL"))
+            problem = _push(user_id, doc["NOTIFY_MESSAGE"], doc.get("IMAGE_URL"), doc.get("NOTIFY_FLEX"))
             flag, error = (SENT, None) if problem is None else (ERROR, problem)
     now = now_utc()
     values = {"NOTIFY_FLG": flag, "ERROR": error, "LAST_UPDATE": now}
@@ -189,7 +194,7 @@ def send(doc):
     return doc
 
 
-def queue(order, kind, when, image_url=None):
+def queue(order, kind, when, image_url=None, flex=None):
     """Writes the message of `kind` ('finished' | 'finished_delivery' | 'delivery' | 'label') for a milling order and tries
     to send it. Nothing is written when the message is switched off on LINE Message Maintenance. `image_url`: the QR
     picture sent after the text (update 47)."""
@@ -201,7 +206,7 @@ def queue(order, kind, when, image_url=None):
     doc = {"NOTIFY_ID": "NT-%s-%02d" % (order["ORD_ID"], seq), "ORD_ID": order["ORD_ID"], "ORD_TYPE": "ML",
            "CUST_CODE": order["CUST_CODE"], "NOTIFY_KIND": kind, "NOTIFY_DATETIME": None, "NOTIFY_FLG": UNSENT,
            "NOTIFY_MESSAGE": _message(kind, order, when), "ERROR": None, "REGIST_DATE": now, "LAST_UPDATE": now,
-           "IMAGE_URL": image_url}
+           "IMAGE_URL": image_url, "NOTIFY_FLEX": flex}
     col(COL).insert_one(dict(doc))
     return send(doc)
 
@@ -238,9 +243,11 @@ def card_image_url(cust_code, browser_origin=None):
 
 
 def send_card(customer, browser_origin=None):
-    """The customer card text (LN_CARD) and its QR picture; saved in AOITS_NOTIFY (kind card, ORD_TYPE CU)."""
-    from . import line_msg
+    """The customer card text (LN_CARD) and its QR picture; saved in AOITS_NOTIFY (kind card, ORD_TYPE CU).
+    Update 52: sent as the whole card (Flex Message), like the printed card."""
+    from . import line_flex, line_msg, phone
     from .tv import short_name
+    from ..i18n import t_in
     if not line_msg.active("LN_CARD"):
         return {"NOTIFY_FLG": ERROR, "ERROR": "lnLabelOff"}
     now = now_utc()
@@ -250,5 +257,8 @@ def send_card(customer, browser_origin=None):
            "NOTIFY_MESSAGE": line_msg.text("LN_CARD", name=short_name(customer.get("CUST_NAME", "")) or customer["CUST_CODE"],
                                            code=customer["CUST_CODE"]),
            "ERROR": None, "REGIST_DATE": now, "LAST_UPDATE": now, "IMAGE_URL": card_image_url(customer["CUST_CODE"], browser_origin)}
+    base = public_base(browser_origin)
+    doc["NOTIFY_FLEX"] = line_flex.customer_card(customer, doc["IMAGE_URL"], base, phone.of(customer),
+                                                 t_in("th", "custCardSub"), t_in("th", "custCardNote")) if doc["IMAGE_URL"] else None
     col(COL).insert_one(dict(doc))
     return send(doc)

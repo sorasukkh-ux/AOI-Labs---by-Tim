@@ -5,7 +5,7 @@
 
 Run it in a second terminal while the app runs (bash start.sh in the first). It
   1. finds the machines of the branch that are in use and have remote control (main motor 1, main motor 2 ...),
-  2. gives each a device key directly in the database - kept in .gateways.local.json (private, not in git) and
+  2. gives each (and the mill selector, update 51) a device key directly in the database - kept in .gateways.local.json (private, not in git) and
      reused next time while it still matches, so normally nothing changes,
   3. starts a virtual inverter for each and ONE gateway for all of them.
 Then ON / OFF / speed work on Hardware Control and the SCADA for every motor.
@@ -52,7 +52,7 @@ def prepare(branch, force=False, user="sim_all"):
     keys, out = load_keys(), []
     with app.app_context():
         for m in Machine.for_branch(branch, active_only=True):
-            if not m.get("CONTROL_FLG") or m.get("MACHINE_TYPE") == SELECTOR:
+            if not m.get("CONTROL_FLG"):
                 continue
             mid, key = m["MACHINE_ID"], keys.get(m["MACHINE_ID"])
             if not (key and m.get("DEVICE_KEY_HASH") == _hash(key)):
@@ -75,6 +75,8 @@ def main():
     parser.add_argument("--port", default="/dev/ttyUSB0", help="--export: the RS-485 port of the Pi")
     args = parser.parse_args()
     machines = prepare(args.branch, args.force)
+    selectors = [(m, k) for m, k in machines if m.get("MACHINE_TYPE") == "MILL_SELECTOR"]
+    machines = [(m, k) for m, k in machines if m.get("MACHINE_TYPE") != "MILL_SELECTOR"]
     if not machines:
         print("No machine in use with remote control on %s (Hardware Control > Machine setup)." % args.branch)
         return 1
@@ -92,9 +94,12 @@ def main():
     print("Simulating %d machine(s) of %s against %s:" % (len(machines), args.branch, args.url))
     for n, (m, _key) in enumerate(machines):
         print("  %d  %s  %s" % (n + 1, m["MACHINE_ID"], m["MACHINE_NAME"]))
+    for m, _key in selectors:
+        print("  -  %s  %s (mill selector, turns by itself when you start the other motor)" % (m["MACHINE_ID"], m["MACHINE_NAME"]))
     sims, stop, _threads = aoi_gateway.run_many(args.url, [
         {"machine": m["MACHINE_ID"], "key": key, "slave": 1, "min_hz": m.get("SPEED_MIN_HZ") or 30, "max_hz": m.get("SPEED_MAX_HZ") or 50,
-         "rated_amp": m.get("RATED_AMP")} for m, key in machines], simulate=True)
+         "rated_amp": m.get("RATED_AMP")} for m, key in machines]
+        + [{"machine": m["MACHINE_ID"], "key": key, "kind": "selector", "position": m.get("SELECT_TO")} for m, key in selectors], simulate=True)
     order = [m["MACHINE_ID"] for m, _k in machines]
     print('Test commands: "1 load 120", "2 jam", "1 clear", "2 fault", "status". Ctrl+C stops everything.')
     try:
@@ -104,7 +109,7 @@ def main():
                 if not words:
                     continue
                 if words[0] == "status":
-                    for mid in order:
+                    for mid in order + [m["MACHINE_ID"] for m, _k in selectors]:
                         print("  %s  %s" % (mid, sims[mid].status_line()))
                     continue
                 if not words[0].isdigit() or not (1 <= int(words[0]) <= len(order)) or len(words) < 2:

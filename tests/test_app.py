@@ -3007,6 +3007,23 @@ class Update43(Base):
         self.assertIn('id="cmd-select-F2-MOTOR"', page)
         self.assertIn("SELECT", page)
 
+    def test_stuck_start_does_not_block_the_selector(self):
+        """update 51: a Start the gateway took but never answered (gateway stopped) fails after 5 minutes."""
+        from datetime import timedelta
+        from app.timeutil import now_utc
+        k1 = self.online("F2-MOTOR")
+        self.online("F2-MOTOR2")
+        self.assertTrue(self.cmd("F2-MOTOR", "START")["ok"])
+        w = self.work("F2-MOTOR", k1)                                            # taken (SENT), never answered
+        self.assertIn("Stop", self.cmd("F2-SELECT", "SELECT", "F2-MOTOR2")["message"])
+        with self.app.app_context():
+            col("AOITS_MACHINE_CMD").update_one({"CMD_ID": w[0]["id"]}, {"$set": {"SENT_DATE": now_utc() - timedelta(minutes=6)}})
+            col("AOIMS_MACHINE").update_one({"MACHINE_ID": "F2-MOTOR"}, {"$set": {"MACHINE_STATUS": "R"}})   # a stale status
+        self.api("post", "/api/v1/machines/F2-MOTOR/telemetry", k1, {"running": False, "set_hz": 50, "out_hz": 0, "amp": 0})
+        r = self.cmd("F2-SELECT", "SELECT", "F2-MOTOR2")
+        self.assertTrue(r["ok"], r)
+        self.assertEqual([c["CMD_STATUS"] for c in self.db("AOITS_MACHINE_CMD") if c["CMD_ID"] == w[0]["id"]], ["F"])
+
     def test_selector_with_its_own_device(self):
         k1 = self.online("F2-MOTOR")
         ks = self.online("F2-SELECT")
@@ -3019,6 +3036,35 @@ class Update43(Base):
         self.api("post", "/api/v1/machines/F2-SELECT/telemetry", ks, {"running": False, "position": "F2-MOTOR"})   # its sensor
         self.assertEqual(self.machine("F2-SELECT")["SELECT_TO"], "F2-MOTOR")
         self.assertFalse(self.cmd("F2-SELECT", "START")["ok"])                   # a selector has no start
+
+    def test_start_turns_the_selector_first(self):
+        """update 51: ON for the other motor turns a selector with its own device first, then starts."""
+        k2, ks = self.online("F2-MOTOR2"), self.online("F2-SELECT")
+        self.online("F2-MOTOR")
+        r = self.cmd("F2-MOTOR2", "START")
+        self.assertTrue(r["ok"], r)
+        self.assertIn("Switch the mill selector", r["message"])
+        self.assertEqual(self.work("F2-MOTOR2", k2), [])                          # waits for the selector
+        w = self.work("F2-SELECT", ks)
+        self.assertEqual((w[0]["command"], w[0]["value"]), ("SELECT", "F2-MOTOR2"))
+        self.assertFalse(self.cmd("F2-MOTOR", "START")["ok"])                      # motor 2 is about to start
+        self.api("post", "/api/v1/commands/%s/ack" % w[0]["id"], ks, {"ok": True})
+        self.assertEqual(self.machine("F2-SELECT")["SELECT_TO"], "F2-MOTOR2")
+        w2 = self.work("F2-MOTOR2", k2)
+        self.assertEqual(w2[0]["command"], "START")
+        # the selector fails: the waiting start fails too
+        self.api("post", "/api/v1/commands/%s/ack" % w2[0]["id"], k2, {"ok": True})
+        self.cmd("F2-MOTOR2", "STOP")
+        self.api("post", "/api/v1/commands/%s/ack" % self.work("F2-MOTOR2", k2)[0]["id"], k2, {"ok": True})
+        self.api("post", "/api/v1/machines/F2-MOTOR2/telemetry", k2, {"running": False, "set_hz": 50, "out_hz": 0, "amp": 0})
+        k1 = self.online("F2-MOTOR")
+        self.assertTrue(self.cmd("F2-MOTOR", "START")["ok"])
+        w = self.work("F2-SELECT", ks)
+        self.api("post", "/api/v1/commands/%s/ack" % w[0]["id"], ks, {"ok": False, "result": "jammed"})
+        self.assertEqual(self.work("F2-MOTOR", k1), [])
+        last = sorted(self.db("AOITS_MACHINE_CMD"), key=lambda c: c["CMD_ID"])[-1]
+        self.assertEqual((last["MACHINE_ID"], last["CMD_STATUS"]), ("F2-MOTOR", "F"))
+        self.assertEqual(self.machine("F2-SELECT")["SELECT_TO"], "F2-MOTOR2")
 
     def test_energy_counts_one_motor_and_quick_links(self):
         with self.app.app_context():
@@ -3081,7 +3127,7 @@ class Update45(Base):
         sim_all.KEYS_FILE = os.path.join(tempfile.mkdtemp(), "keys.json")
         try:
             first = sim_all.prepare("factory2")
-            self.assertEqual([m["MACHINE_ID"] for m, _k in first], ["F2-MOTOR", "F2-MOTOR2"])     # not the selector
+            self.assertEqual([m["MACHINE_ID"] for m, _k in first], ["F2-MOTOR", "F2-SELECT", "F2-MOTOR2"])   # update 51: + selector
             again = sim_all.prepare("factory2")
             self.assertEqual([k for _m, k in first], [k for _m, k in again])                     # reused
             self.assertEqual(oct(os.stat(sim_all.KEYS_FILE).st_mode & 0o777), "0o600")
@@ -3089,7 +3135,7 @@ class Update45(Base):
             real = self.issue_key("/automation/hardware", "MACHINE_ID", "F2-MOTOR2")             # a real device, online
             self.api("post", "/api/v1/machines/F2-MOTOR2/telemetry", real, {"running": False})
             third = sim_all.prepare("factory2")
-            self.assertEqual([m["MACHINE_ID"] for m, _k in third], ["F2-MOTOR"])                  # its key is not touched
+            self.assertEqual([m["MACHINE_ID"] for m, _k in third], ["F2-MOTOR", "F2-SELECT"])     # its key is not touched
             self.assertEqual(self.api("post", "/api/v1/machines/F2-MOTOR2/telemetry", real, {"running": False}).status_code, 200)
         finally:
             appmod.create_app = old
@@ -3131,9 +3177,13 @@ class Update47(Base):
                 mock.patch("app.models.notify._push", return_value=None) as push:
             order = self.new_order(PUBLIC_BASE="https://mill.example.com")
             push.assert_called_once()
-            user, text, image = push.call_args[0]
+            user, text, image, flex = push.call_args[0]
             self.assertEqual(user, self.USER)
             self.assertIn(order["QR_ID"], text)
+            flat = json.dumps(flex, ensure_ascii=False)                          # update 52: the whole queue card
+            for part in ('"type": "bubble"', order["QR_ID"], "AOI-" + order["ORD_ID"], "Payment:", "Receive:", image,
+                         "https://mill.example.com/static/img/logo.png"):
+                self.assertIn(part, flat)
             self.assertTrue(image.startswith("https://mill.example.com/line/qr/%s.png?t=" % order["ORD_ID"]))
             path = image[len("https://mill.example.com"):]
             self.logout()
@@ -3145,6 +3195,7 @@ class Update47(Base):
             push.reset_mock()
             self.post("/service/milling/%s/line-qr" % order["ORD_ID"], {"PUBLIC_BASE": "http://127.0.0.1:5000"})
             self.assertIsNone(push.call_args[0][2])
+            self.assertIsNone(push.call_args[0][3])                              # no https: no card either
         notes = [n for n in self.db("AOITS_NOTIFY") if n["ORD_ID"] == order["ORD_ID"]]
         self.assertEqual([n["NOTIFY_KIND"] for n in notes], ["label", "label"])
         self.assertIn("Send QR to LINE", self.text("/service/milling/%s?popup=1" % order["ORD_ID"]))
@@ -3179,9 +3230,12 @@ class Update48(Base):
             self.assertIn('id="cc-line-on" checked', page)
             r = self.post("/admin/customers/C261001001/card/line", {"PUBLIC_BASE": "https://mill.example.com"}, "/admin/customers/")
             self.assertEqual(r.get_json()["ok"], True)
-            user, text, image = push.call_args[0]
+            user, text, image, flex = push.call_args[0]
             self.assertEqual(user, self.USER)
             self.assertIn("C261001001", text)
+            flat = json.dumps(flex, ensure_ascii=False)                          # update 52: the whole customer card
+            for part in ("AOI Labs", "โรงสีข้าว · บัตรลูกค้า", "C261001001", "แสดง QR นี้", image):
+                self.assertIn(part, flat)
             self.assertTrue(image.startswith("https://mill.example.com/line/card/C261001001.png?t="))
             self.logout()
             png = self.client.get(image[len("https://mill.example.com"):])
@@ -3391,6 +3445,37 @@ class Update50(Base):
         with self.app.test_request_context():
             from app.models import ai
             self.assertIn("price_signals", ai.snapshot("factory2"))
+
+
+from app.models import notify as _notify_module                 # the real push (Base replaces it in every test)
+REAL_PUSH = _notify_module._push
+
+
+class Update52(Base):
+    """The queue QR and the customer card reach LINE as the whole card (Flex Message)."""
+
+    def test_push_sends_a_flex_card(self):
+        from unittest import mock
+        import os
+        sent = {}
+
+        class Resp:
+            status = 200
+            def __enter__(self):
+                return self
+            def __exit__(self, *a):
+                return False
+
+        def fake(req, timeout=None):
+            sent["body"] = json.loads(req.data.decode("utf-8"))
+            return Resp()
+        with mock.patch.dict(os.environ, {"AOI_LINE_CHANNEL_TOKEN": "token"}), mock.patch("urllib.request.urlopen", fake):
+            self.assertIsNone(REAL_PUSH("U" + "1" * 32, "hello", "https://x/qr.png", {"type": "bubble", "body": {}}))
+        msg = sent["body"]["messages"]
+        self.assertEqual([(m["type"], m.get("altText")) for m in msg], [("flex", "hello")])
+        with mock.patch.dict(os.environ, {"AOI_LINE_CHANNEL_TOKEN": "token"}), mock.patch("urllib.request.urlopen", fake):
+            REAL_PUSH("U" + "1" * 32, "hello", "https://x/qr.png")
+        self.assertEqual([m["type"] for m in sent["body"]["messages"]], ["text", "image"])   # no card: as before
 
 
 if __name__ == "__main__":

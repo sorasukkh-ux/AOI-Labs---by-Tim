@@ -142,7 +142,10 @@
           var up = b.y < a.y;
           d = "M" + a.cx + " " + (up ? a.y : a.y + a.h) + " V" + (up ? b.y + b.h + 4 : b.y - 4);
         } else {
-          var y1 = a.span && !b.span ? b.cy : a.cy, y2 = b.span && !a.span ? a.cy : b.cy;
+          // update 51: the line ends INSIDE the target (a tall card's own range), so motor 2 -> packing does not look like
+          // motor 2 -> the AMR below packing
+          var clamp = function (v, box) { return Math.max(box.y + 14, Math.min(box.y + box.h - 14, v)); };
+          var y1 = a.span && !b.span ? clamp(b.cy, a) : a.cy, y2 = b.span && !a.span ? clamp(a.cy, b) : b.cy;
           if (a.span && b.span) { y1 = y2 = (Math.max(a.y, b.y) + Math.min(a.y + a.h, b.y + b.h)) / 2; }
           var xa = a.x + a.w, xb = b.x - 4, xm = (xa + xb) / 2;
           d = y1 === y2 ? "M" + xa + " " + y1 + " H" + xb : "M" + xa + " " + y1 + " H" + xm + " V" + y2 + " H" + xb;
@@ -212,6 +215,7 @@
     return data.nodes.filter(function (x) { return x.type === "MAIN_MOTOR" && x.active && (x.status === "R" || (x.live && x.live.fresh && x.live.running)); })
       .map(function (x) { return x.id; });
   }
+  function autoSel(sel) { return !!(sel && !sel.manual && sel.online && sel.control); }   // has its own device, online
   function selectorOf(motorId) {
     return data.nodes.filter(function (x) { return x.type === "MILL_SELECTOR" && x.active && x.feeds.indexOf(motorId) >= 0; })[0];
   }
@@ -283,16 +287,19 @@
     if (n.type === "MAIN_MOTOR" && n.active) {
       var sel = selectorOf(n.id), others = motorsRunning().filter(function (id) { return id !== n.id; });
       if (others.length) h("p", "sc-warn", panel, "⚠ " + text.onlyOne + ": " + ((byId(others[0]) || {}).name || others[0]));
+      else if (sel && sel.select_to !== n.id && autoSel(sel)) h("p", "sc-note", panel, "↻ " + text.autoSwitch.replace("{selector}", sel.name).replace("{name}", n.name));
       else if (sel && sel.select_to !== n.id) h("p", "sc-warn", panel, "⚠ " + sel.name + " " + text.selTo + " " + ((byId(sel.select_to) || {}).name || text.selNone));
     }
     if (n.active && n.live) {
       var lv = n.live, running = lv.fresh ? lv.running : n.status === "R";
       var pair = h("div", "sc-pair", panel);
-      var on = commandForm(n, "START", text.on, "on", text.confirmOn), off = commandForm(n, "STOP", text.off, "off", text.confirmOff);
+      var selA = n.type === "MAIN_MOTOR" ? selectorOf(n.id) : null;
+      var switching = selA && selA.select_to !== n.id && autoSel(selA);          // update 51: the selector turns by itself first
+      var on = commandForm(n, "START", text.on, "on", switching ? text.confirmAutoSwitch.replace("{selector}", selA.name).replace("{name}", n.name) : text.confirmOn), off = commandForm(n, "STOP", text.off, "off", text.confirmOff);
       if (running || n.status === "F") on.querySelector("button").disabled = true;
       if (n.type === "MAIN_MOTOR") {                                     // update 43: the server refuses it too
         var sel2 = selectorOf(n.id);
-        if (motorsRunning().some(function (id) { return id !== n.id; }) || (sel2 && sel2.select_to !== n.id)) on.querySelector("button").disabled = true;
+        if (motorsRunning().some(function (id) { return id !== n.id; }) || (sel2 && sel2.select_to !== n.id && !autoSel(sel2))) on.querySelector("button").disabled = true;
       }
       if (!running) off.querySelector("button").disabled = true;
       pair.appendChild(on); pair.appendChild(off);

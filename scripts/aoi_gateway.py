@@ -334,12 +334,72 @@ def run(machine, key, url, modbus, slave=1, min_hz=30.0, max_hz=50.0, poll=1.0, 
     return 0
 
 
+class SelectorSim:
+    """Update 51: a simulated mill selector (the mechanical switch between main motor 1 and 2). SELECT turns it to the
+    motor given; turning takes `move_seconds`, then it reports the new position (its position sensor)."""
+
+    def __init__(self, position, move_seconds=4.0):
+        self.position, self.target, self.until, self.lock = position, None, 0.0, threading.Lock()
+        self.move_seconds = move_seconds
+
+    def moving(self):
+        return self.target is not None and time.monotonic() < self.until
+
+    def status_line(self):
+        return "turning to %s" % self.target if self.moving() else "at %s" % self.position
+
+
+def run_selector(machine, key, url, sim, poll=1.0, tele=2.0, stop=None, tag=None):
+    """The gateway loop of a mill selector: carries out SELECT and reports the position (simulated switch)."""
+    stop = stop or threading.Event()
+    say = lambda text: log(text, tag)
+    app = App(url, machine, key)
+    say("mill selector %s: app %s, now at %s" % (app.machine, app.base, sim.position))
+    last_post, waiting = 0.0, None
+    while not stop.is_set():
+        now = time.monotonic()
+        try:
+            for cmd in app.commands():
+                if cmd["command"] == "SELECT" and cmd.get("value"):
+                    with sim.lock:
+                        sim.target, sim.until = str(cmd["value"]).upper(), now + sim.move_seconds
+                    waiting = cmd["id"]
+                    say("%s SELECT -> turning to %s" % (cmd["id"], sim.target))
+                elif cmd["command"] == "RESET":
+                    app.ack(cmd["id"], True, "reset")
+                else:
+                    app.ack(cmd["id"], False, "a mill selector only takes SELECT")
+            with sim.lock:
+                if sim.target is not None and not sim.moving():
+                    sim.position, sim.target = sim.target, None
+                    if waiting:
+                        app.telemetry({"running": False, "position": sim.position})
+                        app.ack(waiting, True, "at %s" % sim.position)
+                        say("%s done: at %s" % (waiting, sim.position))
+                        waiting, last_post = None, now
+            if now - last_post >= tele:
+                app.telemetry({"running": sim.moving(), "position": sim.position})
+                last_post = now
+        except (urllib.error.URLError, OSError, ValueError) as error:
+            say("app: %s" % error)
+        stop.wait(poll)
+    return 0
+
+
 def run_many(url, machines, simulate=False, poll=1.0, tele=2.0, link_loss=30.0, keep_running=False, sim_port=5020):
     """Update 45: one gateway process for several machines (a thread each). `machines`: dicts with machine, key,
     modbus (default: simulated tcp:127.0.0.1:<sim_port + n>), slave, min_hz, max_hz. Returns {machine: virtual inverter}
     when simulating (for test commands) and the stop event."""
     stop, sims, threads = threading.Event(), {}, []
     for n, m in enumerate(machines):
+        if m.get("kind") == "selector":                     # update 51: the mill selector (simulated switch)
+            sim = SelectorSim(m.get("position") or "", float(m.get("move_seconds") or 4))
+            sims[m["machine"].upper()] = sim
+            t = threading.Thread(target=run_selector, daemon=True, kwargs=dict(machine=m["machine"], key=m["key"], url=url, sim=sim,
+                                                                               poll=poll, tele=tele, stop=stop, tag=m["machine"].upper()))
+            t.start()
+            threads.append(t)
+            continue
         modbus, slave = m.get("modbus"), int(m.get("slave") or 1)
         if simulate:
             sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))

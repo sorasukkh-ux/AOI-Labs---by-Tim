@@ -149,7 +149,13 @@ def _send_label(order, browser_origin, force=False):
     if not (customer.get("LINE_USER_ID") or force):
         return None
     image = notify.qr_image_url(order, browser_origin)
-    doc = notify.queue(order, "label", order.get("EXPCT_RECEIVE_TIME"), image_url=image)
+    flex = None
+    if image:                                         # update 52: the whole queue card, like the printed label
+        from ..models import line_flex
+        label = label_data(order["QR_ID"], "AOI-" + order["ORD_ID"], customer.get("CUST_NAME", order["CUST_CODE"]),
+                           MillingOrder.pay_total(order), order.get("EXPCT_RECEIVE_TIME"), order["REGIST_DATE"], customer)
+        flex = line_flex.queue_card(label, image, notify.public_base(browser_origin))
+    doc = notify.queue(order, "label", order.get("EXPCT_RECEIVE_TIME"), image_url=image, flex=flex)
     if not doc:
         return "lnLabelOff" if force else None
     if doc["NOTIFY_FLG"] != notify.SENT:
