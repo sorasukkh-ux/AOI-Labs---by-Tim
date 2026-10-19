@@ -2,15 +2,23 @@
 {% from "_macros.html" import page_head %}
 {# Administration > Milling > Milling Analysis: the period analysis, today's milling and today's buying / selling #}
 {% block content %}
-{{ page_head(t('tabMillAnalysis'), url_for('home.index', g='AD')) }}
+{{ page_head(t('tabMillAnalysis'), url_for('automation.ai_screen')) }}
 <div class="chips mt14 ma-tabs" id="ma-tabs" role="tablist">
   {% for key in tabs %}
   <a class="chip{% if tab == key %} active{% endif %}" role="tab" aria-selected="{{ 'true' if tab == key else 'false' }}"
-     href="{{ url_for('admin_milling.analysis', tab=key) }}" data-ma-tab="{{ key }}">{{ t('maTab_' ~ key) }}</a>
+     href="{{ url_for('automation.ai_milling', tab=key) }}" data-ma-tab="{{ key }}">{{ t('maTab_' ~ key) }}</a>
   {% endfor %}
 </div>
 {% if tab == 'period' %}
 {% include "service/_analysis_body.html" %}
+{% if can_ask %}
+{# update 58: part of AI - the AI explains the figures (they are in what the AI sees) #}
+<form method="post" action="{{ url_for('automation.ai_screen') }}" class="card mt14" id="ma-ask">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="QUESTION" value="{{ t('aiMillAskQ') }}">
+  <button class="action primary full" type="submit">&#129302; {{ t('aiMillAsk') }}</button>
+</form>
+{% endif %}
 {% else %}
 {% include "service/_dashboard_body.html" %}
 {% endif %}

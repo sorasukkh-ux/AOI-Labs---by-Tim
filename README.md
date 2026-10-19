@@ -340,6 +340,13 @@ are kept in `AOITS_SYSLOG` (14 days), the checks in `AOITS_HEALTH` (7 days).
 customer's LINE when "Also send to the customer's LINE" is ticked (shown for customers linked to LINE); "Send to LINE
 only" sends without printing. The same public https address is needed as for the queue QR (update 47).
 
+## Milling Analysis in AI (update 58)
+
+Milling Analysis is part of the AI feature: the tile is in Automation (after AI), the screen is
+/automation/ai/milling (old links redirect), the AI dashboard has a "Milling Analysis · last 30 days" card (yield
+gauge vs expected, orders, waiting / milling time, holds, scanned, yield per variety), and the AI sees these
+figures ("Ask AI about the milling" on the analysis screen). Rights stay on the menu AD_MILLANALYSIS.
+
 ## Customer Buying / Selling Order (update 56)
 
 - Names from the customer's side: **Customer Selling Order** (BY: the customer sells, the mill buys - Prepared =

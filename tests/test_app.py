@@ -204,8 +204,8 @@ class Permissions(Base):
         self.assertNotIn('data-menu="AD_USER"', page)
         self.assertNotIn('data-menu="AD_MILLPROD"', page)
         self.logout()
-        self.login("wanida.s")                                      # accountant: only Milling Analysis in Administration
-        page = self.text("/?g=AD")
+        self.login("wanida.s")                                      # accountant: Milling Analysis (update 58: in Automation)
+        page = self.text("/?g=AT")
         self.assertIn('data-menu="AD_MILLANALYSIS"', page)
         self.assertNotIn('data-menu="AD_MILLTIME"', page)
 
@@ -1285,16 +1285,16 @@ class Update8(Base):
         self.assertLess(tv.index("In process"), tv.index("Queue"))
         self.assertIn("#" + b["QR_ID"], tv)
         self.assertIn("20.41", self.text("/service/price"))
-        dash = self.text("/admin/milling/analysis?tab=today")
+        dash = self.text("/automation/ai/milling?tab=today")
         self.assertIn('href="/service/milling/?status=I"', dash)
         self.assertIn('id="chart-svc-status"', dash)
-        trade = self.text("/admin/milling/analysis?tab=trade")
+        trade = self.text("/automation/ai/milling?tab=trade")
         self.assertIn("Total Sell Today", trade)
 
     def test_maintenance_branch_rules(self):
         self.logout()
         self.login("somchai.k")                                       # operator: no financial screens
-        for path in ("/finance/pricing", "/finance/margin", "/finance/account", "/finance/marketing", "/admin/milling/analysis?tab=today"):
+        for path in ("/finance/pricing", "/finance/margin", "/finance/account", "/finance/marketing", "/automation/ai/milling?tab=today"):
             self.assertEqual(self.client.get(path).status_code, 403, path)
         self.assertEqual(self.client.get("/service/price").status_code, 200)
 
@@ -2205,7 +2205,7 @@ class Update22(Base):
         self.set_status(a, "I", ACT_PADDY="98")
         self.set_status(a, "F", INV_QTY="49")
         self.set_status(b, "CC")
-        page = self.text("/admin/milling/analysis")
+        page = self.text("/automation/ai/milling")
         self.assertIn("Milling Analysis", page)
         self.assertIn('id="ma-variety-table"', page)
         self.assertIn("50.00%", page)                               # 49 kg rice / 98 kg weighed paddy
@@ -2219,17 +2219,17 @@ class Update22(Base):
         row = next(r for r in result["rows"] if r["ord_id"] == a)
         self.assertAlmostEqual(row["yield"], 0.5)
         self.assertIsNotNone(row["wait"])
-        self.assertEqual(self.text("/admin/milling/analysis?tab=period&variety=GL").count("<tr><td>"), 0)
-        csv_orders = self.client.get("/admin/milling/analysis?tab=period&csv=orders")
+        self.assertEqual(self.text("/automation/ai/milling?tab=period&variety=GL").count("<tr><td>"), 0)
+        csv_orders = self.client.get("/automation/ai/milling?tab=period&csv=orders")
         self.assertEqual(csv_orders.mimetype, "text/csv")
         body = csv_orders.get_data(as_text=True)
         self.assertTrue(body.startswith("\ufeffORD_ID,QR_ID"))
         self.assertIn(a, body)
-        events = self.client.get("/admin/milling/analysis?tab=period&csv=events").get_data(as_text=True)
+        events = self.client.get("/automation/ai/milling?tab=period&csv=events").get_data(as_text=True)
         self.assertEqual(events.count("EV-" + a), 3)               # Q, I, F
         self.logout()
         self.login("somchai.k", "factory1")                         # operators do not see the analysis
-        self.assertEqual(self.client.get("/admin/milling/analysis").status_code, 403)
+        self.assertEqual(self.client.get("/automation/ai/milling").status_code, 403)
 
 
 class Update23(Base):
@@ -2426,14 +2426,16 @@ class Update25(Base):
         self.assertEqual((c["LINE_USER_ID"], c["LINE_DISPLAY_NAME"], c["LINE_LINK_VIA"]), (self.USER, "Tim K", "PHONE"))
 
     def test_milling_analysis_moved_to_administration(self):
-        self.assertIn('data-menu="AD_MILLANALYSIS"', self.text("/?g=AD"))
+        self.assertIn('data-menu="AD_MILLANALYSIS"', self.text("/?g=AT"))           # update 58: the AI feature
+        self.assertNotIn('data-menu="AD_MILLANALYSIS"', self.text("/?g=AD"))
         self.assertNotIn("AD_MILLANALYSIS", self.text("/?g=SV"))
         self.assertNotIn('data-menu="SV_DASHBOARD"', self.text("/?g=SV"))
         for tab, marker in (("period", 'id="ma-kpis"'), ("today", 'id="svc-dashboard-grid"'), ("trade", 'id="trade-dashboard-grid"')):
-            page = self.text("/admin/milling/analysis?tab=" + tab)
+            page = self.text("/automation/ai/milling?tab=" + tab)
             self.assertIn(marker, page)
             self.assertIn('id="ma-tabs"', page)
-        self.assertIn("/admin/milling/analysis?tab=today", self.client.get("/service/dashboard").headers["Location"])
+        self.assertIn("/automation/ai/milling?tab=today", self.client.get("/service/dashboard").headers["Location"])
+        self.assertIn("/automation/ai/milling", self.client.get("/admin/milling/analysis").headers["Location"])   # old links
         self.assertIn("tab=period", self.client.get("/service/analysis?csv=orders").headers["Location"])
 
     def test_line_message_maintenance(self):
@@ -3616,6 +3618,27 @@ class Update56(Base):
         page = self.text("/service/milling/")
         self.assertIn('<datalist id="ml-names">', page)
         self.assertIn('<option value="%s">' % name, page)
+
+
+class Update58(Base):
+    """Milling Analysis is part of the AI feature."""
+
+    def test_milling_analysis_in_ai(self):
+        self.login("admin")
+        self.client.get("/lang/en")
+        order = self.new_order()
+        for st in ("I", "F"):
+            self.set_status(order["ORD_ID"], st)
+        page = self.text("/automation/ai")
+        for text in ('id="ai-milling"', 'href="/automation/ai/milling"', 'data-mill="yield"', 'data-mill-variety='):
+            self.assertIn(text, page)
+        ma = self.text("/automation/ai/milling")
+        self.assertIn('id="ma-kpis"', ma)
+        self.assertIn('href="/automation/ai"', ma)                                # back to AI
+        with self.app.test_request_context():
+            from app.models import ai
+            snap = ai.snapshot("factory2")["milling_analysis_last_30_days"]
+        self.assertEqual(snap["total"]["orders"], 1)
 
 
 if __name__ == "__main__":

@@ -103,7 +103,7 @@ def _rate_points(orders, w=360, h=150, pad_l=36, pad_r=16, pad_b=28, pad_t=16):
 def dashboard():
     """Moved to Administration > Milling > Milling Analysis (update 25)."""
     from flask import redirect, url_for
-    return redirect(url_for("admin_milling.analysis", tab="trade" if request.args.get("view") == "trade" else "today"))
+    return redirect(url_for("automation.ai_milling", tab="trade" if request.args.get("view") == "trade" else "today"))
 
 
 def dashboard_context(view):
@@ -175,7 +175,7 @@ def _csv(name, header, rows):
 def analysis():
     """Moved to Administration > Milling > Milling Analysis (update 25)."""
     from flask import redirect, url_for
-    return redirect(url_for("admin_milling.analysis", tab="period", **request.args.to_dict()))
+    return redirect(url_for("automation.ai_milling", tab="period", **request.args.to_dict()))
 
 
 def analysis_view():

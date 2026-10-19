@@ -335,6 +335,10 @@ def ai_screen():
                       "%s/%s · %.1f" % (d["PERIOD"][5:], d["YEAR_TH"], d["INDEX_VALUE"])) for d in supply.series(sp["scope"] if sp else None, 24)], w=640, max_bw=22)
     from ..models import monitor, price_signal
     signals = price_signal.overview(branch)
+    from ..models import mill_analysis as ma                  # update 58: Milling Analysis is part of AI
+    mstart, mend = ma.period(None, None)
+    mres = ma.analyse(branch, mstart, mend)
+    mill_by_variety = mres["by_variety"]
     hist = health.history(24)
     health_hist = {"disk": [h["METRICS"]["disk"]["used_pct"] for h in hist if h.get("METRICS", {}).get("disk")],
                    "memory": [h["METRICS"]["memory"]["used_pct"] for h in hist if h.get("METRICS", {}).get("memory")],
@@ -342,12 +346,31 @@ def ai_screen():
     counts = {"buy": sum(1 for o in signals if o["label"] in ("buy", "strong_buy")),
               "sell": sum(1 for o in signals if o["label"] in ("sell", "strong_sell")),
               "hold": sum(1 for o in signals if o["label"] == "hold")}
-    return render_template("automation/ai.html", signals=signals, sig_counts=counts, health_hist=health_hist,
+    return render_template("automation/ai.html", mill=mres["total"], mill_varieties=mill_by_variety, mill_pct=ma.pct,
+                           can_mill=can("AD_MILLANALYSIS"), signals=signals, sig_counts=counts, health_hist=health_hist,
                            api_hourly=monitor.api_hourly(24), fc_total=round(sum(f["kg"] for f in fc)), health=hl, health_logs=hl_logs, health_time=fmt_datetime(hl["CHECK_DATE"]),
                            health_q=t("hlAskQuestion"), supply=sp, supply_bars=sp_bars, can_ask_fetch=can(AI_MENU, "create"), forecast=fc, bars=bars, queue=ai.queue_load(branch), advice=advice,
                            alerts=alerts, configured=ai.ai_configured(), last=session.pop("ai_answer", None),
                            recent=ai.recent_questions(branch, _user_id()), can_ask=can(AI_MENU, "create"),
                            basis=min((f["basis"] for f in fc), default=0))
+
+
+# ---------- AI > Milling Analysis (update 58: moved from Administration into the AI feature) ----------
+@bp.route("/ai/milling")
+@require("AD_MILLANALYSIS")
+def ai_milling():
+    from flask import Response
+    from . import service_info
+    from .admin_milling import ANALYSIS_TABS
+    tab = request.args.get("tab") if request.args.get("tab") in ANALYSIS_TABS else "period"
+    if tab == "period":
+        context = service_info.analysis_view()
+        if isinstance(context, Response):
+            return context
+    else:
+        context = service_info.dashboard_context("trade" if tab == "trade" else "milling")
+    return render_template("admin/milling_analysis.html", tab=tab, tabs=ANALYSIS_TABS, in_ai=True,
+                           can_ask=can(AI_MENU, "create") and ai.ai_configured(), **context)
 
 
 # ---------- AI > Price analysis (update 50) ----------

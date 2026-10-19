@@ -30,7 +30,7 @@
 <p class="desc-text dash-desc">{{ t('aiDesc') }}</p>
 <nav class="chips dash-nav">
   <a class="chip{% if health.LEVEL != 'ok' %} hl-chip-{{ health.LEVEL }}{% endif %}" href="#ai-health">{{ t('hlTitle') }}{% if health.LEVEL != 'ok' %} &#9888;{% endif %}</a>
-  <a class="chip" href="#ai-forecast">{{ t('aiForecast') }}</a><a class="chip" href="#ai-signals">{{ t('psChip') }}</a><a class="chip" href="#ai-price">{{ t('aiPrice') }}</a>
+  <a class="chip" href="#ai-forecast">{{ t('aiForecast') }}</a>{% if can_mill %}<a class="chip" href="#ai-milling">{{ t('tabMillAnalysis') }}</a>{% endif %}<a class="chip" href="#ai-signals">{{ t('psChip') }}</a><a class="chip" href="#ai-price">{{ t('aiPrice') }}</a>
   <a class="chip" href="#ai-supply">{{ t('spChip') }}</a><a class="chip" href="#ai-alerts">{{ t('aiAlerts') }} ({{ alerts|length }})</a><a class="chip" href="#ai-ask">{{ t('aiAsk') }}</a>
 </nav>
 
@@ -160,6 +160,44 @@
   <p class="cap-note">{{ t('aiAlertsNote') }}</p>
 </section>
 </div>
+
+{# ---- update 58: Milling Analysis (last 30 days) is part of AI ---- #}
+{% if can_mill %}
+<section class="card dash-card mt14" id="ai-milling">
+  <div class="dash-head"><p class="card-title sub">{{ t('tabMillAnalysis') }} &middot; {{ t('aiMill30') }}</p>
+    <a class="action small" href="{{ url_for('automation.ai_milling') }}" id="ai-milling-open">{{ t('aiMillOpen') }} &rarr;</a></div>
+  {% set yv, ev = mill_pct(mill['yield']), mill_pct(mill.expected) %}
+  <div class="dash-mill">
+    {% set g = svg_donut(yv or 0, 30, 9) %}
+    <div class="dash-gauge {{ 'hl-ok' if yv is not none and ev is not none and yv >= ev else ('hl-warn' if yv is not none else '') }}" data-mill="yield">
+      <svg viewBox="0 0 {{ g.size }} {{ g.size }}" role="img" aria-label="{{ t('maYield') }}"><circle cx="{{ g.cx }}" cy="{{ g.cx }}" r="{{ g.r }}" class="track" stroke-width="{{ g.w }}"/>
+        <circle cx="{{ g.cx }}" cy="{{ g.cx }}" r="{{ g.r }}" class="fill" stroke-width="{{ g.w }}" stroke-dasharray="{{ g.dash }}" transform="rotate(-90 {{ g.cx }} {{ g.cx }})"/>
+        <text x="{{ g.cx }}" y="{{ g.cx + 5 }}" text-anchor="middle" class="v">{{ '%.1f'|format(yv) if yv is not none else '-' }}<tspan class="u">%</tspan></text></svg>
+      <span class="k">{{ t('maYield') }}</span><span class="s">{{ t('maExpected') }} {{ ('%.2f%%'|format(ev)) if ev is not none else '-' }}</span></div>
+    <div class="dash-minis">
+      <div class="dash-mini"><span>{{ t('maOrders') }}</span><b>{{ mill.orders }}</b><small>{{ t('maDoneCancelled', done=mill.done, cancelled=mill.cancelled) }}</small></div>
+      <div class="dash-mini"><span>{{ t('maPaddyRice') }}</span><b class="sm">{{ mill.paddy|num(0) }} / {{ mill.rice|num(0) }} kg</b></div>
+      <div class="dash-mini"><span>{{ t('maWait') }}</span><b class="sm">{{ mill.wait|duration }}</b></div>
+      <div class="dash-mini"><span>{{ t('maMilling') }}</span><b class="sm">{{ mill.milling|duration }}</b></div>
+      <div class="dash-mini{% if mill.held %} hl-warn{% endif %}"><span>{{ t('maHeld') }}</span><b>{{ mill.held }}</b></div>
+      <div class="dash-mini"><span>{{ t('maScanned') }}</span><b>{{ mill.scanned }} / {{ mill.orders }}</b></div>
+    </div>
+  </div>
+  {% if mill_varieties %}
+  <p class="card-title mt14">{{ t('aiMillByVariety') }}</p>
+  <div class="dash-api">
+  {% for key, g in mill_varieties %}{% set y = mill_pct(g['yield']) %}{% set e = mill_pct(g.expected) %}
+    <div class="dash-api-row" data-mill-variety="{{ key }}">
+      <div class="top"><span class="nm">{{ t(var_keys[key]) }}</span><span class="nums"><b>{{ ('%.2f%%'|format(y)) if y is not none else '-' }}</b> &middot; {{ t('maExpected') }} {{ ('%.2f%%'|format(e)) if e is not none else '-' }} &middot; {{ g.orders }} {{ t('dashOrders') }}</span></div>
+      <svg class="dash-stack" viewBox="0 0 100 8" preserveAspectRatio="none" aria-hidden="true"><rect x="0" y="0" width="100" height="8" rx="4" class="bg"/>
+        {% if y is not none %}<rect x="0" y="0" width="{{ [y, 100]|min }}" height="8" class="{{ 'ok' if e is none or y >= e else 'e4' }}"/>{% endif %}
+        {% if e is not none %}<rect x="{{ [e, 99.4]|min }}" y="0" width="0.6" height="8" class="e5"/>{% endif %}</svg>
+    </div>
+  {% endfor %}</div>
+  <p class="cap-note">{{ t('aiMillNote') }}</p>
+  {% endif %}
+</section>
+{% endif %}
 
 {# ---- Market and prices ---- #}
 <p class="dash-sec">{{ t('dashSecMarket') }}</p>

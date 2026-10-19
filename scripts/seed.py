@@ -76,7 +76,7 @@ MENUS = [  # MENU_CODE, MENU_NAME, MENU_GROUP, MENU_SUBGROUP, MENU_SEQ
     ("FN_ACCOUNT", "Account", "FN", "", 3), ("FN_MARKETING", "Marketing", "FN", "", 4),
     ("FN_INVEST", "Investment & Break-even", "FN", "", 5),
     ("AD_MILLPROD", "Milling Production", "AD", "MILL", 1), ("AD_MILLTIME", "Milling Maintenance", "AD", "MILL", 2),
-    ("AD_MILLANALYSIS", "Milling Analysis", "AD", "MILL", 3),
+    ("AD_MILLANALYSIS", "Milling Analysis", "AT", "", 2),       # update 58: part of the AI feature (was Administration)
     ("AD_USER", "User Maintenance", "AD", "USER", 3), ("AD_ROLE", "Role Authorization", "AD", "USER", 4),
     ("AT_AI", "AI", "AT", "", 1), ("AT_HARDWARE", "Hardware Control", "AT", "", 2),
     ("AT_ELECTRIC", "Electricity", "AT", "", 3), ("AT_MACHINE", "Machine Usage Statistics", "AT", "", 4),
@@ -266,6 +266,8 @@ def seed(log=print, reset=False):
     for code, old_name in (("SV_MILLSTATUS", "Update Milling Status"), ("SV_BSSTATUS", "Update Buy/Sell Status")):
         new_name = next(m[1] for m in MENUS if m[0] == code)
         db["AOIMS_MENU"].update_one({"MENU_CODE": code, "MENU_NAME": old_name}, {"$set": {"MENU_NAME": new_name}})
+    # update 58: Milling Analysis moves from Administration > Milling to Automation, next to AI
+    db["AOIMS_MENU"].update_many({"MENU_CODE": "AD_MILLANALYSIS", "MENU_GROUP": "AD"}, {"$set": {"MENU_GROUP": "AT", "MENU_SUBGROUP": None, "MENU_SEQ": 2}})
     for code, name, group, sub, seq in MENUS:
         add("AOIMS_MENU", {"MENU_CODE": code}, {"MENU_NAME": name, "MENU_GROUP": group, "MENU_SUBGROUP": sub or None, "MENU_SEQ": seq})
     for code, name, desc in ROLES:

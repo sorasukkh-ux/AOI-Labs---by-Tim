@@ -131,15 +131,5 @@ ANALYSIS_TABS = ("period", "today", "trade")
 @bp.route("/analysis")
 @require("AD_MILLANALYSIS")
 def analysis():
-    """Milling Analysis: the period analysis of the status timeline, today's milling orders and today's buying /
-    selling (the former Service Dashboard), on one screen with tabs."""
-    from flask import Response
-    from . import service_info
-    tab = request.args.get("tab") if request.args.get("tab") in ANALYSIS_TABS else "period"
-    if tab == "period":
-        context = service_info.analysis_view()
-        if isinstance(context, Response):
-            return context
-    else:
-        context = service_info.dashboard_context("trade" if tab == "trade" else "milling")
-    return render_template("admin/milling_analysis.html", tab=tab, tabs=ANALYSIS_TABS, **context)
+    """Update 58: Milling Analysis is part of the AI feature now (Automation > AI > Milling Analysis); old links go there."""
+    return redirect(url_for("automation.ai_milling", **request.args.to_dict()))

@@ -9,7 +9,7 @@ MENU_ENDPOINTS = {
     "SV_SERVICE": "service_milling.new_order",
     "SV_MILLSTATUS": "service_milling.order_list",
     "SV_PRICE": "service_info.current_price",
-    "AD_MILLANALYSIS": "admin_milling.analysis",
+    "AD_MILLANALYSIS": "automation.ai_milling",
     "AD_LINEMSG": "admin_line.messages",
     "SV_BSSTATUS": "service_buysell.order_list",
     "IV_LIST": "inventory.item_list",

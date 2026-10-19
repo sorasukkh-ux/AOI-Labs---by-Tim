@@ -324,6 +324,10 @@
   var targets = [];
   document.querySelectorAll(".home-subgroup, .card").forEach(function (node) {
     if (node.closest("#app-modal-overlay, template") || (node.parentElement && node.parentElement.closest(".card"))) return;
+    // update 57: a card that is one tile of a grid or row (the KPI tiles of Milling Analysis) is not a section -
+    // the bar was put inside the grid and squeezed into one tile
+    var shown = node.parentElement && window.getComputedStyle(node.parentElement).display;
+    if (shown && /grid|flex/.test(shown)) return;
     var head = node.querySelector(".home-sub-title, .card-title");
     if (!head || !head.textContent.trim()) return;
     if (!node.id) node.id = "qj-" + targets.length;

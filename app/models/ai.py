@@ -202,8 +202,23 @@ def snapshot(branch_id):
         "yields": {v: MillYield.ratios(branch_id, v) for v in ("HM", "WH", "GL")},
         "supply_indicator_nabc_agri_production_index": _supply(),
         "server_health": _health(),
-        "price_signals": _signals(branch_id),             # update 50: price sources, trend, buy / sell points                       # update 48: disk, memory, CPU, database, log
+        "price_signals": _signals(branch_id),
+        "milling_analysis_last_30_days": _milling(branch_id),   # update 58: yield, times, holds (Milling Analysis)             # update 50: price sources, trend, buy / sell points                       # update 48: disk, memory, CPU, database, log
     }
+
+
+def _milling(branch_id):
+    try:
+        from . import mill_analysis as ma
+        start, end = ma.period(None, None)
+        r = ma.analyse(branch_id, start, end)
+        keys = ("orders", "done", "cancelled", "paddy", "rice", "yield", "expected", "wait", "milling", "ready", "pickup", "held", "hold_min", "scanned")
+        pick = lambda s: {k: (round(v, 4) if isinstance(v, float) else v) for k, v in s.items() if k in keys}
+        return {"from": start.isoformat(), "to": end.isoformat(), "total": pick(r["total"]),
+                "by_variety": {k: pick(v) for k, v in (r["by_variety"] or [])},
+                "note": "yield = rice kg / paddy kg (0-1), times in minutes (wait = registered to milling, milling = in process, ready = finished to closed)"}
+    except Exception:                                     # noqa: BLE001
+        return None
 
 
 def _signals(branch_id):
