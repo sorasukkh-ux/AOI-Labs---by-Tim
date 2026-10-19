@@ -340,6 +340,19 @@ are kept in `AOITS_SYSLOG` (14 days), the checks in `AOITS_HEALTH` (7 days).
 customer's LINE when "Also send to the customer's LINE" is ticked (shown for customers linked to LINE); "Send to LINE
 only" sends without printing. The same public https address is needed as for the queue QR (update 47).
 
+## One broken rice SKU (update 61)
+
+Broken rice is one SKU, **BROKEN (ปลายข้าว)**, for every variety - like bran and husk: one price, one stock, one
+row in the Buy / Sell tables, and the take-home broken rice of every milling order. start.sh merges the old
+BROKEN_HM / BROKEN_GL: their stock and open orders move to BROKEN, their prices and market mappings are removed
+(check the BROKEN price on Pricing Maintenance). Closed orders and history keep the old codes, shown as broken rice.
+The milling yield of broken rice is still kept per variety.
+
+## Milling Order List in three groups (update 60)
+
+The list has three tabs: **Queue / In process / Hold** (default), **Finished / Ready for delivery** and **Closed /
+cancelled** (newest first). A searched or scanned order opens the tab it is in.
+
 ## Milling Analysis in AI (update 58)
 
 Milling Analysis is part of the AI feature: the tile is in Automation (after AI), the screen is

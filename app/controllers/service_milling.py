@@ -34,6 +34,9 @@ LIST_FILTERS = (flow.QUEUE, flow.IN_PROCESS, flow.HOLD, flow.FINISHED, flow.CLOS
 # update 46: the list in two views - active orders, and closed / cancelled ones
 ACTIVE_STATUSES = (flow.QUEUE, flow.IN_PROCESS, flow.HOLD, flow.FINISHED, flow.DELIVERY)
 ENDED_STATUSES = (flow.CLOSED, flow.CANCELLED)
+# update 60 (Tim): three groups - milling now (Queue / In process / Hold), done (Finished / Ready for delivery),
+# ended (Closed / Cancelled)
+VIEWS = {"active": (flow.QUEUE, flow.IN_PROCESS, flow.HOLD), "done": (flow.FINISHED, flow.DELIVERY), "closed": ENDED_STATUSES}
 CLOSED_LIMIT = 200                                     # the closed view shows the newest ones
 
 
@@ -271,8 +274,8 @@ def _context():
 @bp.route("/")
 @require(STATUS)
 def order_list():
-    view = "closed" if request.args.get("view") == "closed" else "active"
-    statuses = ENDED_STATUSES if view == "closed" else ACTIVE_STATUSES
+    view = request.args.get("view") if request.args.get("view") in VIEWS else "active"
+    statuses = VIEWS[view]
     status = request.args.get("status") if request.args.get("status") in statuses else None
     order_type = request.args.get("type") if request.args.get("type") in (flow.TAKEAWAY, flow.DELIVER) else None
     q = (request.args.get("q") or "").strip()[:60]
@@ -284,8 +287,7 @@ def order_list():
         every = [o for o in every if o["ORDER_TYPE"] == order_type]
     if q:                                                # update 37: search (typed, or the QR on the label scanned)
         every = [o for o in every if _matches(dict(o, customer=Customer.find(o["CUST_CODE"]) or {}), q)]
-    counts = {"active": sum(1 for o in every if o["MILL_STATUS"] in ACTIVE_STATUSES),
-              "closed": sum(1 for o in every if o["MILL_STATUS"] in ENDED_STATUSES)}
+    counts = {v: sum(1 for o in every if o["MILL_STATUS"] in sts) for v, sts in VIEWS.items()}
     orders = [o for o in every if o["MILL_STATUS"] in ((status,) if status else statuses)]
     base = MillingOrder.list_base(branch)
     if view == "closed":                                 # the most recently closed / cancelled first
@@ -296,12 +298,14 @@ def order_list():
     # update 53: only right after a search / scan (go=1), not when a view or filter is tapped later with the same search
     exact = bool(q) and request.args.get("go") == "1" and len(orders) == 1 and orders[0]["ORD_ID"].lower() == scan_text(q)
     # a scanned / typed order that is in the other view: open that view (the label of a closed order, say)
-    if q and not orders and counts["closed" if view == "active" else "active"]:
-        return redirect(url_for("service_milling.order_list", view=None if view == "closed" else "closed", type=order_type, q=q,
-                                go=request.args.get("go") or None))
+    if q and not orders:
+        other = next((v for v in VIEWS if v != view and counts[v]), None)
+        if other:
+            return redirect(url_for("service_milling.order_list", view=None if other == "active" else other, type=order_type, q=q,
+                                    go=request.args.get("go") or None))
     status_counts = {s: sum(1 for o in every if o["MILL_STATUS"] == s) for s in statuses}
     return render_template("service/milling_list.html", name_options=names, orders=orders, q=q, auto_open=exact, list_base=base, view=view,
-                           view_arg="closed" if view == "closed" else None, counts=counts, status_counts=status_counts,
+                           view_arg=None if view == "active" else view, views=list(VIEWS), counts=counts, status_counts=status_counts,
                            closed_limit=CLOSED_LIMIT, status=status, order_type=order_type, filters=statuses, **_context())
 
 

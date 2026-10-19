@@ -1,7 +1,7 @@
 """Rice varieties and the SKUs (AOIMS_MATERIAL codes) of each variety.
 
-The mill buys, mills and sells three varieties. Paddy, rice and broken rice are separate SKUs per variety;
-rice bran and husk are one SKU each. The white-rice codes are the original ones (PADDY, RICE_W5, BROKEN),
+The mill buys, mills and sells three varieties. Paddy and rice are separate SKUs per variety; broken rice
+(update 61), rice bran and husk are one SKU each. The white-rice codes are the original ones (PADDY, RICE_W5, BROKEN),
 so the data recorded before the varieties existed stays white rice.
 """
 JASMINE, WHITE, GLUTINOUS = "HM", "WH", "GL"
@@ -14,27 +14,31 @@ DEFAULT_PRIORITY = {JASMINE: "H", WHITE: "M", GLUTINOUS: "L"}
 PADDY, RICE, BROKEN, BRAN, HUSK = "paddy", "rice", "broken", "bran", "husk"
 KIND_KEYS = {PADDY: "skuPaddy", RICE: "skuRice", BROKEN: "skuBroken", BRAN: "skuBran", HUSK: "skuHusk"}
 
+# update 61 (Tim): broken rice is ONE SKU for every variety (like bran and husk) - BROKEN. The broken rice SKUs per
+# variety of update 10 (BROKEN_HM, BROKEN_GL) are merged into it by start.sh; old records keep the name "broken rice".
 CODES = {
-    JASMINE: {PADDY: "PADDY_HM", RICE: "RICE_HM", BROKEN: "BROKEN_HM"},
-    WHITE: {PADDY: "PADDY", RICE: "RICE_W5", BROKEN: "BROKEN"},
-    GLUTINOUS: {PADDY: "PADDY_GL", RICE: "RICE_GL", BROKEN: "BROKEN_GL"},
+    JASMINE: {PADDY: "PADDY_HM", RICE: "RICE_HM"},
+    WHITE: {PADDY: "PADDY", RICE: "RICE_W5"},
+    GLUTINOUS: {PADDY: "PADDY_GL", RICE: "RICE_GL"},
 }
-MAT_BRAN, MAT_HUSK = "BRAN", "HUSK"
+MAT_BRAN, MAT_HUSK, MAT_BROKEN = "BRAN", "HUSK", "BROKEN"
+LEGACY_BROKEN = ("BROKEN_HM", "BROKEN_GL")
 
 # code -> (kind, variety or None)
 INFO = {code: (kind, var) for var, kinds in CODES.items() for kind, code in kinds.items()}
-INFO.update({MAT_BRAN: (BRAN, None), MAT_HUSK: (HUSK, None)})
+INFO.update({MAT_BROKEN: (BROKEN, None), MAT_BRAN: (BRAN, None), MAT_HUSK: (HUSK, None)})
+INFO.update({c: (BROKEN, None) for c in LEGACY_BROKEN})
 
-# every SKU in display order: per variety paddy, rice, broken; then bran and husk
-ALL = tuple(CODES[v][k] for v in VARIETIES for k in (PADDY, RICE, BROKEN)) + (MAT_BRAN, MAT_HUSK)
+# every SKU in display order: per variety paddy, rice; then broken rice, bran and husk
+ALL = tuple(CODES[v][k] for v in VARIETIES for k in (PADDY, RICE)) + (MAT_BROKEN, MAT_BRAN, MAT_HUSK)
 # what Customer Service buys and sells (the design's rate tables; husk is sold from Inventory only)
 TRADED = tuple(c for c in ALL if c != MAT_HUSK)
 
 # Thai names for AOIMS_MATERIAL.MAT_DESC
-DESC_TH = {"PADDY_HM": "ข้าวเปลือกหอมมะลิ", "RICE_HM": "ข้าวหอมมะลิ", "BROKEN_HM": "ปลายข้าวหอมมะลิ",
-           "PADDY": "ข้าวเปลือกเจ้า", "RICE_W5": "ข้าวสารขาว 5%", "BROKEN": "ปลายข้าวเจ้า",
-           "PADDY_GL": "ข้าวเปลือกเหนียว", "RICE_GL": "ข้าวเหนียว", "BROKEN_GL": "ปลายข้าวเหนียว",
-           "BRAN": "รำข้าว", "HUSK": "แกลบ"}
+DESC_TH = {"PADDY_HM": "ข้าวเปลือกหอมมะลิ", "RICE_HM": "ข้าวหอมมะลิ",
+           "PADDY": "ข้าวเปลือกเจ้า", "RICE_W5": "ข้าวสารขาว 5%",
+           "PADDY_GL": "ข้าวเปลือกเหนียว", "RICE_GL": "ข้าวเหนียว",
+           "BROKEN": "ปลายข้าว", "BRAN": "รำข้าว", "HUSK": "แกลบ"}
 MAT_TYPE = {PADDY: "PD", RICE: "RC", BROKEN: "BR", BRAN: "RB", HUSK: "HK"}
 
 
@@ -48,6 +52,8 @@ def code(variety, kind):
     """The SKU of a variety: code('HM', 'rice') -> 'RICE_HM'. Bran and husk are shared."""
     if kind == BRAN:
         return MAT_BRAN
+    if kind == BROKEN:
+        return MAT_BROKEN
     if kind == HUSK:
         return MAT_HUSK
     return CODES[clean(variety)][kind]

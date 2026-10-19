@@ -37,9 +37,9 @@ MIN_PRICE = 100.0                           # report prices are per 100 kg or pe
 
 # first guess of the report rows of each SKU (normalized text the row label must contain); change on the screen
 DEFAULT_KEYS = {
-    "PADDY_HM": "ข้าวเปลือกหอมมะลิ", "RICE_HM": "ข้าวหอมมะลิ100%", "BROKEN_HM": "ปลายข้าวหอมมะลิ",
+    "PADDY_HM": "ข้าวเปลือกหอมมะลิ", "RICE_HM": "ข้าวหอมมะลิ100%", 
     "PADDY": "ข้าวเปลือกเจ้า", "RICE_W5": "ข้าวขาว5%", "BROKEN": "ปลายข้าวขาว",
-    "PADDY_GL": "ข้าวเปลือกเหนียว", "RICE_GL": "ข้าวเหนียว10%", "BROKEN_GL": "ปลายข้าวเหนียว",
+    "PADDY_GL": "ข้าวเปลือกเหนียว", "RICE_GL": "ข้าวเหนียว10%", 
     "BRAN": "รำข้าว",
 }
 

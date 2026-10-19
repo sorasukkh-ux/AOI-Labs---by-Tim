@@ -31,7 +31,7 @@ MATERIALS = [(code, _var.DESC_TH[code], _var.MAT_TYPE[_var.kind_of(code)]) for c
 # names before the rice varieties (update 10): PADDY and BROKEN are now the white-rice SKUs
 OLD_MAT_DESC = {"PADDY": "ข้าวเปลือก", "BROKEN": "ปลายข้าว"}
 # sample market prices (THB/kg) of the new varieties' SKUs; the market price import replaces them
-NEW_SKU_MARKET = {"PADDY_HM": 15.0, "RICE_HM": 33.0, "BROKEN_HM": 18.0, "PADDY_GL": 12.0, "RICE_GL": 24.0, "BROKEN_GL": 14.0}
+NEW_SKU_MARKET = {"PADDY_HM": 15.0, "RICE_HM": 33.0, "PADDY_GL": 12.0, "RICE_GL": 24.0}
 NEW_SKU_MARGIN = (5.0, 8.0)        # sample buy / sell margin targets (%) of those SKUs
 # milling tests from the mill (Tim, 2026-10): (reference, paddy kg, minutes, rice kg, broken kg or None)
 MILL_TESTS = [("Mill test", 33.0, 9.0, 17.0, 2.0), ("Customer A", 36.0, 10.0, 20.5, 2.0), ("Customer B", 39.0, 12.75, 22.5, 3.0)]
@@ -121,6 +121,27 @@ SEED_USER = "system"
 PERM_FIELDS = (("v", "CAN_VIEW"), ("c", "CAN_CREATE"), ("e", "CAN_EDIT"), ("d", "CAN_DELETE"), ("a", "CAN_APPROVE"))
 
 
+def merge_broken(db):
+    """Update 61 (Tim): broken rice is one SKU (BROKEN) for every variety. The per-variety broken rice SKUs of update 10
+    (BROKEN_HM, BROKEN_GL) are merged: stock and open orders move to BROKEN; their prices, market mappings and
+    material records are removed (BROKEN keeps its price). Closed orders, logs and the ledger keep their codes (shown as
+    broken rice). Runs every start, does nothing once merged."""
+    legacy = list(_var.LEGACY_BROKEN)
+    db["AOINV_ONHAND"].update_many({"MAT_CODE": {"$in": legacy}}, {"$set": {"MAT_CODE": _var.MAT_BROKEN}})
+    for order in db["AOITS_ORDBUYSELL"].find({"ORD_STATUS": {"$nin": ["C", "CC"]},
+                                             "$or": [{"MAT_CODE": {"$in": legacy}}, {"ORD_ITEMS.MAT_CODE": {"$in": legacy}}]}, {"_id": 0}):
+        items = [dict(l, MAT_CODE=_var.MAT_BROKEN) if l.get("MAT_CODE") in legacy else l for l in (order.get("ORD_ITEMS") or [])]
+        values = {"MAT_CODE": _var.MAT_BROKEN if order.get("MAT_CODE") in legacy else order.get("MAT_CODE")}
+        if order.get("ORD_ITEMS"):
+            values["ORD_ITEMS"] = items
+        db["AOITS_ORDBUYSELL"].update_one({"ORD_ID": order["ORD_ID"]}, {"$set": values})
+    db["AOIMS_PRICE"].delete_many({"MAT_CODE": {"$in": legacy}})
+    db["AOIMS_MKMAP"].delete_many({"MAT_CODE": {"$in": legacy}})
+    db["AOIMS_MATERIAL"].delete_many({"MAT_CODE": {"$in": legacy}})
+    db["AOIMS_MATERIAL"].update_many({"MAT_CODE": _var.MAT_BROKEN, "MAT_DESC": {"$in": ["ปลายข้าวเจ้า", "ปลายข้าวขาว"]}},
+                                     {"$set": {"MAT_DESC": _var.DESC_TH[_var.MAT_BROKEN]}})
+
+
 def seed(log=print, reset=False):
     """Must run inside an application context."""
     from app.db import get_db
@@ -159,6 +180,7 @@ def seed(log=print, reset=False):
     db["AOIMS_SYSPARAM"].update_many({"SYSP_PLANKGDAY": {"$exists": False}}, {"$set": {"SYSP_PLANKGDAY": 2000.0}})
     for code, old in OLD_MAT_DESC.items():
         db["AOIMS_MATERIAL"].update_one({"MAT_CODE": code, "MAT_DESC": old}, {"$set": {"MAT_DESC": _var.DESC_TH[code]}})
+    merge_broken(db)                              # update 61: one broken rice SKU
     for branch_id, name in BRANCHES:
         add("AOIMS_SYSPARAM", {"BRANCH_ID": branch_id}, dict(MILL_SETTINGS, BRANCH_NAME=name))
         for variety in _var.VARIETIES:

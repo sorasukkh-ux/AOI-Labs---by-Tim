@@ -264,7 +264,7 @@ def ask(branch_id, user_id, question, lang):
     system = ("You help the staff of a rice mill (AOI Labs). Answer in %s, briefly, using only the figures given. "
               "If the figures do not answer the question, say so and say which screen of the system to check. "
               "Rice varieties: HM jasmine (Hom Mali), WH white, GL glutinous. Material codes: PADDY_HM / PADDY / PADDY_GL paddy, "
-              "RICE_HM / RICE_W5 / RICE_GL rice, BROKEN_HM / BROKEN / BROKEN_GL broken rice (jasmine / white / glutinous), "
+              "RICE_HM / RICE_W5 / RICE_GL rice, BROKEN broken rice (one SKU for all varieties), "
               "BRAN rice bran, HUSK husk. Prices are THB per kg. profit_check gives, per variety, the value of 1 kg paddy once "
               "milled, the break-even and recommended buying prices. Prices only change when a person approves them. "
               "Milling statuses: Q queue, I in process, H hold, F finished, D ready for delivery. "

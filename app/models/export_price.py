@@ -37,7 +37,6 @@ DEFAULT_KEYS = {
     "RICE_W5": ("whiterice5%", "ขาวขาว5%", "ข้าวขาว5%"),
     "RICE_GL": ("glutinous", "ขาวเหนียว", "ข้าวเหนียว"),
     "BROKEN": ("a1super", "a1เลิศ", "เอวนเลศ", "เอวันเลิศ", "a.1super"),
-    "BROKEN_HM": ("hommalibroken", "ปลายขาวหอมมะลิ"),
 }
 
 MONTHS_EN = {m: i + 1 for i, m in enumerate(("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"))}

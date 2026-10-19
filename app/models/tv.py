@@ -18,7 +18,7 @@ from ..timeutil import now_local, now_utc, to_local
 
 READY = (flow.FINISHED, flow.DELIVERY)
 NEW_MINUTES = 5                         # a just-finished order is marked for this long
-PRICE_SKUS = ("PADDY_HM", "RICE_HM", "PADDY", "RICE_W5", "PADDY_GL", "RICE_GL", "BRAN", "BROKEN_HM", "BROKEN", "BROKEN_GL")
+PRICE_SKUS = ("PADDY_HM", "RICE_HM", "PADDY", "RICE_W5", "PADDY_GL", "RICE_GL", "BRAN", "BROKEN")   # update 61: one broken rice
 
 
 def issue_key(branch_id, ope_user):

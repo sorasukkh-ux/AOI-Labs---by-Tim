@@ -24,10 +24,10 @@
   {% if q %}<p class="cap-note tight" id="ml-search-note">{{ t('bsSearchResult', n=orders|length, q=q) }}</p>{% endif %}
 </form>
 <div class="ml-views mt14" role="tablist" id="ml-views">
-  <a class="ml-view{% if view == 'active' %} on{% endif %}" role="tab" aria-selected="{{ 'true' if view == 'active' else 'false' }}" id="ml-view-active"
-     href="{{ url_for('service_milling.order_list', type=order_type, q=q or None) }}">{{ t('mlViewActive') }} <b>{{ counts.active }}</b></a>
-  <a class="ml-view{% if view == 'closed' %} on{% endif %}" role="tab" aria-selected="{{ 'true' if view == 'closed' else 'false' }}" id="ml-view-closed"
-     href="{{ url_for('service_milling.order_list', view='closed', type=order_type, q=q or None) }}">{{ t('mlViewClosed') }} <b>{{ counts.closed }}</b></a>
+  {% for v in views %}
+  <a class="ml-view{% if view == v %} on{% endif %}" role="tab" aria-selected="{{ 'true' if view == v else 'false' }}" id="ml-view-{{ v }}"
+     href="{{ url_for('service_milling.order_list', view=None if v == 'active' else v, type=order_type, q=q or None) }}">{{ t('mlView_' ~ v) }} <b>{{ counts[v] }}</b></a>
+  {% endfor %}
 </div>
 <div class="chips mt6" id="status-filter-chips">
   <a class="chip status-chip{% if not status %} active{% endif %}" href="{{ url_for('service_milling.order_list', view=view_arg, type=order_type, q=q or None) }}">{{ t('filterAll') }}</a>

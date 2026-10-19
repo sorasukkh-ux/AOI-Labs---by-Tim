@@ -1289,3 +1289,5 @@ a.badge.from-milling.link { text-decoration: none; cursor: pointer; } a.badge.fr
 /* update 58: Milling Analysis on the AI dashboard */
 .dash-mill { display: flex; flex-wrap: wrap; gap: 12px 18px; align-items: center; }
 .dash-mini small { font-size: 10.5px; color: var(--text-muted); }
+/* update 60: three groups on the Milling Order List */
+@media (max-width: 640px) { .ml-view { font-size: 13px; padding: 9px 4px; } .ml-view b { display: block; width: fit-content; margin: 3px auto 0; } }

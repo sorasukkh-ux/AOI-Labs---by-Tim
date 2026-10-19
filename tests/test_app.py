@@ -424,7 +424,7 @@ class MillingOrders(Base):
         # update 56: at Finished the change to Delivery needs the arrival time (the pop-up) ...
         self.post("/service/milling/%s/type" % ord_id, {"new_type": "D", "DELIVERY_ADDRESS": "", "DELIVERY_DISTANCE": ""})
         self.assertEqual(self.order(ord_id)["ORDER_TYPE"], "T")
-        self.assertIn('data-form="type-delivery-%s"' % ord_id, self.text("/service/milling/"))
+        self.assertIn('data-form="type-delivery-%s"' % ord_id, self.text("/service/milling/?view=done"))
         # ... and then the order is Ready for Delivery with the time confirmed, and the LINE message is written
         from unittest import mock
         with mock.patch("app.models.notify.queue") as queued:
@@ -646,7 +646,8 @@ class Update4(Base):
         self.post("/service/milling/%s/cancel-request" % orders["request"])
         page = self.text("/service/milling/")
         shown = re.findall(r'class="status-card[^"]*" data-order="([^"]+)"', page)
-        expected = ["request", "inproc", "hold", "queue_urgent", "queue_low", "finished"]       # update 46: active view
+        expected = ["request", "inproc", "hold", "queue_urgent", "queue_low"]       # update 60: Queue / In process / Hold
+        self.assertEqual(re.findall(r'class="status-card[^"]*" data-order="([^"]+)"', self.text("/service/milling/?view=done")), [orders["finished"]])
         self.assertEqual(shown, [orders[n] for n in expected])
         closed = re.findall(r'class="status-card[^"]*" data-order="([^"]+)"', self.text("/service/milling/?view=closed"))
         self.assertEqual(set(closed), {orders["closed"], orders["cancelled"]})
@@ -687,7 +688,7 @@ class Update4(Base):
         self.assertEqual(len(self.db("AOILOG_ORDBUYSELL")), 1)
         page = self.text("/service/buysell/")
         self.assertIn("From Milling #%s" % order["QR_ID"], page)
-        self.assertIn("Rice bran 2 kg, Broken rice (White) 1 kg", page)
+        self.assertIn("Rice bran 2 kg, Broken rice 1 kg", page)
         self.assertNotIn("Can be prepared when milling order", page)          # update 42: independent of the milling
         self.assertIn('data-form="prepare-%s"' % sl["ORD_ID"], page)
         self.set_status(ord_id, "I")
@@ -702,7 +703,7 @@ class Update4(Base):
         stock = {s["MAT_CODE"]: s for s in self.onhand() if s["SUB_2"] == sl["ORD_ID"]}
         self.assertEqual((stock["BRAN"]["INV_QTY"], stock["BRAN"]["SUB_1"], stock["BROKEN"]["INV_QTY"]), (2.0, "LOT-" + ord_id, 1.0))
         # update 28: the milling order cannot be closed while its selling order is open
-        self.assertIn('data-linked-open="%s"' % sl["ORD_ID"], self.text("/service/milling/"))
+        self.assertIn('data-linked-open="%s"' % sl["ORD_ID"], self.text("/service/milling/?view=done"))
         self.set_status(ord_id, "C")
         self.assertEqual(self.order(ord_id)["MILL_STATUS"], "F")
         self.assertIn('data-milling-link', self.text("/service/buysell/"))          # update 55: link back
@@ -713,14 +714,14 @@ class Update4(Base):
         self.assertIn("/service/milling/?q=AOI-" + ord_id, back)
         entries = self.db("AOITS_ACCOUNT")
         self.assertEqual([(a["REF_ORD_ID"], a["REF_ORD_TYPE"], a["ACC_TYPE"], a["ACC_AMOUNT"], a["ACC_DESC"]) for a in entries],
-                         [(sl["ORD_ID"], "SL", "IN", 32.67, "Sold Rice bran, Broken rice (White)")])
+                         [(sl["ORD_ID"], "SL", "IN", 32.67, "Sold Rice bran, Broken rice")])
         self.set_status(ord_id, "C")                                             # now it closes: only its fee is posted
         self.assertEqual(self.order(ord_id)["MILL_STATUS"], "C")
         self.assertEqual([(a["REF_ORD_ID"], a["ACC_AMOUNT"]) for a in self.db("AOITS_ACCOUNT")][-1], (ord_id, 12.0))
         self.assertEqual([s["MAT_CODE"] for s in self.onhand() if s["SUB_2"] == sl["ORD_ID"]], [])
         detail = self.text("/service/milling/%s?popup=1" % ord_id)
         self.assertIn('data-linked="%s"' % sl["ORD_ID"], detail)
-        self.assertIn("Rice bran, Broken rice (White) taken home", detail)
+        self.assertIn("Rice bran, Broken rice taken home", detail)
         receipt = self.text("/service/buysell/billing?ids=" + sl["ORD_ID"])
         self.assertIn("21.60", receipt)
         self.assertIn("11.07", receipt)
@@ -910,9 +911,9 @@ class Update5(Base):
         ord_id = deliver["ORD_ID"]
         for status in ("I", "F", "D"):
             self.set_status(ord_id, status)
-        page = self.text("/service/milling/")
+        page = self.text("/service/milling/?view=done")
         shown = re.findall(r'class="status-card[^"]*" data-order="([^"]+)"', page)
-        self.assertEqual(shown, [ord_id, inproc["ORD_ID"]])
+        self.assertEqual(shown, [ord_id])                                     # update 60: the Finished / Ready group
         self.assertIn('class="status-card needs-attention" data-order="%s"' % ord_id, page)
         self.assertIn('name="DELIVERY_ARRIVAL_TIME" value="20', page)                    # suggested: now + 2 hours
         self.post("/service/milling/%s/delivery" % ord_id, {"action": "confirm", "DELIVERY_ADDRESS": "9 New Road",
@@ -925,12 +926,13 @@ class Update5(Base):
         with self.app.app_context():
             from app.timeutil import to_local
             self.assertEqual(to_local(saved["DELIVERY_ARRIVAL_TIME"]).strftime("%Y-%m-%d %H:%M"), "2026-10-09 15:30")
-        shown = re.findall(r'class="status-card[^"]*" data-order="([^"]+)"', self.text("/service/milling/"))
-        self.assertEqual(shown, [inproc["ORD_ID"], ord_id])                               # back to the usual sequence
-        self.assertIn("Delivery time confirmed", self.text("/service/milling/"))
+        shown = re.findall(r'class="status-card[^"]*" data-order="([^"]+)"', self.text("/service/milling/?view=done"))
+        self.assertEqual(shown, [ord_id])                                                 # confirmed, in its group
+        self.assertNotIn("needs-attention", self.text("/service/milling/?view=done"))
+        self.assertIn("Delivery time confirmed", self.text("/service/milling/?view=done"))
         self.post("/service/milling/%s/delivery" % ord_id, {"action": "reopen"})         # failed delivery: confirm again
         self.assertFalse(self.order(ord_id)["DELIVERY_CONFIRM_FLG"])
-        self.assertEqual(re.findall(r'class="status-card[^"]*" data-order="([^"]+)"', self.text("/service/milling/"))[0], ord_id)
+        self.assertEqual(re.findall(r'class="status-card[^"]*" data-order="([^"]+)"', self.text("/service/milling/?view=done"))[0], ord_id)
         self.post("/service/milling/%s/delivery" % inproc["ORD_ID"], {"action": "confirm", "DELIVERY_ADDRESS": "x",
                                                                      "DELIVERY_DISTANCE": "1", "DELIVERY_ARRIVAL_TIME": "2026-10-09T15:30"})
         self.assertNotIn("DELIVERY_CONFIRM_FLG", [k for k, v in self.order(inproc["ORD_ID"]).items() if v])
@@ -1542,9 +1544,9 @@ class Update10(Base):
     # ---------- varieties ----------
     def test_every_variety_has_its_own_skus_and_prices(self):
         codes = {m["MAT_CODE"] for m in self.db("AOIMS_MATERIAL")}
-        self.assertEqual(codes, {"PADDY_HM", "RICE_HM", "BROKEN_HM", "PADDY", "RICE_W5", "BROKEN", "PADDY_GL", "RICE_GL",
-                                 "BROKEN_GL", "BRAN", "HUSK"})
-        self.assertEqual(len([p for p in self.db("AOIMS_PRICE") if p["BRANCH_ID"] == "factory2"]), 11)
+        self.assertEqual(codes, {"PADDY_HM", "RICE_HM", "PADDY", "RICE_W5", "PADDY_GL", "RICE_GL",
+                                 "BROKEN", "BRAN", "HUSK"})                       # update 61: one broken rice SKU
+        self.assertEqual(len([p for p in self.db("AOIMS_PRICE") if p["BRANCH_ID"] == "factory2"]), 9)
         page = self.text("/service/milling/new?svc=buy")
         self.assertIn('name="QTY_PADDY_HM"', page)
         self.assertIn('<tr class="rate-group"><th colspan="4">Jasmine</th></tr>', page)
@@ -1560,15 +1562,15 @@ class Update10(Base):
             col("AOIMS_MILLYIELD").update_one({"BRANCH_ID": "factory2", "RICE_VARIETY": "HM"}, {"$set": {"YIELD_RICE": 0.6, "YIELD_BROKE": 0.05}})
         order = self.new_order(RICE_VARIETY="HM", REGIST_PADDY="100", BROKE_ORDER="2")
         self.assertEqual((order["RICE_VARIETY"], order["EXPCT_RICE"], order["EXPCT_BROKE"]), ("HM", 60.0, 5.0))
-        sell = self.price("BROKEN_HM")["PRICE_SELL"]
-        self.assertEqual(order["EST_PAY_BROKE"], round(2 * sell * 0.9, 2))          # jasmine broken rice price, 10% off
+        sell = self.price("BROKEN")["PRICE_SELL"]
+        self.assertEqual(order["EST_PAY_BROKE"], round(2 * sell * 0.9, 2))          # update 61: the one broken rice price, 10% off
         linked = self.bs()
-        self.assertEqual([(o["MAT_CODE"], o["ORD_QTY"]) for o in linked], [("BROKEN_HM", 2.0)])
+        self.assertEqual([(o["MAT_CODE"], o["ORD_QTY"]) for o in linked], [("BROKEN", 2.0)])
         self.assertEqual(self.new_order(RICE_VARIETY="xx")["RICE_VARIETY"], "WH")    # unknown -> white rice
         self.set_status(order["ORD_ID"], "I")
         self.set_status(order["ORD_ID"], "F")
         self.assertEqual([s["MAT_CODE"] for s in self.db("AOINV_ONHAND")], ["RICE_HM"])
-        self.assertIn('<span class="badge variety-badge">Jasmine</span>', self.text("/service/milling/"))
+        self.assertIn('<span class="badge variety-badge">Jasmine</span>', self.text("/service/milling/?view=done"))
 
     def test_changing_the_variety_moves_the_take_home_order_to_the_new_sku(self):
         order = self.new_order(BROKE_ORDER="1")
@@ -1577,7 +1579,7 @@ class Update10(Base):
                                                                   "BRAN_ORDER": "0", "BROKE_ORDER": "1", "RICE_VARIETY": "GL"})
         self.assertEqual(self.order(order["ORD_ID"])["RICE_VARIETY"], "GL")
         linked = [o for o in self.bs() if o["ORD_STATUS"] != "CC"]
-        self.assertEqual([o["MAT_CODE"] for o in linked], ["BROKEN_GL"])
+        self.assertEqual([o["MAT_CODE"] for o in linked], ["BROKEN"])                   # update 61: same SKU for every variety
 
     # ---------- milling tests ----------
     def test_seeded_tests_give_the_averaged_rates(self):
@@ -2076,7 +2078,7 @@ class Update21(Base):
         (note,) = self.notes(ord_id)
         self.assertEqual((note["NOTIFY_FLG"], note["ERROR"], note["ORD_TYPE"]), ("0", "lnNotConfigured", "ML"))
         self.assertIn("ข้าวของคุณสีเสร็จแล้ว", note["NOTIFY_MESSAGE"])
-        page = self.text("/service/milling/")
+        page = self.text("/service/milling/?view=done")
         self.assertIn("LINE not sent", page)
         self.assertIn("/line-resend", page)
         with mock.patch.dict(os.environ, {"AOI_LINE_CHANNEL_TOKEN": "token"}):
@@ -2095,7 +2097,7 @@ class Update21(Base):
         note = self.notes(ord_id)[0]
         self.assertEqual((note["NOTIFY_FLG"], note["ERROR"]), ("1", None))
         self.assertIsNotNone(note["NOTIFY_DATETIME"])
-        self.assertIn("LINE Sent", self.text("/service/milling/"))
+        self.assertIn("LINE Sent", self.text("/service/milling/?view=done"))
 
     def test_line_message_for_delivery_waits_for_the_delivery_time(self):
         ord_id = self.new_order(ORDER_TYPE="D")["ORD_ID"]
@@ -2114,7 +2116,7 @@ class Update21(Base):
         self.assertEqual(note["NOTIFY_FLG"], "9")
         self.assertIn("15:30", push.call_args[0][1])
         self.assertIn("จัดส่ง", note["NOTIFY_MESSAGE"])
-        self.assertIn("LINE Failed", self.text("/service/milling/"))
+        self.assertIn("LINE Failed", self.text("/service/milling/?view=done"))
         self.assertTrue(self.order(ord_id)["DELIVERY_CONFIRM_FLG"])         # the confirmation itself is saved
 
     def test_a_broken_line_never_stops_the_status_change(self):
@@ -2266,7 +2268,7 @@ class Update23(Base):
         ord_id = self.new_order(ORDER_TYPE="D")["ORD_ID"]
         for status in ("I", "F"):
             self.set_status(ord_id, status)
-        page = self.text("/service/milling/")
+        page = self.text("/service/milling/?view=done")
         self.assertIn('data-form="ready-%s"' % ord_id, page)
         self.assertIn('name="DELIVERY_ARRIVAL_TIME"', page)
         self.set_status(ord_id, "D", DELIVERY_ADDRESS="9 New Road", DELIVERY_DISTANCE="10", DELIVERY_ARRIVAL_TIME="")
@@ -3639,6 +3641,35 @@ class Update58(Base):
             from app.models import ai
             snap = ai.snapshot("factory2")["milling_analysis_last_30_days"]
         self.assertEqual(snap["total"]["orders"], 1)
+
+
+class Update61(Base):
+    """One broken rice SKU for every variety; the old per-variety SKUs are merged."""
+
+    def test_merge(self):
+        from scripts.seed import merge_broken
+        from app.models import variety as var
+        with self.app.app_context():
+            db = __import__("app.db", fromlist=["get_db"]).get_db()
+            col("AOIMS_MATERIAL").insert_one({"MAT_CODE": "BROKEN_HM", "MAT_DESC": "ปลายข้าวหอมมะลิ"})
+            col("AOIMS_PRICE").insert_one({"BRANCH_ID": "factory2", "MAT_CODE": "BROKEN_HM", "PRICE_SELL": 18.0})
+            col("AOINV_ONHAND").insert_one({"INV_ID": "X1", "BRANCH_ID": "factory2", "LOC_ID": "01-001-001", "MAT_CODE": "BROKEN_GL",
+                                            "INV_QTY": 5.0, "INV_STATUS": "A", "SUB_2": None})
+            col("AOITS_ORDBUYSELL").insert_one({"ORD_ID": "SL-X", "ORD_STATUS": "O", "MAT_CODE": "BROKEN_HM",
+                                                "ORD_ITEMS": [{"MAT_CODE": "BRAN"}, {"MAT_CODE": "BROKEN_HM"}]})
+            merge_broken(db)
+            self.assertIsNone(col("AOIMS_MATERIAL").find_one({"MAT_CODE": "BROKEN_HM"}))
+            self.assertIsNone(col("AOIMS_PRICE").find_one({"MAT_CODE": "BROKEN_HM"}))
+            self.assertEqual(col("AOINV_ONHAND").find_one({"INV_ID": "X1"})["MAT_CODE"], "BROKEN")
+            o = col("AOITS_ORDBUYSELL").find_one({"ORD_ID": "SL-X"})
+            self.assertEqual((o["MAT_CODE"], [l["MAT_CODE"] for l in o["ORD_ITEMS"]]), ("BROKEN", ["BRAN", "BROKEN"]))
+        with self.app.test_request_context():
+            self.assertEqual(var.mat_name("BROKEN_HM"), var.mat_name("BROKEN"))   # old records: broken rice
+        self.login("admin")
+        self.client.get("/lang/en")
+        page = self.text("/service/milling/new?svc=sell")
+        self.assertIn('name="QTY_BROKEN"', page)
+        self.assertNotIn('name="QTY_BROKEN_HM"', page)
 
 
 if __name__ == "__main__":
