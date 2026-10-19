@@ -359,15 +359,25 @@ class MillingOrder:
         order = cls._open_order(ord_id, branch_id)
         if new_type not in (flow.TAKEAWAY, flow.DELIVER) or new_type == order["ORDER_TYPE"]:
             raise ValidationError("errStatusNotAllowed")
+        arrival = None
         if new_type == flow.DELIVER:
             address, distance = cls._delivery_inputs(form, Customer.find(order["CUST_CODE"]))
             values = {"ORDER_TYPE": flow.DELIVER, "DELIVERY_ADDRESS": address, "DELIVERY_DISTANCE": distance,
                       "EST_PAY_DELIVERY": cls._delivery_fee(branch_id, distance)}
+            if order["MILL_STATUS"] == flow.FINISHED:
+                # update 56 (Tim): milled already - the delivery is confirmed now (address, distance, arrival time),
+                # the order goes to Ready for Delivery and the customer gets the LINE message with the time
+                arrival = parse_local_datetime((form or {}).get("DELIVERY_ARRIVAL_TIME"))
+                if arrival is None:
+                    raise ValidationError("errArrivalTime")
+                values.update({"MILL_STATUS": flow.DELIVERY, "DELIVERY_ARRIVAL_TIME": arrival, "DELIVERY_CONFIRM_FLG": True})
         else:
             values = {"ORDER_TYPE": flow.TAKEAWAY, "EST_PAY_DELIVERY": 0.0, "DELIVERY_CONFIRM_FLG": False, "DELIVERY_ARRIVAL_TIME": None}
             if order["MILL_STATUS"] == flow.DELIVERY:
                 values["MILL_STATUS"] = flow.FINISHED          # the customer picks up instead
         updated = cls._save(order, values, ope_user)
+        if arrival is not None:
+            cls._notify(updated, "delivery", arrival)          # update 56: LINE with the arrival time
         if order["MILL_STATUS"] == flow.DELIVERY and updated["MILL_STATUS"] == flow.FINISHED:
             cls._notify(updated, "finished", now_utc())        # LINE: ready to pick up after all
         return updated

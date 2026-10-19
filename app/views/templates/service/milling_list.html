@@ -16,7 +16,8 @@
   <label class="field-label" for="ml-search">{{ t('mlSearchLabel') }}</label>
   <div class="row-inline last">
     <input type="hidden" name="go" value="1">
-    <input type="search" id="ml-search" name="q" value="{{ q }}" placeholder="{{ t('mlSearchPh') }}" autocapitalize="characters" spellcheck="false" autocomplete="off" data-scan="submit">
+    <input type="search" id="ml-search" name="q" value="{{ q }}" placeholder="{{ t('mlSearchPh') }}" autocapitalize="characters" spellcheck="false" autocomplete="off" data-scan="submit" list="ml-names">
+    <datalist id="ml-names">{% for n in name_options %}<option value="{{ n }}"></option>{% endfor %}</datalist>
     <button type="submit" class="action primary" id="ml-search-btn">{{ t('btnSearch') }}</button>
     {% if q %}<a class="action" href="{{ url_for('service_milling.order_list', view=view_arg, status=status, type=order_type) }}" id="ml-search-clear">{{ t('btnClear') }}</a>{% endif %}
   </div>
@@ -99,7 +100,8 @@
         <select class="order-type-select" id="order-type-{{ order.ORD_ID }}" name="new_type" data-autosubmit {% if not editable %}disabled{% endif %}>
           <option value="T"{% if order.ORDER_TYPE == 'T' %} selected{% else %}
             data-confirm="{{ t('confirmTypeToTakeawayFromDelivery', id=order.QR_ID, status=t(status_keys['F'])) if order.MILL_STATUS == 'D' else t('confirmTypeToTakeaway', id=order.QR_ID) }}"{% endif %}>{{ t('deliveryTakeaway') }}</option>
-          <option value="D"{% if order.ORDER_TYPE == 'D' %} selected{% else %}
+          <option value="D"{% if order.ORDER_TYPE == 'D' %} selected{% elif order.MILL_STATUS == 'F' %}
+            data-form="type-delivery-{{ order.ORD_ID }}"{% else %}
             data-prompts='{{ [{"name": "DELIVERY_ADDRESS", "label": t("typeToDeliveryPrompt", id=order.QR_ID), "value": order.DELIVERY_ADDRESS or order.customer.get("ADDRESS", "")},
                               {"name": "DELIVERY_DISTANCE", "label": t("lblDistanceKm"), "value": (order.DELIVERY_DISTANCE if order.DELIVERY_DISTANCE is not none else order.customer.get("DISTANCE_KM"))|plain|string}]|tojson }}'{% endif %}>{{ t('deliveryDelivery') }}</option>
         </select>
@@ -165,6 +167,36 @@
         <div class="btn-pair">
           <button type="button" class="action" data-modal-close>{{ t('btnCancel') }}</button>
           <button type="submit" class="action primary ready-save-btn">{{ t('btnConfirmSendLine') }}</button>
+        </div>
+      </form>
+    </template>
+    {% endif %}
+
+    {% if editable and order.MILL_STATUS == 'F' and order.ORDER_TYPE == 'T' %}
+    {# update 56: Finished take-away changed to Delivery - the delivery is confirmed now and the customer gets LINE #}
+    <template id="type-delivery-{{ order.ORD_ID }}">
+      <form method="post" action="{{ url_for('service_milling.change_type', ord_id=order.ORD_ID) }}" class="ready-form inbound-form order-details" autocomplete="off">
+        {{ hidden() }}
+        <input type="hidden" name="new_type" value="D">
+        <p class="od-title">{{ t('typeDeliveryTitle', id=order.QR_ID) }}</p>
+        <p class="cap-note">{{ t('typeDeliveryNote') }}</p>
+        <div class="od-row"><span class="od-label">{{ t('colCustomer') }}</span><span class="od-value">{{ order.customer.get('CUST_NAME', order.CUST_CODE) }}</span></div>
+        <div class="od-row"><span class="od-label">{{ t('lblDeliveryLoc') }}</span><span class="od-value">{{ order.REF_INV_LOC or '-' }}</span></div>
+        <div class="field-row">
+          <label class="field-label" for="td-addr-{{ order.ORD_ID }}">{{ t('lblDeliveryAddr') }}</label>
+          <input type="text" id="td-addr-{{ order.ORD_ID }}" name="DELIVERY_ADDRESS" value="{{ order.DELIVERY_ADDRESS or order.customer.get('ADDRESS', '') or '' }}" maxlength="200" required>
+        </div>
+        <div class="field-row">
+          <label class="field-label" for="td-km-{{ order.ORD_ID }}">{{ t('lblDistanceKm') }}</label>
+          <input type="number" min="0" step="0.1" id="td-km-{{ order.ORD_ID }}" name="DELIVERY_DISTANCE" value="{{ (order.DELIVERY_DISTANCE if order.DELIVERY_DISTANCE is not none else order.customer.get('DISTANCE_KM'))|plain }}" required>
+        </div>
+        <div class="field-row">
+          <label class="field-label" for="td-arrival-{{ order.ORD_ID }}">{{ t('lblArrivalTime') }}</label>
+          <input type="datetime-local" id="td-arrival-{{ order.ORD_ID }}" name="DELIVERY_ARRIVAL_TIME" value="{{ order.arrival_input }}" required>
+        </div>
+        <div class="btn-pair">
+          <button type="button" class="action" data-modal-close>{{ t('btnCancel') }}</button>
+          <button type="submit" class="action primary">{{ t('btnConfirmSendLine') }}</button>
         </div>
       </form>
     </template>

@@ -15,6 +15,7 @@ Three kinds of order, one record per material:
 Status flow: Open -> Prepared -> Unpaid -> Closed; Open (and Prepared, except a received buying order) -> Cancelled.
 Every change is also written to AOILOG_ORDBUYSELL.
 """
+import re
 from .account import Account
 from .base import col, NO_ID, ValidationError, audit_new, audit_update, round_half_up, to_number
 from .counter import Counter
@@ -62,6 +63,38 @@ class BuySellOrder:
     @staticmethod
     def is_linked(order):
         return order.get("REF_ORD_TYPE") == "ML"
+
+    # ---------- update 56: a customer buying order (SL) linked by hand to a milling order ----------
+    @staticmethod
+    def resolve_milling(branch_id, text, cust_code):
+        """The milling order typed or scanned (ML-YYYYMMDD-NNNN or the label AOI-ML-...); None when empty.
+        It must be of this branch and this customer."""
+        from .milling_order import MillingOrder
+        code = re.sub(r"\s+", "", text or "").upper()
+        if not code:
+            return None
+        if code.startswith("AOI-"):
+            code = code[4:]
+        milling = MillingOrder.find(code, branch_id)
+        if not milling:
+            raise ValidationError("errLinkMlNotFound", id=code)
+        if milling["CUST_CODE"] != cust_code:
+            raise ValidationError("errLinkMlOtherCustomer", id=milling["QR_ID"])
+        return milling
+
+    @classmethod
+    def link_milling(cls, ord_id, branch_id, text, ope_user):
+        order = cls.find(ord_id, branch_id)
+        if not order:
+            raise ValidationError("errOrderNotFound")
+        if order["ORD_TYPE"] != SELL or cls.is_linked(order) or not cls.is_open(order):
+            raise ValidationError("errStatusNotAllowed")
+        milling = cls.resolve_milling(branch_id, text, order["CUST_CODE"])
+        return cls._save(order, {"LINK_ML_ID": milling["ORD_ID"] if milling else None}, ope_user)
+
+    @classmethod
+    def linked_by_hand(cls, milling_ord_id):
+        return list(col(cls.COL).find({"LINK_ML_ID": milling_ord_id}, NO_ID).sort([("ORD_ID", 1)]))
 
     @classmethod
     def allowed_next(cls, order):
@@ -194,6 +227,8 @@ class BuySellOrder:
         updated = cls._save(order, values, ope_user)
         if new_status == CLOSED:
             cls._on_close(updated, ope_user, describe)
+        elif new_status == CANCELLED and order["ORD_TYPE"] == SELL and not cls.is_linked(order):
+            Inventory.unreserve(order["BRANCH_ID"], order["ORD_ID"], SELL, ope_user)   # update 56: back to the mill's stock
         return updated
 
     @classmethod
@@ -201,6 +236,9 @@ class BuySellOrder:
         """Closed: stock leaves (selling orders) and the ledger entry is posted."""
         if cls.is_linked(order):
             Inventory.release(order["BRANCH_ID"], order["ORD_ID"], order["ORD_TYPE"], MOVE_ORDER_CLOSE, ope_user)
+        elif order["ORD_TYPE"] == SELL and Inventory.for_order(order["BRANCH_ID"], order["ORD_ID"]):
+            # update 56: picked at Prepared (Inventory Outbound) - the kept goods leave now
+            Inventory.release(order["BRANCH_ID"], order["ORD_ID"], SELL, MOVE_SELLING, ope_user)
         elif order["ORD_TYPE"] == SELL:
             Inventory.release_free(order["BRANCH_ID"], order["MAT_CODE"], order["ORD_QTY"], order["ORD_ID"], SELL,
                                    MOVE_SELLING, ope_user)
@@ -247,6 +285,7 @@ class BuySellOrder:
         if not customer:
             raise ValidationError("alertCustInfoRequired")
         items = cls.parse_items(branch_id, ord_type, form)
+        link = cls.resolve_milling(branch_id, form.get("LINK_ML"), customer["CUST_CODE"]) if ord_type == SELL else None
         inbound = None
         if close and ord_type == BUY:                        # checked before anything is saved
             inbound = Inventory.parse_inbound(form, 1)
@@ -258,7 +297,8 @@ class BuySellOrder:
             order = {"ORD_ID": ord_id, "BRANCH_ID": branch_id, "ORD_TYPE": ord_type, "CUST_CODE": customer["CUST_CODE"],
                      "ORD_STATUS": OPEN, "QR_ID": qr_id, "MAT_CODE": item["mat"], "ORD_QTY": item["qty"], "UOM_CODE": "KG",
                      "REMARK": None, "PRICING_UINT": item["price"], "ORD_AMOUNT": item["amount"],
-                     "REF_ORD_ID": None, "REF_ORD_TYPE": None, "REF_QR_PRINT": None, "REF_INV_LOC": None}
+                     "REF_ORD_ID": None, "REF_ORD_TYPE": None, "REF_QR_PRINT": None, "REF_INV_LOC": None,
+                     "LINK_ML_ID": link["ORD_ID"] if link else None}
             order.update(audit_new(ope_user))
             col(cls.COL).insert_one(dict(order))
             cls._log(ord_id)
@@ -295,7 +335,10 @@ class BuySellOrder:
                               MOVE_BUYING, ope_user, reserve=False)
             return inbound["loc"]
         if not cls.is_linked(order):
-            return None
+            # update 56: a customer buying order - Inventory Outbound: the goods are taken from the mill's stock
+            # (the location chosen, or oldest first) and kept for the order until it is closed
+            return Inventory.reserve_free(order["BRANCH_ID"], order["MAT_CODE"], order["ORD_QTY"], order["ORD_ID"], SELL,
+                                          (form or {}).get("OUT_LOC") or None, ope_user)
         # update 42 (Tim): the buying/selling order is prepared and closed on its own - it does not wait for the
         # milling order's status. The lot still names the milling order it came from.
         lot = lot_of(order["REF_ORD_ID"]) if order.get("REF_ORD_TYPE") == "ML" and order.get("REF_ORD_ID") else None

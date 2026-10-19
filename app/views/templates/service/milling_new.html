@@ -134,6 +134,13 @@
         {% endfor %}
       </tbody>
     </table>
+    {% if code == 'SL' %}
+    {# update 56: a customer buying order can be linked with a milling order of the same customer #}
+    <div class="field-row mt14">
+      <label class="field-label" for="sell-link-ml">{{ t('lblLinkMl') }}</label>
+      <input type="text" id="sell-link-ml" name="LINK_ML" placeholder="{{ t('linkMlPh') }}" autocapitalize="characters" spellcheck="false" autocomplete="off" maxlength="30" data-scan>
+    </div>
+    {% endif %}
     <div class="total-row mt14"><span>{{ t('totalLabel') }}</span><span class="bs-total">0.00 THB &middot; 0.00 kg</span></div>
     <p class="login-error mb0 bs-error" role="alert"></p>
     {% if bs_editable %}

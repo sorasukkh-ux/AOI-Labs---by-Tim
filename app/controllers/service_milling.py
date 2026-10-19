@@ -247,11 +247,11 @@ def _decorate(orders, details=False):
             order["suggest_loc"] = suggest_loc
         order["needs_attention"] = MillingOrder.needs_attention(order)
         order["qty_editable"] = flow.quantities_editable(order)
-        if order["MILL_STATUS"] == flow.DELIVERY or flow.DELIVERY in order["next_statuses"]:
+        if order["MILL_STATUS"] in (flow.DELIVERY, flow.FINISHED) or flow.DELIVERY in order["next_statuses"]:
             order["arrival_input"] = input_local_datetime(order.get("DELIVERY_ARRIVAL_TIME")) or default_arrival(order["BRANCH_ID"])
         if details:
             order["events"] = mill_event.for_order(order["ORD_ID"])
-            order["linked"] = BuySellOrder.for_milling(order["ORD_ID"])
+            order["linked"] = BuySellOrder.for_milling(order["ORD_ID"]) + BuySellOrder.linked_by_hand(order["ORD_ID"])   # update 56
             for bso in order["linked"]:                      # update 39: one order, a line per SKU
                 lines = [l for l in BuySellOrder.items_of(bso) if l["ORD_QTY"] > 0] or BuySellOrder.items_of(bso)[:1]
                 bso["mat_text"] = ", ".join(mat_name(l["MAT_CODE"]) for l in lines)
@@ -278,6 +278,8 @@ def order_list():
     q = (request.args.get("q") or "").strip()[:60]
     branch = operating_branch()
     every = MillingOrder.for_branch(branch, ACTIVE_STATUSES + ENDED_STATUSES)
+    # update 56: the customer names of the branch's orders, offered while typing in the search box
+    names = sorted({(Customer.find(c) or {}).get("CUST_NAME") or "" for c in {o["CUST_CODE"] for o in every}} - {""})
     if order_type:
         every = [o for o in every if o["ORDER_TYPE"] == order_type]
     if q:                                                # update 37: search (typed, or the QR on the label scanned)
@@ -298,7 +300,7 @@ def order_list():
         return redirect(url_for("service_milling.order_list", view=None if view == "closed" else "closed", type=order_type, q=q,
                                 go=request.args.get("go") or None))
     status_counts = {s: sum(1 for o in every if o["MILL_STATUS"] == s) for s in statuses}
-    return render_template("service/milling_list.html", orders=orders, q=q, auto_open=exact, list_base=base, view=view,
+    return render_template("service/milling_list.html", name_options=names, orders=orders, q=q, auto_open=exact, list_base=base, view=view,
                            view_arg="closed" if view == "closed" else None, counts=counts, status_counts=status_counts,
                            closed_limit=CLOSED_LIMIT, status=status, order_type=order_type, filters=statuses, **_context())
 
@@ -317,8 +319,14 @@ def _matches(order, q):
         return True
     if needle.startswith("ml-"):
         return order["ORD_ID"].lower() == needle or (len(needle) < 16 and needle in order["ORD_ID"].lower())
-    fields = [order.get("QR_ID"), order.get("CUST_CODE"), (order.get("customer") or {}).get("CUST_NAME")]
-    return any(needle in str(f).lower() for f in fields if f)
+    customer = order.get("customer") or {}
+    fields = [order.get("QR_ID"), order.get("CUST_CODE"), customer.get("CUST_NAME"), customer.get("MOBILE_NO")]
+    if any(needle in str(f).lower() for f in fields if f):
+        return True
+    # update 56: a customer name typed without spaces or with other tone marks (อ้อย / อ๋อย) still matches
+    from ..models.market import normalize
+    loose = normalize(needle)
+    return bool(loose) and any(loose in normalize(str(f)) for f in (customer.get("CUST_NAME"), customer.get("CUST_CODE")) if f)
 
 
 def _order_or_404(ord_id):

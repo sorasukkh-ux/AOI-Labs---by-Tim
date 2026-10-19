@@ -43,6 +43,8 @@
       {% if order.milling %}{% if can('SV_MILLSTATUS') %}<a class="badge from-milling link" href="{{ url_for('service_milling.order_list', q='AOI-' ~ order.REF_ORD_ID) }}" data-milling-link title="{{ t('tabUpdateStatus') }}">{{ t('fromMillingBadge', id=order.milling.get('QR_ID', order.REF_ORD_ID)) }} &rarr;</a>
       {% else %}<span class="badge from-milling">{{ t('fromMillingBadge', id=order.milling.get('QR_ID', order.REF_ORD_ID)) }}</span>{% endif %}
       {% else %}<span class="badge manual">{{ t('newServiceOrderBadge') }}</span>{% endif %}
+      {% if order.link_ml %}{% if can('SV_MILLSTATUS') %}<a class="badge from-milling link" href="{{ url_for('service_milling.order_list', q='AOI-' ~ order.LINK_ML_ID) }}" data-link-ml="{{ order.LINK_ML_ID }}">{{ t('linkMlBadge', id=order.link_ml.get('QR_ID', order.LINK_ML_ID)) }} &rarr;</a>
+      {% else %}<span class="badge from-milling" data-link-ml="{{ order.LINK_ML_ID }}">{{ t('linkMlBadge', id=order.link_ml.get('QR_ID', order.LINK_ML_ID)) }}</span>{% endif %}{% endif %}
       <span class="ord-cust">{{ order.customer.get('CUST_NAME', order.CUST_CODE) }} &middot; {{ order.lines_text or (material ~ ' ' ~ order.ORD_QTY|num ~ ' kg') }} &middot; <span class="bs-amount">{{ order.amount|num }} THB</span> &middot; {{ order.registered_text }}</span>
     </div>
     <form method="post" action="{{ url_for('service_buysell.change_status', ord_id=order.ORD_ID) }}">
@@ -55,6 +57,7 @@
         <option value="{{ nxt }}"
           {% if nxt == 'P' and not order.milling_ready %}disabled
           {% elif nxt == 'P' and order.needs_inbound %}data-form="prepare-{{ order.ORD_ID }}"
+          {% elif nxt == 'P' and order.needs_outbound %}data-form="outbound-{{ order.ORD_ID }}"
           {% elif nxt == 'P' %}data-confirm="{{ t('confirmPrepareSellDirect', id=order.QR_ID) }}"
           {% elif nxt == 'C' %}data-confirm="{{ order.close_text }}"
           {% elif nxt == 'CC' %}data-confirm="{{ t('confirmCancelBsOrder', id=order.QR_ID) }}"{% endif %}>{{ t(status_keys[nxt]) }}</option>
@@ -88,6 +91,44 @@
         <div class="btn-pair">
           <button type="button" class="action" data-modal-close>{{ t('btnCancel') }}</button>
           <button type="submit" class="action primary">{{ t('btnSaveChanges') }}</button>
+        </div>
+      </form>
+    </template>
+    {% endif %}
+
+    {% if order.kept %}<p class="bs-note" data-kept>{{ t('outboundKept', stock=order.kept|map(attribute='LOC_ID')|join(', '), qty=order.kept|sum(attribute='INV_QTY')|num) }}</p>{% endif %}
+    {% if editable and order.ORD_TYPE == 'SL' and not order.milling and order.is_open %}
+    {# update 56: link a customer buying order to a milling order of the same customer #}
+    <form method="post" action="{{ url_for('service_buysell.link', ord_id=order.ORD_ID) }}" class="bs-link-form">
+      {{ hidden() }}
+      <button type="button" class="action small" data-link-btn
+              data-prompts='{{ [{"name": "LINK_ML", "label": t("linkMlPrompt", id=order.QR_ID), "value": order.LINK_ML_ID or ""}]|tojson }}'>&#128279; {{ t('linkMlBtn') if not order.LINK_ML_ID else t('linkMlChange') }}</button>
+    </form>
+    {% endif %}
+    {% if editable and order.needs_outbound %}
+    {# update 56: Prepared = Inventory Outbound - the goods are picked from the mill's stock and kept for the order #}
+    <template id="outbound-{{ order.ORD_ID }}">
+      <form method="post" action="{{ url_for('service_buysell.change_status', ord_id=order.ORD_ID) }}" class="inbound-form order-details">
+        {{ hidden() }}
+        <input type="hidden" name="new_status" value="P">
+        <p class="od-title">{{ t('outboundTitle', id=order.QR_ID) }}</p>
+        <p class="cap-note">{{ t('outboundNote') }}</p>
+        <div class="od-row"><span class="od-label">{{ t('lblSkuName') }}</span><span class="od-value">{{ material }}</span></div>
+        <div class="od-row"><span class="od-label">{{ t('colQty') }}</span><span class="od-value">{{ order.ORD_QTY|num }} kg</span></div>
+        <div class="od-row"><span class="od-label">{{ t('colCustomer') }}</span><span class="od-value">{{ order.customer.get('CUST_NAME', order.CUST_CODE) }}</span></div>
+        <div class="od-row"><span class="od-label">{{ t('outboundFree') }}</span><span class="od-value{% if order.free_total < order.ORD_QTY %} bad{% endif %}">{{ order.free_total|num }} kg</span></div>
+        {% if order.free_stock %}
+        <div class="field-row">
+          <label class="field-label" for="out-loc-{{ order.ORD_ID }}">{{ t('outboundFrom') }}</label>
+          <select id="out-loc-{{ order.ORD_ID }}" name="OUT_LOC">
+            <option value="">{{ t('outboundFifo') }}</option>
+            {% for r in order.free_stock %}<option value="{{ r.LOC_ID }}">{{ r.LOC_ID }} &middot; {{ r.INV_QTY|num }} kg{% if r.SUB_1 %} &middot; {{ r.SUB_1 }}{% endif %}</option>{% endfor %}
+          </select>
+        </div>
+        {% else %}<p class="notice error">{{ t('outboundNone') }}</p>{% endif %}
+        <div class="btn-pair">
+          <button type="button" class="action" data-modal-close>{{ t('btnCancel') }}</button>
+          <button type="submit" class="action primary"{% if not order.free_stock %} disabled{% endif %}>{{ t('outboundConfirm') }}</button>
         </div>
       </form>
     </template>

@@ -177,6 +177,43 @@ class Inventory:
         return taken
 
 
+    @classmethod
+    def reserve_free(cls, branch_id, mat_code, qty, ord_id, ord_type, loc_id, ope_user):
+        """Update 56, Inventory Outbound of a customer buying order: `qty` of the mill's own stock (at `loc_id`, or
+        oldest first) is kept for the order (SUB_2 = order ID) until the order is closed. Refused when there is
+        not enough. Returns the location (the first one when several)."""
+        qty = round_half_up(float(qty or 0), 3)
+        stock = [r for r in cls.free_stock(branch_id, mat_code) if not loc_id or r["LOC_ID"] == loc_id]
+        have = round_half_up(sum(r["INV_QTY"] for r in stock), 3)
+        if have < qty:
+            raise ValidationError("errOutboundShort", need="%.2f" % qty, have="%.2f" % have, loc=loc_id or "-")
+        remaining, first = qty, None
+        for record in stock:
+            if remaining <= 0:
+                break
+            take = round_half_up(min(record["INV_QTY"], remaining), 3)
+            left = round_half_up(record["INV_QTY"] - take, 3)
+            if left > 0:
+                col(cls.COL).update_one({"INV_ID": record["INV_ID"]}, {"$set": dict({"INV_QTY": left}, **audit_update(ope_user))})
+            else:
+                col(cls.COL).delete_one({"INV_ID": record["INV_ID"]})
+            kept = {"INV_ID": cls._next_id(), "BRANCH_ID": branch_id, "LOC_ID": record["LOC_ID"], "MAT_CODE": mat_code,
+                    "SUB_1": record.get("SUB_1"), "SUB_2": ord_id, "INV_QTY": take, "INV_STATUS": record["INV_STATUS"],
+                    "UOM_CODE": record.get("UOM_CODE") or "KG"}
+            kept.update(audit_new(ope_user))
+            col(cls.COL).insert_one(dict(kept))
+            cls._log(kept, OPE_TRANSFER, MOVE_ORDER_PREP, record["LOC_ID"], record["LOC_ID"], take, ord_id, ord_type, ope_user)
+            first = first or record["LOC_ID"]
+            remaining = round_half_up(remaining - take, 3)
+        return first
+
+    @classmethod
+    def unreserve(cls, branch_id, ord_id, ord_type, ope_user):
+        """Update 56: a cancelled customer buying order gives its kept goods back to the mill's stock."""
+        for record in cls.for_order(branch_id, ord_id):
+            col(cls.COL).update_one({"INV_ID": record["INV_ID"]}, {"$set": dict({"SUB_2": None}, **audit_update(ope_user))})
+            cls._log(record, OPE_TRANSFER, "Order cancelled", record["LOC_ID"], record["LOC_ID"], record["INV_QTY"], ord_id, ord_type, ope_user)
+
     # ---------- Inventory screens: items and their operations ----------
     @staticmethod
     def item_key(record):

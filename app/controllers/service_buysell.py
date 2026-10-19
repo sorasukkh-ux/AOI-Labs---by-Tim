@@ -63,8 +63,21 @@ def _decorate(orders):
                     suggest = Inventory.last_location(order["BRANCH_ID"])
                 order["suggest_loc"] = suggest
         order["needs_inbound"] = BuySellOrder.needs_inbound(order)
+        # update 56: a customer buying order picks its goods from stock at Prepared (Inventory Outbound)
+        order["needs_outbound"] = order["ORD_TYPE"] == bs.SELL and not BuySellOrder.is_linked(order) and bs.PREPARED in order["next_statuses"]
+        if order["needs_outbound"]:
+            order["free_stock"] = Inventory.free_stock(order["BRANCH_ID"], order["MAT_CODE"])
+            order["free_total"] = round(sum(r["INV_QTY"] for r in order["free_stock"]), 3)
+        order["kept"] = Inventory.for_order(order["BRANCH_ID"], order["ORD_ID"]) if order["ORD_TYPE"] == bs.SELL and not BuySellOrder.is_linked(order) else []
+        if order.get("LINK_ML_ID"):                       # update 56: linked by hand to a milling order
+            ref = order["LINK_ML_ID"]
+            if ref not in millings:
+                millings[ref] = MillingOrder.find(ref) or {}
+            order["link_ml"] = millings[ref]
         if bs.CLOSED in order["next_statuses"]:
-            if BuySellOrder.is_linked(order):
+            if order["kept"]:
+                order["close_text"] = t("confirmCloseBsOrder", id=order["QR_ID"], stock=Inventory.describe(order["kept"]))
+            elif BuySellOrder.is_linked(order):
                 order["close_text"] = t("confirmCloseBsOrder", id=order["QR_ID"],
                                         stock=Inventory.describe(Inventory.for_order(order["BRANCH_ID"], order["ORD_ID"])) or "-")
             elif order["ORD_TYPE"] == bs.SELL:
@@ -103,9 +116,9 @@ def _matches(order, q):
         needle = needle[4:]
     milling = order.get("milling") or {}
     fields = [order.get("ORD_ID"), order.get("QR_ID"), order.get("REF_ORD_ID"), milling.get("QR_ID"), order.get("CUST_CODE"),
-              (order.get("customer") or {}).get("CUST_NAME")]
+              (order.get("customer") or {}).get("CUST_NAME"), order.get("LINK_ML_ID")]
     if needle.startswith("ml-"):
-        return (order.get("REF_ORD_ID") or "").lower() == needle
+        return needle in ((order.get("REF_ORD_ID") or "").lower(), (order.get("LINK_ML_ID") or "").lower())
     return any(needle in str(f).lower() for f in fields if f)
 
 
@@ -122,6 +135,23 @@ def maintain(ord_id):
         flash_error(error)
     else:
         flash_ok("msgOrderUpdated", id=order["QR_ID"])
+    return redirect(url_for("service_buysell.order_list", status=request.form.get("status_filter") or None,
+                            type=request.form.get("type_filter") or None, q=request.form.get("q_filter") or None))
+
+
+@bp.route("/<ord_id>/link", methods=["POST"])
+@require(MENU, "edit")
+def link(ord_id):
+    """Update 56: link a customer buying order to a milling order of the same customer (or remove the link)."""
+    order = BuySellOrder.find(ord_id, operating_branch())
+    if not order:
+        abort(404)
+    try:
+        saved = BuySellOrder.link_milling(order["ORD_ID"], operating_branch(), request.form.get("LINK_ML"), current_user()["USER_ID"])
+    except ValidationError as error:
+        flash_error(error)
+    else:
+        flash_ok("msgLinkMlSaved" if saved.get("LINK_ML_ID") else "msgLinkMlRemoved", id=order["QR_ID"])
     return redirect(url_for("service_buysell.order_list", status=request.form.get("status_filter") or None,
                             type=request.form.get("type_filter") or None, q=request.form.get("q_filter") or None))
 

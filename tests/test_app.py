@@ -421,11 +421,23 @@ class MillingOrders(Base):
         self.post("/service/milling/%s/type" % ord_id, {"new_type": "T"})          # the customer picks up instead
         saved = self.order(ord_id)
         self.assertEqual((saved["ORDER_TYPE"], saved["MILL_STATUS"], saved["EST_PAY_DELIVERY"]), ("T", "F", 0.0))
+        # update 56: at Finished the change to Delivery needs the arrival time (the pop-up) ...
         self.post("/service/milling/%s/type" % ord_id, {"new_type": "D", "DELIVERY_ADDRESS": "", "DELIVERY_DISTANCE": ""})
+        self.assertEqual(self.order(ord_id)["ORDER_TYPE"], "T")
+        self.assertIn('data-form="type-delivery-%s"' % ord_id, self.text("/service/milling/"))
+        # ... and then the order is Ready for Delivery with the time confirmed, and the LINE message is written
+        from unittest import mock
+        with mock.patch("app.models.notify.queue") as queued:
+            self.post("/service/milling/%s/type" % ord_id, {"new_type": "D", "DELIVERY_ADDRESS": "", "DELIVERY_DISTANCE": "",
+                                                            "DELIVERY_ARRIVAL_TIME": "2026-10-20T10:00"})
         saved = self.order(ord_id)
-        self.assertEqual((saved["ORDER_TYPE"], saved["EST_PAY_DELIVERY"]), ("D", 30.0))   # customer's address and distance again
-        self.set_status(ord_id, "C")                                    # a delivery order closes only after Ready for Delivery
+        self.assertEqual((saved["ORDER_TYPE"], saved["EST_PAY_DELIVERY"], saved["MILL_STATUS"], saved["DELIVERY_CONFIRM_FLG"]),
+                         ("D", 30.0, "D", True))                         # customer's address and distance again
+        self.assertEqual(queued.call_args[0][1], "delivery")
+        self.post("/service/milling/%s/type" % ord_id, {"new_type": "T"})
         self.assertEqual(self.order(ord_id)["MILL_STATUS"], "F")
+        self.set_status(ord_id, "C")                                    # take-away again: closes from Finished
+        self.assertEqual(self.order(ord_id)["MILL_STATUS"], "C")
 
     def test_print_qr_saves_through_the_page_and_answers_in_json(self):
         data = {"CUST_CODE": "C261001001", "REGIST_PADDY": "33", "ORDER_TYPE": "T", "csrf_token": self.token("/service/milling/new")}
@@ -1031,10 +1043,12 @@ class Update6(Base):
         self.assertNotIn('value="CC"', card[:card.index("</select>")])           # received goods: no cancel
         self.bs_status(buy["ORD_ID"], "C")
         self.assertEqual(self.bs(buy["ORD_ID"])["ORD_STATUS"], "C")
-        self.bs_status(sell["ORD_ID"], "P")                                       # selling: no stock moves at Prepared
+        self.assertIn('data-form="outbound-%s"' % sell["ORD_ID"], self.text("/service/buysell/"))   # update 56
+        self.bs_status(sell["ORD_ID"], "P")                                       # Inventory Outbound: picked, kept for it
         self.assertEqual(self.bs(sell["ORD_ID"])["ORD_STATUS"], "P")
-        self.assertIn("on hand: 98.00 kg", self.text("/service/buysell/"))        # the close confirmation shows the stock
-        self.assertEqual(self.db("AOINV_ONHAND")[0]["INV_QTY"], 98.0)
+        self.assertIn("60.00 kg @ 01-001-001", self.text("/service/buysell/"))   # the close confirmation shows the stock
+        stock = sorted((r["INV_QTY"], r.get("SUB_2")) for r in self.db("AOINV_ONHAND"))
+        self.assertEqual(stock, [(38.0, None), (60.0, sell["ORD_ID"])])
         self.bs_status(sell["ORD_ID"], "U")
         self.bs_status(sell["ORD_ID"], "C")
         self.assertEqual(self.db("AOINV_ONHAND")[0]["INV_QTY"], 38.0)
@@ -3520,6 +3534,88 @@ class Update54(Base):
             p = notify.order_params(order, now_utc() + timedelta(days=3))
             self.assertTrue(p["day"].startswith("วันที่ "))
             self.assertEqual(notify.order_params(order, now_utc())["day"], "วันนี้")
+
+
+class Update56(Base):
+    """Customer Buying / Selling Order names, link with a milling order, Inventory Outbound; milling name search;
+    Finished take-away -> Delivery with the delivery pop-up."""
+
+    def setUp(self):
+        super().setUp()
+        self.login("admin")
+        self.client.get("/lang/en")
+
+    def trade(self, ord_type, mode="open", cust="C261001001", **fields):
+        data = {"ORD_TYPE": ord_type, "mode": mode, "CUST_CODE": cust, "csrf_token": self.token("/service/milling/new")}
+        data.update(fields)
+        return self.client.post("/service/buysell/new", data=data, headers={"Accept": "application/json"})
+
+    def bs(self, ord_id):
+        return next(o for o in self.db("AOITS_ORDBUYSELL") if o["ORD_ID"] == ord_id)
+
+    def bs_status(self, ord_id, status, **fields):
+        return self.post("/service/buysell/%s/status" % ord_id, dict({"new_status": status}, **fields))
+
+    def test_names(self):
+        page = self.text("/service/milling/new")
+        self.assertIn("Customer Buying Order", page)
+        self.assertIn("Customer Selling Order", page)
+        self.assertIn('id="sell-link-ml"', page)
+
+    def test_link_with_a_milling_order(self):
+        ml = self.new_order()
+        r = self.trade("SL", QTY_BRAN="5", LINK_ML="AOI-" + ml["ORD_ID"]).get_json()
+        self.assertTrue(r["ok"], r)
+        sl = self.bs(r["ids"][0])
+        self.assertEqual(sl["LINK_ML_ID"], ml["ORD_ID"])
+        self.assertIsNone(sl["REF_ORD_ID"])                                     # not a take-home order
+        page = self.text("/service/buysell/?q=" + ml["ORD_ID"])
+        self.assertIn('data-link-ml="%s"' % ml["ORD_ID"], page)
+        bad = self.trade("SL", QTY_BRAN="5", LINK_ML=ml["ORD_ID"], cust="C261001002").get_json()
+        self.assertFalse(bad["ok"])
+        self.assertIn("another customer", bad["error"])
+        self.assertFalse(self.trade("SL", QTY_BRAN="5", LINK_ML="ML-20000101-0001").get_json()["ok"])
+        # link / unlink afterwards on the list
+        other = self.trade("SL", QTY_BRAN="2").get_json()["ids"][0]
+        self.post("/service/buysell/%s/link" % other, {"LINK_ML": ml["ORD_ID"]}, "/service/buysell/")
+        self.assertEqual(self.bs(other)["LINK_ML_ID"], ml["ORD_ID"])
+        self.post("/service/buysell/%s/link" % other, {"LINK_ML": ""}, "/service/buysell/")
+        self.assertIsNone(self.bs(other)["LINK_ML_ID"])
+        # the milling order can still close (a hand link is not a take-home order)
+        for st, f in (("I", {}), ("F", {}), ("C", {})):
+            self.set_status(ml["ORD_ID"], st, **f)
+        self.assertEqual(self.order(ml["ORD_ID"])["MILL_STATUS"], "C")
+
+    def test_inventory_outbound(self):
+        self.trade("BY", mode="close", QTY_RICE_W5="30", LOC_ID="01-001-001")
+        self.trade("BY", mode="close", QTY_RICE_W5="20", LOC_ID="01-001-002")
+        sl = self.trade("SL", QTY_RICE_W5="25").get_json()["ids"][0]
+        page = self.text("/service/buysell/")
+        self.assertIn('id="outbound-%s"' % sl, page)
+        self.assertIn('<option value="01-001-002">', page)
+        r = self.bs_status(sl, "P", OUT_LOC="01-001-002")                        # only 20 kg there
+        self.assertEqual(self.bs(sl)["ORD_STATUS"], "O")
+        self.assertIn("Not enough stock", self.text(r.headers["Location"]))
+        self.bs_status(sl, "P")                                                  # oldest first
+        stock = sorted((r["LOC_ID"], r["INV_QTY"], r.get("SUB_2")) for r in self.db("AOINV_ONHAND"))
+        self.assertEqual(stock, [("01-001-001", 5.0, None), ("01-001-001", 25.0, sl), ("01-001-002", 20.0, None)])
+        self.bs_status(sl, "CC")                                                 # cancelled: back to the mill's stock
+        self.assertEqual([r.get("SUB_2") for r in self.db("AOINV_ONHAND")], [None, None, None])
+        sl2 = self.trade("SL", QTY_RICE_W5="10").get_json()["ids"][0]
+        self.bs_status(sl2, "P", OUT_LOC="01-001-002")
+        self.bs_status(sl2, "C")
+        left = {(r["LOC_ID"]): r["INV_QTY"] for r in self.db("AOINV_ONHAND") if r["LOC_ID"] == "01-001-002"}
+        self.assertEqual(left, {"01-001-002": 10.0})
+
+    def test_milling_search_by_name(self):
+        order = self.new_order()
+        with self.app.app_context():
+            name = col("AOIMS_CUSTOMER").find_one({"CUST_CODE": order["CUST_CODE"]})["CUST_NAME"]
+        cards = lambda page: re.findall(r'class="status-card[^"]*" data-order="([^"]+)"', page)
+        self.assertIn(order["ORD_ID"], cards(self.text("/service/milling/?q=" + name.replace(" ", ""))))
+        page = self.text("/service/milling/")
+        self.assertIn('<datalist id="ml-names">', page)
+        self.assertIn('<option value="%s">' % name, page)
 
 
 if __name__ == "__main__":

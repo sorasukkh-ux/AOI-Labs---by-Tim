@@ -340,6 +340,20 @@ are kept in `AOITS_SYSLOG` (14 days), the checks in `AOITS_HEALTH` (7 days).
 customer's LINE when "Also send to the customer's LINE" is ticked (shown for customers linked to LINE); "Send to LINE
 only" sends without printing. The same public https address is needed as for the queue QR (update 47).
 
+## Customer Buying / Selling Order (update 56)
+
+- Names from the customer's side: **Customer Selling Order** (BY: the customer sells, the mill buys - Prepared =
+  Inventory Inbound) and **Customer Buying Order** (SL: the customer buys, the mill sells).
+- A Customer Buying Order can be **linked with a milling order #** of the same customer: on Customer Service (the
+  field under the table, type or scan the label) or later with "Link milling order" on the list. The badge
+  "Milling #..." opens that milling order. It is only a link: the milling order closes on its own.
+- **Inventory Outbound**: Prepared of a Customer Buying Order opens a pop-up - the free stock, take from a location or
+  oldest first; the goods are kept for the order (Inventory List) until Closed; Cancelled puts them back.
+- Milling Order List: search by customer name (also without spaces / with other tone marks, names offered while
+  typing), code or phone.
+- A Finished take-away changed to **Delivery** opens the delivery pop-up (address, distance, arrival time): the order
+  goes to Ready for Delivery and the customer gets the LINE message with the time.
+
 ## Back to the milling order (update 55)
 
 When the take-home selling order of a milling order (bran / broken rice) is closed or cancelled on the
