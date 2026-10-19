@@ -334,8 +334,12 @@
     targets.push({ node: node, text: head.textContent.replace(/\s+/g, " ").trim() });
   });
   if (targets.length < 3) return;
-  var bar = document.createElement("nav");
-  bar.className = "quick-jump"; bar.setAttribute("aria-label", label);
+  var nav = document.createElement("nav");
+  nav.className = "quick-jump"; nav.setAttribute("aria-label", label);
+  // update 59: the chips are in a track that scrolls sideways; when they do not all fit, the ‹ › buttons, the mouse
+  // wheel and the ≡ button (shows every chip on several rows) reach the hidden ones - before, a mouse could not
+  var bar = document.createElement("div");
+  bar.className = "qj-track";
   var links = targets.map(function (tg) {
     var a = document.createElement("a");
     a.href = "#" + tg.node.id; a.className = "qj-chip";
@@ -353,7 +357,35 @@
   top.href = "#"; top.className = "qj-chip qj-top"; top.textContent = "\u2191 " + (document.body.getAttribute("data-quick-top") || "Top");
   top.addEventListener("click", function (e) { e.preventDefault(); window.scrollTo({ top: 0, behavior: "smooth" }); });
   bar.appendChild(top);
-  targets[0].node.parentNode.insertBefore(bar, targets[0].node);
+  function arrow(cls, text, dir) {
+    var b = document.createElement("button");
+    b.type = "button"; b.className = "qj-arrow " + cls; b.textContent = text; b.setAttribute("aria-label", text);
+    b.addEventListener("click", function () { bar.scrollBy({ left: dir * Math.max(160, bar.clientWidth * 0.7), behavior: "smooth" }); });
+    return b;
+  }
+  var prev = arrow("qj-prev", "\u2039", -1), next = arrow("qj-next", "\u203A", 1);
+  var all = document.createElement("button");
+  all.type = "button"; all.className = "qj-arrow qj-all"; all.textContent = "\u2261"; all.setAttribute("aria-expanded", "false");
+  all.setAttribute("aria-label", label);
+  all.addEventListener("click", function () {
+    var open = nav.classList.toggle("open"); all.setAttribute("aria-expanded", open ? "true" : "false"); update();
+  });
+  nav.appendChild(prev); nav.appendChild(bar); nav.appendChild(next); nav.appendChild(all);
+  function update() {
+    var over = bar.scrollWidth > bar.clientWidth + 2 && !nav.classList.contains("open");
+    nav.classList.toggle("overflow", over || nav.classList.contains("open"));
+    prev.disabled = !over || bar.scrollLeft <= 2;
+    next.disabled = !over || bar.scrollLeft + bar.clientWidth >= bar.scrollWidth - 2;
+  }
+  bar.addEventListener("scroll", update, { passive: true });
+  window.addEventListener("resize", update);
+  bar.addEventListener("wheel", function (e) {                 // a mouse wheel moves the chips sideways
+    if (nav.classList.contains("open") || Math.abs(e.deltaY) <= Math.abs(e.deltaX) || bar.scrollWidth <= bar.clientWidth) return;
+    e.preventDefault(); bar.scrollLeft += e.deltaY;
+  }, { passive: false });
+  links.forEach(function (l) { l.addEventListener("click", function () { if (nav.classList.contains("open")) all.click(); }); });
+  targets[0].node.parentNode.insertBefore(nav, targets[0].node);
+  setTimeout(update, 0);
   if ("IntersectionObserver" in window) {
     var observer = new IntersectionObserver(function (entries) {
       entries.forEach(function (en) {
