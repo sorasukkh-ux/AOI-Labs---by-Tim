@@ -162,7 +162,10 @@ def order_params(order, when):
         pay = "-"
     branch_key = "branch" + (order.get("BRANCH_ID") or "").capitalize()
     branch = t_in("th", branch_key)
+    from . import line_msg
+    from ..timeutil import now_local
     return {"no": order.get("QR_ID", ""), "name": short_name(customer.get("CUST_NAME", "")) or "",
+            "day": line_msg.day_word(local.date() if local else None, now_local().date()),
             "time": local.strftime("%H:%M") if local else "-", "date": local.strftime("%d/%m/%Y") if local else "-",
             "rice_kg": "%.2f" % float(order.get("ACT_RICE") or order.get("EXPCT_RICE") or 0), "pay": pay,
             "branch": branch if branch != branch_key else (order.get("BRANCH_ID") or ""),

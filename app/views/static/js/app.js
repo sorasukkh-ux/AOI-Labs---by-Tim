@@ -155,13 +155,18 @@
     var current = select.value;
     select.addEventListener("change", function () {
       var option = select.options[select.selectedIndex];
-      if (option.hasAttribute("data-form")) {          // closed without saving: back to the current value
-        openForm(option.getAttribute("data-form")).then(function () { select.value = current; });
-        return;
-      }
-      askAll(option, select.form).then(function (ok) {
-        if (ok) select.form.submit(); else select.value = current;
-      });
+      // update 54: on the iPad the drop-down is still closing when "change" fires - a pop-up opened at that moment
+      // could be lost (the choice stayed on the screen and nothing happened). Let the drop-down go first.
+      select.blur();
+      setTimeout(function () {
+        if (option.hasAttribute("data-form")) {          // closed without saving: back to the current value
+          openForm(option.getAttribute("data-form")).then(function () { select.value = current; });
+          return;
+        }
+        askAll(option, select.form).then(function (ok) {
+          if (ok) select.form.submit(); else select.value = current;
+        });
+      }, 60);
     });
   });
   // Print Billing: only the receipt is printed (see @media print in app.css)

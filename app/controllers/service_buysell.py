@@ -142,6 +142,11 @@ def change_status(ord_id):
         flash_error(error)
     else:
         flash_ok("msgOrderUpdated", id=order["QR_ID"])
+        # update 55: the take-home order of a milling order is done - offer the way back to that milling order
+        if order.get("REF_ORD_TYPE") == "ML" and order.get("REF_ORD_ID") and new_status in (bs.CLOSED, bs.CANCELLED) \
+                and can("SV_MILLSTATUS") and not BuySellOrder.open_for_milling([order["REF_ORD_ID"]]).get(order["REF_ORD_ID"]):
+            from flask import flash
+            flash(url_for("service_milling.order_list", q="AOI-" + order["REF_ORD_ID"]), "milling")
     return redirect(url_for("service_buysell.order_list", status=request.form.get("status_filter") or None,
                             type=request.form.get("type_filter") or None, q=request.form.get("q_filter") or None))
 

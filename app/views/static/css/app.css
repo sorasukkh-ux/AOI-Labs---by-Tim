@@ -1276,3 +1276,5 @@ body.wide { max-width: 1240px; }
 .ps-ladder { max-width: 1000px; } .ps-ladder .tl { font-size: 13px; } .ps-ladder .nl { font-size: 13px; }
 .dash-sig-grid { align-items: start; }
 @media (max-width: 480px) { .dash-gauges { gap: 8px; } .dash-gauge { width: calc(33.3% - 6px); } .dash-gauge svg { width: 72px; height: 72px; } .dash-gauge .k { font-size: 11.5px; } .dash-minis { min-width: 100%; } }
+/* update 55: the milling order badge on a buying/selling card is a link back to it */
+a.badge.from-milling.link { text-decoration: none; cursor: pointer; } a.badge.from-milling.link:hover { filter: brightness(.95); text-decoration: underline; }

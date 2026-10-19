@@ -43,6 +43,9 @@ class Config:
     AI_API_URL = os.environ.get("AOI_AI_API_URL", "https://api.anthropic.com/v1/messages").strip()
 
     # Financial > Market prices: the Thai Rice Millers Association price page (its newest Pricerice*.pdf report).
+    # update 54: the browser asks every time whether a script / style changed (304 when not), so an iPad never keeps
+    # an old app.js after an update
+    SEND_FILE_MAX_AGE_DEFAULT = 0
     MARKET_URL = os.environ.get("AOI_MARKET_URL", "http://www.thairicemillers.org/index.php?lay=show&ac=article&Ntype=19").strip()
     # update 50: Thai Rice Exporters Association weekly FOB export prices (US$/ton), for Automation > AI > Price analysis
     EXPORT_URL = os.environ.get("AOI_EXPORT_URL", "http://www.thairiceexporters.or.th/price.htm").strip()

@@ -11,7 +11,7 @@ from .base import col, NO_ID, ValidationError, audit_new, audit_update, clean_te
 COL = "AOIMS_LINEMSG"
 PARAM = re.compile(r"\{([a-z_]+)\}")
 MAX_LEN = 1000
-ORDER_PARAMS = ("no", "name", "time", "date", "rice_kg", "pay", "branch")
+ORDER_PARAMS = ("no", "name", "day", "time", "date", "rice_kg", "pay", "branch")   # update 54: + day
 # MSG_ID: (default name key, default text key (Thai), parameters)
 MESSAGES = (
     ("ML_FINISHED", "lmName_ML_FINISHED", "lmDefault_ML_FINISHED", ORDER_PARAMS),
@@ -32,8 +32,33 @@ MESSAGES = (
     ("LN_HELP_LINKED", "lmName_LN_HELP_LINKED", "lnrHelpLinked", ("name",)),
 )
 INFO = {m[0]: m for m in MESSAGES}
-SAMPLE = {"no": "0031", "name": "สมชาย ก.", "time": "14:30", "date": "13/10/2026", "rice_kg": "51.52", "pay": "120.00",
+SAMPLE = {"no": "0031", "name": "สมชาย ก.", "day": "พรุ่งนี้", "time": "14:30", "date": "13/10/2026", "rice_kg": "51.52", "pay": "120.00",
           "branch": "โรงงาน 2", "address": "45 หมู่ 2 ต.บ้านเป็ด อ.เมือง จ.ขอนแก่น", "n": "1", "code": "C261001001"}
+
+
+# update 54: the defaults before {day}; a saved text still equal to one of them is moved to the new default (seed)
+OLD_DEFAULTS = {
+    "ML_FINISHED": "#{no} ดีใจด้วยจ้า! ตอนนี้ข้าวของคุณสีเสร็จแล้วเมื่อเวลา {time}",
+    "ML_FINISHED_DELIVERY": "#{no} ดีใจด้วยจ้า! ข้าวของคุณสีเสร็จแล้วเมื่อเวลา {time} เราจะแจ้งเวลาจัดส่งให้ทราบอีกครั้งนะจ๊ะ",
+    "ML_DELIVERY": "#{no} ดีใจด้วยจ้า! ข้าวของคุณจะจัดส่งถึงที่หมายโดยประมาณเวลา {time}",
+    "ML_LABEL": "AOI Labs {branch}: ลงทะเบียนคิวสีข้าวเลขที่ {no} แล้ว ยอดชำระ {pay} บาท รับได้ประมาณ {date} {time} กรุณาแสดง QR นี้เมื่อมารับสินค้า",
+}
+
+
+def day_word(day, today):
+    """update 54: วันนี้ / พรุ่งนี้ / เมื่อวาน, otherwise วันที่ DD/MM/YYYY (the {day} parameter)."""
+    if day is None:
+        return "-"
+    diff = (day - today).days
+    return {0: "วันนี้", 1: "พรุ่งนี้", -1: "เมื่อวาน"}.get(diff, "วันที่ " + day.strftime("%d/%m/%Y"))
+
+
+def upgrade_defaults(ope_user):
+    """Saved texts that are still the old default get the new default with {day}. Returns how many."""
+    n = 0
+    for msg_id, old in OLD_DEFAULTS.items():
+        n += col(COL).update_many({"MSG_ID": msg_id, "MSG_TEXT": old}, {"$set": {"MSG_TEXT": default_text(msg_id)}}).modified_count
+    return n
 
 
 def default_text(msg_id):

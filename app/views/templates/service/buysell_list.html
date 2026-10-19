@@ -40,7 +40,8 @@
     <div class="who">
       <span class="ord-id">#{{ order.QR_ID }}</span>
       <span class="badge {{ 'buy-type' if order.ORD_TYPE == 'BY' else 'sell-type' }}">{{ t(type_keys[order.ORD_TYPE]) }}</span>
-      {% if order.milling %}<span class="badge from-milling">{{ t('fromMillingBadge', id=order.milling.get('QR_ID', order.REF_ORD_ID)) }}</span>
+      {% if order.milling %}{% if can('SV_MILLSTATUS') %}<a class="badge from-milling link" href="{{ url_for('service_milling.order_list', q='AOI-' ~ order.REF_ORD_ID) }}" data-milling-link title="{{ t('tabUpdateStatus') }}">{{ t('fromMillingBadge', id=order.milling.get('QR_ID', order.REF_ORD_ID)) }} &rarr;</a>
+      {% else %}<span class="badge from-milling">{{ t('fromMillingBadge', id=order.milling.get('QR_ID', order.REF_ORD_ID)) }}</span>{% endif %}
       {% else %}<span class="badge manual">{{ t('newServiceOrderBadge') }}</span>{% endif %}
       <span class="ord-cust">{{ order.customer.get('CUST_NAME', order.CUST_CODE) }} &middot; {{ order.lines_text or (material ~ ' ' ~ order.ORD_QTY|num ~ ' kg') }} &middot; <span class="bs-amount">{{ order.amount|num }} THB</span> &middot; {{ order.registered_text }}</span>
     </div>

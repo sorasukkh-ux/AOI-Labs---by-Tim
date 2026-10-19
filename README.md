@@ -340,6 +340,20 @@ are kept in `AOITS_SYSLOG` (14 days), the checks in `AOITS_HEALTH` (7 days).
 customer's LINE when "Also send to the customer's LINE" is ticked (shown for customers linked to LINE); "Send to LINE
 only" sends without printing. The same public https address is needed as for the queue QR (update 47).
 
+## Back to the milling order (update 55)
+
+When the take-home selling order of a milling order (bran / broken rice) is closed or cancelled on the
+Buying/Selling Order List, a pop-up asks "Back to the milling order now, to close it?" and opens the Milling Order
+List on that order. The "From Milling #..." badge on a buying/selling card is also a link to its milling order.
+
+## The day in the LINE messages (update 54)
+
+The order messages have a new parameter **{day}**: วันนี้ / พรุ่งนี้ / เมื่อวาน, otherwise วันที่ DD/MM/YYYY (the day of
+the time in the message, compared with the day the message is sent). The default texts use it ("...โดยประมาณพรุ่งนี้
+เวลา 10:00"); saved texts that were still the old default are moved to the new one by start.sh; your own texts are
+kept - add {day} on LINE Message Maintenance. Drop-downs that ask first (Close, Cancel, Hold ...) let the iPad
+drop-down close before the pop-up opens, and scripts / styles are re-checked by the browser after every update.
+
 ## The whole card on LINE (update 52)
 
 Print QR (queue) and Print QR card (customer) now send the **whole card** to the customer's LINE as a LINE Flex

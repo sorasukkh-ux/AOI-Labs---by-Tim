@@ -291,10 +291,12 @@ def order_list():
     else:
         orders = MillingOrder.sort_for_list(orders, base)
     orders = _decorate(orders)
-    exact = bool(q) and len(orders) == 1 and orders[0]["ORD_ID"].lower() == scan_text(q)
+    # update 53: only right after a search / scan (go=1), not when a view or filter is tapped later with the same search
+    exact = bool(q) and request.args.get("go") == "1" and len(orders) == 1 and orders[0]["ORD_ID"].lower() == scan_text(q)
     # a scanned / typed order that is in the other view: open that view (the label of a closed order, say)
     if q and not orders and counts["closed" if view == "active" else "active"]:
-        return redirect(url_for("service_milling.order_list", view=None if view == "closed" else "closed", type=order_type, q=q))
+        return redirect(url_for("service_milling.order_list", view=None if view == "closed" else "closed", type=order_type, q=q,
+                                go=request.args.get("go") or None))
     status_counts = {s: sum(1 for o in every if o["MILL_STATUS"] == s) for s in statuses}
     return render_template("service/milling_list.html", orders=orders, q=q, auto_open=exact, list_base=base, view=view,
                            view_arg="closed" if view == "closed" else None, counts=counts, status_counts=status_counts,

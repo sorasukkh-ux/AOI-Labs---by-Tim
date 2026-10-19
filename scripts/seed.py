@@ -240,6 +240,8 @@ def seed(log=print, reset=False):
                                                           "MACHINE_ID": None, "DEVICE_KEY_HASH": None, "LAST_SEEN": None})
     from app.models.market import seed_default_map
     seed_default_map(SEED_USER)                   # first guess of which report row is which SKU (Financial > Market prices)
+    from app.models.line_msg import upgrade_defaults
+    upgrade_defaults(SEED_USER)                   # update 54: saved LINE texts still on the old default get {day}
     # update 26: Service Status is part of Current Services (SV_PRICE): who could open it can open Current Services
     for auth in list(db["AOIMS_ROLEAUTH"].find({"MENU_CODE": "SV_STATUS", "CAN_VIEW": True}, {"_id": 0})):
         if db["AOIMS_ROLEAUTH"].find_one({"ROLE_CODE": auth["ROLE_CODE"], "MENU_CODE": "SV_PRICE"}) is None:

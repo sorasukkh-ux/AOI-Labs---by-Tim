@@ -693,8 +693,12 @@ class Update4(Base):
         self.assertIn('data-linked-open="%s"' % sl["ORD_ID"], self.text("/service/milling/"))
         self.set_status(ord_id, "C")
         self.assertEqual(self.order(ord_id)["MILL_STATUS"], "F")
-        self.bs_status(sl["ORD_ID"], "C")                                        # the selling order posts both
+        self.assertIn('data-milling-link', self.text("/service/buysell/"))          # update 55: link back
+        r = self.bs_status(sl["ORD_ID"], "C")                                    # the selling order posts both
         self.assertEqual(self.bs(sl["ORD_ID"])["ORD_STATUS"], "C")
+        back = self.text(r.headers["Location"])                                  # update 55: back to the milling order
+        self.assertIn('id="back-milling"', back)
+        self.assertIn("/service/milling/?q=AOI-" + ord_id, back)
         entries = self.db("AOITS_ACCOUNT")
         self.assertEqual([(a["REF_ORD_ID"], a["REF_ORD_TYPE"], a["ACC_TYPE"], a["ACC_AMOUNT"], a["ACC_DESC"]) for a in entries],
                          [(sl["ORD_ID"], "SL", "IN", 32.67, "Sold Rice bran, Broken rice (White)")])
@@ -2893,9 +2897,15 @@ class Update37(Base):
         first = self.new_order()
         second = self.new_order()
         cards = lambda page: re.findall(r'class="status-card[^"]*" data-order="([^"]+)"', page)
-        page = self.text("/service/milling/?q=AOI-" + first["ORD_ID"])          # the label QR scanned
+        page = self.text("/service/milling/?go=1&q=AOI-" + first["ORD_ID"])     # the label QR scanned (search form)
         self.assertEqual(cards(page), [first["ORD_ID"]])
         self.assertIn("data-auto-popup", page)
+        self.assertIn('name="go" value="1"', page)
+        # update 53: tapping Active / Closed or a filter later keeps the search but does not open the order again
+        for path in ("/service/milling/?q=AOI-%s" % first["ORD_ID"], "/service/milling/?view=closed&q=AOI-%s" % first["ORD_ID"],
+                     "/service/milling/?status=Q&q=AOI-%s" % first["ORD_ID"]):
+            self.assertNotIn("data-auto-popup", self.text(path))
+        self.assertNotIn("go=1", re.search(r'id="ml-view-closed"[^>]*', page).group(0) if 'id="ml-view-closed"' in page else "")
         page = self.text("/service/milling/?q=" + second["QR_ID"])
         self.assertIn(second["ORD_ID"], cards(page))
         self.assertNotIn("data-auto-popup", page)
@@ -3476,6 +3486,40 @@ class Update52(Base):
         with mock.patch.dict(os.environ, {"AOI_LINE_CHANNEL_TOKEN": "token"}), mock.patch("urllib.request.urlopen", fake):
             REAL_PUSH("U" + "1" * 32, "hello", "https://x/qr.png")
         self.assertEqual([m["type"] for m in sent["body"]["messages"]], ["text", "image"])   # no card: as before
+
+
+class Update54(Base):
+    """LINE order messages say the day: วันนี้ / พรุ่งนี้ / วันที่ ..."""
+
+    def test_day_word_and_messages(self):
+        from datetime import date
+        from app.models import line_msg
+        today = date(2026, 10, 17)
+        self.assertEqual(line_msg.day_word(date(2026, 10, 17), today), "วันนี้")
+        self.assertEqual(line_msg.day_word(date(2026, 10, 18), today), "พรุ่งนี้")
+        self.assertEqual(line_msg.day_word(date(2026, 10, 16), today), "เมื่อวาน")
+        self.assertEqual(line_msg.day_word(date(2026, 10, 20), today), "วันที่ 20/10/2026")
+        with self.app.app_context():
+            text = line_msg.text("ML_DELIVERY", no="0005", day="พรุ่งนี้", time="10:00")
+            self.assertEqual(text, "#0005 ดีใจด้วยจ้า! ข้าวของคุณจะจัดส่งถึงที่หมายโดยประมาณพรุ่งนี้ เวลา 10:00")
+            # a text saved before update 54 that is still the old default gets the new one; an own text is kept
+            col("AOIMS_LINEMSG").insert_one({"MSG_ID": "ML_DELIVERY", "MSG_TEXT": line_msg.OLD_DEFAULTS["ML_DELIVERY"], "ACTIVE_FLG": True})
+            col("AOIMS_LINEMSG").insert_one({"MSG_ID": "ML_FINISHED", "MSG_TEXT": "own {time}", "ACTIVE_FLG": True})
+            self.assertEqual(line_msg.upgrade_defaults("t"), 1)
+            self.assertIn("{day}", line_msg.get("ML_DELIVERY")["MSG_TEXT"])
+            self.assertEqual(line_msg.get("ML_FINISHED")["MSG_TEXT"], "own {time}")
+
+    def test_delivery_message_has_the_date(self):
+        from unittest import mock
+        import os
+        from datetime import timedelta
+        from app.models import notify
+        from app.timeutil import now_utc
+        with self.app.test_request_context():
+            order = {"QR_ID": "0005", "CUST_CODE": "C261001001", "BRANCH_ID": "factory2", "ORD_ID": "ML-X"}
+            p = notify.order_params(order, now_utc() + timedelta(days=3))
+            self.assertTrue(p["day"].startswith("วันที่ "))
+            self.assertEqual(notify.order_params(order, now_utc())["day"], "วันนี้")
 
 
 if __name__ == "__main__":
