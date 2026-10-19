@@ -2,6 +2,8 @@
 
   customer_card  - the customer card: logo, AOI Labs, "โรงสีข้าว · บัตรลูกค้า", name, customer code, mobile, the note,
                    the QR of the customer code (same as Admin > Customers > Print QR card)
+  receipt        - update 62: the receipt (Print Billing) of customer buying/selling orders: logo, AOI Labs, address,
+                   receipt title + order type, order numbers, customer, date, the lines (kg x THB/kg = THB) and the total
   queue_card     - the milling queue card: logo, MILLING + queue number, address, customer, payment, receive time,
                    the QR of the order, the order code, phone / e-mail and the date (same as the printed queue label)
 
@@ -74,3 +76,35 @@ def queue_card(label, qr_url, base):
                         _text("Tel: %s" % cfg["LABEL_TEL"], "xxs", color=MUTED), _text("Email: %s" % cfg["LABEL_EMAIL"], "xxs", color=MUTED)]},
                     {"type": "box", "layout": "vertical", "flex": 2, "contents": [
                         _text(label.get("date"), "xxs", color=MUTED, align="end"), _text(label.get("time"), "xxs", color=MUTED, align="end")]}]}]}}
+
+
+def receipt(title, orders_no, customer, date, lines, total, base=None, labels=None):
+    """The receipt as a Flex bubble. `lines`: [(name, kg, price, amount)] as texts; `base` None -> no logo (LINE
+    fetches pictures only from a public https address), the card is still sent. `labels`: the Thai row titles."""
+    cfg = current_app.config
+    lb = labels or {}
+
+    def row(left, right, size="sm", weight="regular", color=INK):
+        return {"type": "box", "layout": "horizontal", "spacing": "sm", "contents": [
+            _text(left, size, weight, color, flex=3), _text(right, size, weight, color, flex=4, align="end")]}
+
+    def item(name, kg, price, amount):
+        return {"type": "box", "layout": "vertical", "contents": [
+            _text(name, "sm", "bold"),
+            {"type": "box", "layout": "horizontal", "contents": [
+                _text("%s kg x %s" % (kg, price), "xs", color=MUTED, flex=3), _text(amount, "sm", flex=2, align="end")]}]}
+
+    head = [{"type": "box", "layout": "vertical", "contents": [_logo(base)], "paddingStart": "60px", "paddingEnd": "60px"}] if base else []
+    return {"type": "bubble", "size": "mega", "body": {"type": "box", "layout": "vertical", "spacing": "md", "paddingAll": "16px",
+            "contents": head + [
+                _text("AOI Labs", "lg", "bold", align="center"),
+                _text(cfg["LABEL_ADDRESS_TH"], "xxs", color=MUTED, align="center"),
+                _text("Tel. %s" % cfg["LABEL_TEL"], "xxs", color=MUTED, align="center"),
+                _text(title, "md", "bold", align="center"),
+                {"type": "separator", "color": LINE_GREY},
+                {"type": "box", "layout": "vertical", "spacing": "xs", "contents": [
+                    row(lb.get("no", "เลขที่"), orders_no), row(lb.get("customer", "ลูกค้า"), customer), row(lb.get("date", "วันที่"), date)]},
+                {"type": "separator", "color": LINE_GREY},
+                {"type": "box", "layout": "vertical", "spacing": "sm", "contents": [item(*l) for l in lines] or [_text("-")]},
+                {"type": "separator", "color": LINE_GREY},
+                row(lb.get("total", "รวม"), "%s THB" % total, "md", "bold")]}}

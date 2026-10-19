@@ -4,7 +4,9 @@ and the gateways of the machines in use.
 * collect()   reads the figures (Linux /proc and the standard library; no extra package).
 * evaluate()  turns them into findings: ok / warn / crit, each with a text key and its numbers.
 * check()     both, saved in AOITS_HEALTH (every 5 minutes by the scheduler; kept 7 days).
-* latest()    the newest check (made now when the last one is too old) - the home menu shows a red "!" on AI and
+* live()      update 63: a check made now (kept 10 seconds, not saved) - what the AI screen and the menu show, so a
+              stopped device or a problem shows within seconds, not at the next 5-minute check.
+* latest()    the live check - the home menu shows a red "!" on AI and
               a banner when it is not ok, so the operator sees it without opening the screen.
 * The app's log: every WARNING / ERROR of the app is also kept in AOITS_SYSLOG (DbLogHandler), the same message
   counted once per minute, kept 14 days.
@@ -39,6 +41,8 @@ API_SLOW = (10, 50)                  # requests slower than 2 s in the last hour
 DEVICE_REJECTED = (20, 200)          # device calls with a wrong key in the last hour
 LINE_FAILED = (1, 5)                 # LINE pushes refused in the last 24 h
 _STARTED = time.time()
+LIVE_SECONDS = 10                    # update 63: the live check is made again after 10 seconds
+_LIVE_LOCK = threading.Lock()
 
 
 # ---------- figures ----------
@@ -116,13 +120,13 @@ def _logs(minutes=60):
 
 
 def _gateways():
-    """Machines in use with remote control whose device reported in the last 24 hours but not in the last 5 minutes
-    (a device that stopped; one never started, or a test key left over, is not a warning)."""
+    """Machines in use with remote control (update 64: and the mill selector) whose device reported in the last 24 hours
+    but not in the last minute (a device that stopped; one never started, or a test key left over, is not a warning)."""
     try:
-        from .automation import Machine, SELECTOR
+        from .automation import Machine
         day_ago = now_utc() - timedelta(hours=24)
         silent = [m["MACHINE_ID"] for m in col(Machine.COL).find({"CONTROL_FLG": True}, NO_ID)
-                  if m.get("ACTIVE_FLG") is not False and m.get("DEVICE_KEY_HASH") and m.get("MACHINE_TYPE") != SELECTOR
+                  if m.get("ACTIVE_FLG") is not False and m.get("DEVICE_KEY_HASH")
                   and m.get("LAST_SEEN") and m["LAST_SEEN"] >= day_ago and not Machine.is_online(m)]
         return {"offline": silent}
     except Exception:                                     # noqa: BLE001
@@ -216,11 +220,37 @@ def check(sample_seconds=0.5, save=True):
             col(COL).delete_many({"CHECK_DATE": {"$lt": now_utc() - timedelta(days=KEEP_DAYS)}})
         except Exception:                                 # noqa: BLE001 - the database itself may be the problem
             pass
+    _remember(doc)
     return doc
 
 
+def _remember(doc):
+    try:
+        from flask import current_app
+        with _LIVE_LOCK:
+            current_app.extensions["aoi_health_live"] = (time.time(), doc)
+    except RuntimeError:                                  # no app context
+        pass
+
+
+def live(max_age_seconds=LIVE_SECONDS):
+    """Update 63: the health right now. A check made at most `max_age_seconds` ago in this server process (CPU sampled
+    0.2 s), not saved - the scheduler saves one every 5 minutes for the 24-hour chart. One per app (tests)."""
+    from flask import current_app
+    with _LIVE_LOCK:
+        hit = current_app.extensions.get("aoi_health_live")
+        if hit and time.time() - hit[0] <= max_age_seconds:
+            return hit[1]
+    return check(sample_seconds=0 if current_app.config.get("TESTING") else 0.2, save=False)
+
+
 def latest(max_age_minutes=FRESH_MINUTES):
-    """The newest check; a quick new one (no CPU sampling) when the newest is older than max_age_minutes."""
+    """Update 63: the live check (was: the newest saved one, up to 10 minutes old)."""
+    return live()
+
+
+def latest_saved(max_age_minutes=FRESH_MINUTES):
+    """The newest saved check; a quick new one (no CPU sampling) when the newest is older than max_age_minutes."""
     try:
         doc = col(COL).find_one({}, NO_ID, sort=[("CHECK_DATE", -1)])
     except Exception:                                     # noqa: BLE001

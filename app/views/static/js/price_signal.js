@@ -3,9 +3,15 @@
                 marks: [[day, "B"|"S", kg]], levels: {cost, tp, sl}}.
    The base source is the thick line (the signals are worked out on it); the other sources are thin lines in their
    own fixed colour; the averages are neutral dashed lines, the bands a light area; B / S are the average crosses;
-   cost, take profit and stop loss are labelled horizontal lines. Hover / tap: crosshair + tooltip. */
+   cost, take profit and stop loss are labelled horizontal lines. Hover / tap: crosshair + tooltip.
+   Update 63: drawn again when the live refresh brings a new chart ("aoi:live"). */
 (function () {
   "use strict";
+  var current = null, timer = null;
+  window.addEventListener("resize", function () { clearTimeout(timer); timer = setTimeout(function () { if (current) current(); }, 150); });
+  document.addEventListener("aoi:live", function (e) { if (!e.detail || e.detail.indexOf("ps-chart") >= 0) init(); });
+  init();
+  function init() {
   var host = document.getElementById("ps-svg");
   if (!host) return;
   var data = JSON.parse(host.getAttribute("data-chart"));
@@ -116,7 +122,7 @@
     host.appendChild(svg);
   }
   boxes.forEach(function (b) { b.addEventListener("change", draw); });
-  var timer = null;
-  window.addEventListener("resize", function () { clearTimeout(timer); timer = setTimeout(draw, 150); });
+  current = draw;
   draw();
+  }
 })();

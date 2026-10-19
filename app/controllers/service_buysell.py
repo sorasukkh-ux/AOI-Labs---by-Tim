@@ -244,4 +244,25 @@ def billing():
     return render_template("service/_billing.html", orders=orders, customer=customer, mat_keys=MAT_KEYS, items_of=BuySellOrder.items_of,
                            type_keys=TYPE_KEYS, total=sum(BuySellOrder.amount(o) for o in orders),
                            printed=fmt_datetime(now_utc()), address=current_app.config["LABEL_ADDRESS_TH"],
-                           address_en=current_app.config["LABEL_ADDRESS_EN"], tel=current_app.config["LABEL_TEL"])
+                           address_en=current_app.config["LABEL_ADDRESS_EN"], tel=current_app.config["LABEL_TEL"],
+                           line_ok=bool(customer.get("LINE_USER_ID")), ids=",".join(o["ORD_ID"] for o in orders))
+
+
+@bp.route("/billing/line", methods=["POST"])
+def billing_line():
+    """Update 62: Send LINE in the receipt pop-up - the receipt as a card to the customer's LINE. Answers JSON."""
+    from ..models import notify
+    if not current_user():
+        abort(401)
+    if not (can(REGISTER) or can(MENU)):
+        abort(403)
+    orders = [o for o in (BuySellOrder.find(i, operating_branch()) for i in request.form.get("ids", "").split(",")[:10]) if o]
+    if not orders:
+        abort(404)
+    customer = Customer.find(orders[0]["CUST_CODE"]) or {}
+    if not customer.get("LINE_USER_ID"):
+        return jsonify({"ok": False, "message": t("lnNoUser")}), 422
+    doc = notify.send_receipt(orders, customer, request.form.get("PUBLIC_BASE"))
+    if doc.get("NOTIFY_FLG") != notify.SENT:
+        return jsonify({"ok": False, "message": t(notify.reason_key(doc.get("ERROR")))}), 422
+    return jsonify({"ok": True, "message": t("lnReceiptSent")})

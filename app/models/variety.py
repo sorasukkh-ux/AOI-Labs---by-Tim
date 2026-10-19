@@ -67,13 +67,14 @@ def variety_of(mat_code):
     return INFO.get(mat_code, (None, None))[1]
 
 
-def mat_name(mat_code):
-    """Translated SKU name, e.g. 'Rice (Jasmine)' / 'ข้าวสาร (หอมมะลิ)'."""
-    from ..i18n import t
+def mat_name(mat_code, lang=None):
+    """Translated SKU name, e.g. 'Rice (Jasmine)' / 'ข้าวสาร (หอมมะลิ)'. `lang`: a fixed language (LINE: "th")."""
+    from ..i18n import t, t_in
+    tr = (lambda key: t_in(lang, key)) if lang else t
     kind, var = INFO.get(mat_code, (None, None))
     if kind is None:
         return mat_code or ""
-    return t(KIND_KEYS[kind]) + ((" (%s)" % t(VAR_KEYS[var])) if var else "")
+    return tr(KIND_KEYS[kind]) + ((" (%s)" % tr(VAR_KEYS[var])) if var else "")
 
 
 def groups(codes=ALL):

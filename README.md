@@ -340,6 +340,38 @@ are kept in `AOITS_SYSLOG` (14 days), the checks in `AOITS_HEALTH` (7 days).
 customer's LINE when "Also send to the customer's LINE" is ticked (shown for customers linked to LINE); "Send to LINE
 only" sends without printing. The same public https address is needed as for the queue QR (update 47).
 
+## Hardware devices card (update 64)
+
+AI > Hardware devices shows only the devices of the branch you work in (each factory has its own "main motor 1 / 2",
+which looked like duplicates) - a line under the cards says how many are in other branches. The mill selector
+(ชุดสลับเครื่องสี, motor switching device) is listed too, with the motor it points at; a stopped selector device is a
+health warning like the motors.
+
+## Live AI screens (update 63)
+
+Everything on Automation > AI is read from the database and the server itself (orders, prices, the device reports, the
+server's disk / memory / CPU) - nothing is demo data unless the server runs with AOI_DB=memory (the yellow banner).
+Before, the server health shown was the check saved every 5 minutes (up to 10 minutes old) and a device counted as
+connected until 5 minutes after its last report, so a stopped simulator still showed "normal" for a while.
+Now:
+* the health is checked when the screen asks (kept 10 seconds); the 5-minute check is still saved for the 24-hour chart;
+* a device is offline 1 minute after its last report (the gateway reports every second) - the health turns to
+  warning and the device card shows offline;
+* the AI screen updates itself every 15 seconds (Price analysis 60 s, Milling Analysis 30 s) without reloading: only
+  the parts that changed are swapped, the scroll position stays. It pauses while you type, a pop-up is open or a filter
+  was changed and not sent yet, and while the tab is hidden;
+* the green bar shows the time of the last update; when the server cannot be reached it turns red ("cannot reach the
+  server since ...") and the banner shows "No connection".
+
+## Receipt to LINE (update 62)
+
+The receipt pop-up (Print Billing) of customer buying/selling orders has a **Send LINE** button next to Print. It sends the
+receipt as a LINE card (Flex Message): logo, AOI Labs, address, receipt title and order type, order numbers, customer, date,
+each line (kg x THB/kg = THB) and the total. The text LN_RECEIPT (LINE Message Maintenance) is the card's notification
+preview. The logo needs a public https address (AOI_PUBLIC_URL or the Codespaces address); without one the card is sent
+without the logo. The button is grey when the customer is not linked to LINE. Each send is saved in AOITS_NOTIFY
+(NOTIFY_KIND receipt, ORD_TYPE BY / SL). DB 1.50.
+
 ## One broken rice SKU (update 61)
 
 Broken rice is one SKU, **BROKEN (ปลายข้าว)**, for every variety - like bran and husk: one price, one stock, one

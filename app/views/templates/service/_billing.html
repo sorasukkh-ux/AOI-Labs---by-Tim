@@ -19,5 +19,14 @@
       <tfoot><tr><td colspan="3">{{ t('totalLabel') }}</td><td class="num">{{ total|num }}</td></tr></tfoot>
     </table>
   </div>
-  <button type="button" class="action primary rc-print-btn" data-print-receipt>&#128424; {{ t('btnPrintBilling') }}</button>
+  <div class="rc-actions">
+    <button type="button" class="action primary rc-print-btn" data-print-receipt>&#128424; {{ t('btnPrintBilling') }}</button>
+    {% if line_ok %}
+    <button type="button" class="action rc-line-btn" data-receipt-line="{{ url_for('service_buysell.billing_line') }}" data-ids="{{ ids }}"
+            data-csrf="{{ csrf_token() }}">&#128172; {{ t('btnSendLine') }}</button>
+    {% else %}
+    <button type="button" class="action rc-line-btn" disabled title="{{ t('lnNoUser') }}">&#128172; {{ t('btnSendLine') }}</button>
+    {% endif %}
+  </div>
+  <p class="rc-line-status" data-receipt-line-status hidden></p>
 </div>

@@ -521,7 +521,12 @@ table.tv-table.wide { margin-bottom: 6px; min-width: 520px; }
 .receipt .rc-table th, .receipt .rc-table td { padding: 4px 3px; border-bottom: 1px solid #ccc; text-align: left; }
 .receipt .rc-table .num { text-align: right; white-space: nowrap; }
 .receipt .rc-table tfoot td { font-weight: 700; border-bottom: 0; }
-.rc-print-btn { width: 100%; margin-top: 10px; }
+.rc-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+.rc-print-btn, .rc-line-btn { width: 100%; }
+.rc-line-btn:not([disabled]) { background: #06C755; border-color: #06C755; color: #fff; }
+.rc-line-status { margin: 8px 0 0; font-size: 13px; text-align: center; }
+.rc-line-status.ok { color: #0a7a3a; }
+.rc-line-status.bad { color: #b42318; }
 @media print {
   body.print-receipt .qr-label, body.print-receipt .qr-label * { visibility: hidden; }
   body.print-receipt .receipt, body.print-receipt .receipt * { visibility: visible; }
@@ -1291,3 +1296,10 @@ a.badge.from-milling.link { text-decoration: none; cursor: pointer; } a.badge.fr
 .dash-mini small { font-size: 10.5px; color: var(--text-muted); }
 /* update 60: three groups on the Milling Order List */
 @media (max-width: 640px) { .ml-view { font-size: 13px; padding: 9px 4px; } .ml-view b { display: block; width: fit-content; margin: 3px auto 0; } }
+
+/* update 63: live dashboards - the time of the last automatic update, or that the server cannot be reached */
+.live-bar { display: inline-flex; align-items: center; gap: 6px; margin: 4px 0 10px; padding: 3px 10px; border-radius: 999px;
+  font-size: 12px; background: #e8f6ec; color: #17663a; }
+.live-bar i { display: none; }
+.live-bar.live-paused { background: #eef2f6; color: #5b6b7f; }
+.live-bar.live-lost { background: #fdecec; color: #b42318; font-weight: 600; }

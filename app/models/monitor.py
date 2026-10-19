@@ -151,18 +151,22 @@ def devices():
     from .automation import Machine, MachineCommand, Meter, SELECTOR, FAULT, TELE_FRESH_SECONDS, CMD_FAILED, CMD_EXPIRED
     since = now_utc() - timedelta(hours=24)
     out = []
-    for m in col(Machine.COL).find({}, NO_ID).sort([("BRANCH_ID", 1), ("MACHINE_SEQ", 1)]):
-        if m.get("ACTIVE_FLG") is False or not m.get("CONTROL_FLG") or m.get("MACHINE_TYPE") == SELECTOR:
+    machines = list(col(Machine.COL).find({}, NO_ID).sort([("BRANCH_ID", 1), ("MACHINE_SEQ", 1)]))
+    names = {m["MACHINE_ID"]: m.get("MACHINE_NAME") or m["MACHINE_ID"] for m in machines}
+    for m in machines:
+        if m.get("ACTIVE_FLG") is False or not m.get("CONTROL_FLG"):
             continue
+        selector = m.get("MACHINE_TYPE") == SELECTOR             # update 64: the mill selector is a device too
         seen = m.get("LAST_SEEN")
         failed = col(MachineCommand.COL).count_documents({"MACHINE_ID": m["MACHINE_ID"], "CMD_STATUS": {"$in": [CMD_FAILED, CMD_EXPIRED]},
                                                           "REQ_DATE": {"$gte": since}})
         faults = col(Machine.LOG).count_documents({"MACHINE_ID": m["MACHINE_ID"], "NEW_STATUS": FAULT, "LOG_DATE": {"$gte": since}})
-        out.append({"id": m["MACHINE_ID"], "name": m.get("MACHINE_NAME"), "kind": "machine", "branch": m.get("BRANCH_ID"),
+        out.append({"id": m["MACHINE_ID"], "name": m.get("MACHINE_NAME"), "kind": "selector" if selector else "machine", "branch": m.get("BRANCH_ID"),
+                    "select_to": names.get(m.get("SELECT_TO"), m.get("SELECT_TO")) if selector else None,
                     "has_key": bool(m.get("DEVICE_KEY_HASH")), "online": Machine.is_online(m),
                     "last_seen": to_local(seen).strftime("%d/%m %H:%M") if seen else None,
                     "recent": bool(seen and seen >= since),
-                    "fresh": bool(m.get("TEL_TIME")) and (now_utc() - m["TEL_TIME"]).total_seconds() <= TELE_FRESH_SECONDS,
+                    "fresh": None if selector else bool(m.get("TEL_TIME")) and (now_utc() - m["TEL_TIME"]).total_seconds() <= TELE_FRESH_SECONDS,
                     "failed_cmds": failed, "faults": faults})
     for mt in col(Meter.COL).find({}, NO_ID):
         if not mt.get("DEVICE_KEY_HASH"):

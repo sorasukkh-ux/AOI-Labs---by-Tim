@@ -3,6 +3,9 @@
 {# Administration > Milling > Milling Analysis: the period analysis, today's milling and today's buying / selling #}
 {% block content %}
 {{ page_head(t('tabMillAnalysis'), url_for('automation.ai_screen')) }}
+<div data-live-refresh="30">
+<p class="live-bar" data-live-clock data-ok="{{ t('liveOk', n=30) }}" data-lost="{{ t('liveLost') }}" data-paused="{{ t('livePaused') }}" data-down="{{ t('liveDown') }}"><i></i><span>{{ t('liveOk', n=30) }} {{ live_time }}</span></p>
+<div id="ma-live" data-live>
 <div class="chips mt14 ma-tabs" id="ma-tabs" role="tablist">
   {% for key in tabs %}
   <a class="chip{% if tab == key %} active{% endif %}" role="tab" aria-selected="{{ 'true' if tab == key else 'false' }}"
@@ -11,6 +14,7 @@
 </div>
 {% if tab == 'period' %}
 {% include "service/_analysis_body.html" %}
+</div>
 {% if can_ask %}
 {# update 58: part of AI - the AI explains the figures (they are in what the AI sees) #}
 <form method="post" action="{{ url_for('automation.ai_screen') }}" class="card mt14" id="ma-ask">
@@ -21,5 +25,7 @@
 {% endif %}
 {% else %}
 {% include "service/_dashboard_body.html" %}
+</div>
 {% endif %}
+</div>
 {% endblock %}

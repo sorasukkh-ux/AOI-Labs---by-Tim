@@ -3364,10 +3364,10 @@ class Update49(Base):
         self.assertEqual((ln["token"], ln["bot"]), (False, None))
         ids = [d["id"] for d in devs]
         self.assertTrue(ids)
-        self.assertFalse([i for i in ids if i.endswith("SELECT")])
+        self.assertTrue([i for i in ids if i.endswith("SELECT")])                      # update 64: the selector is listed
         self.post("/automation/ai", {"action": "health"}, "/automation/ai")
         page = self.text("/automation/ai")
-        for text in ('id="hl-line"', "LINE interface", "Hardware devices", 'data-area="device"', 'data-device="%s"' % ids[0]):
+        for text in ('id="hl-line"', "LINE interface", "Hardware devices", 'data-area="device"', 'data-device="F2-SELECT"'):   # update 64: this branch only
             self.assertIn(text, page)
 
 
@@ -3670,6 +3670,123 @@ class Update61(Base):
         page = self.text("/service/milling/new?svc=sell")
         self.assertIn('name="QTY_BROKEN"', page)
         self.assertNotIn('name="QTY_BROKEN_HM"', page)
+
+
+class Update62(Base):
+    """Send LINE in the receipt (Print Billing) pop-up of customer buying/selling orders."""
+    USER = "U" + "3" * 32
+
+    def setUp(self):
+        super().setUp()
+        self.login("admin")
+        self.client.get("/lang/en")
+
+    def trade(self, ord_type, cust="C261001001", **fields):
+        data = {"ORD_TYPE": ord_type, "mode": "open", "CUST_CODE": cust, "csrf_token": self.token("/service/milling/new")}
+        data.update(fields)
+        return self.client.post("/service/buysell/new", data=data, headers={"Accept": "application/json"})
+
+    def test_receipt_is_sent_to_line(self):
+        from unittest import mock
+        import os
+        body = self.trade("SL", QTY_PADDY="10").get_json()
+        ord_id = body["billing_url"].split("ids=")[1]
+        page = self.text(body["billing_url"])
+        self.assertIn("Send LINE", page)
+        self.assertNotIn("data-receipt-line=", page)                              # not linked to LINE: the button is off
+        with self.app.app_context():
+            col("AOIMS_CUSTOMER").update_one({"CUST_CODE": "C261001001"}, {"$set": {"LINE_USER_ID": self.USER}})
+        page = self.text(body["billing_url"])
+        self.assertIn('data-receipt-line="/service/buysell/billing/line"', page)
+        with mock.patch.dict(os.environ, {"AOI_LINE_CHANNEL_TOKEN": "token", "AOI_PUBLIC_URL": ""}), \
+                mock.patch("app.models.notify._push", return_value=None) as push:
+            r = self.post("/service/buysell/billing/line", {"ids": ord_id, "PUBLIC_BASE": "https://mill.example.com"}, "/service/buysell/")
+            self.assertEqual(r.get_json(), {"ok": True, "message": "The receipt was sent to the customer's LINE."})
+            user, text, image, flex = push.call_args[0]
+            self.assertEqual((user, image), (self.USER, None))
+            self.assertIn("ใบเสร็จรับเงิน", text)
+            flat = json.dumps(flex, ensure_ascii=False)
+            for part in ("AOI Labs", "ใบเสร็จรับเงิน · ลูกค้าซื้อ", "ข้าวเปลือก", "10.00 kg", "THB", "https://mill.example.com/static/img/logo.png"):
+                self.assertIn(part, flat)
+            r = self.post("/service/buysell/billing/line", {"ids": ord_id}, "/service/buysell/")      # no https: no logo, still sent
+            self.assertTrue(r.get_json()["ok"])
+            self.assertNotIn("logo.png", json.dumps(push.call_args[0][3]))
+        kinds = [(n["NOTIFY_KIND"], n["ORD_TYPE"], n["ORD_ID"], n["NOTIFY_FLG"]) for n in self.db("AOITS_NOTIFY") if n["NOTIFY_KIND"] == "receipt"]
+        self.assertEqual(kinds, [("receipt", "SL", ord_id, "1")] * 2)
+
+    def test_receipt_line_errors(self):
+        body = self.trade("BY", QTY_PADDY="10").get_json()
+        ord_id = body["billing_url"].split("ids=")[1]
+        r = self.post("/service/buysell/billing/line", {"ids": ord_id}, "/service/buysell/")
+        self.assertEqual(r.status_code, 422)                                       # customer not linked to LINE
+        self.assertEqual(self.post("/service/buysell/billing/line", {"ids": "nope"}, "/service/buysell/").status_code, 404)
+        from app.models import line_msg
+        with self.app.app_context():
+            self.assertIn("LN_RECEIPT", [m["MSG_ID"] for m in line_msg.all_messages("en")])    # editable on LINE Message Maintenance
+
+
+class Update63(Base):
+    """AI screens are live: health checked now (kept 10 s), a stopped device shows within a minute, parts refresh."""
+
+    def setUp(self):
+        super().setUp()
+        self.login("admin")
+        self.client.get("/lang/en")
+
+    def test_stopped_device_shows_at_once(self):
+        from datetime import timedelta
+        from app.models import health
+        from app.models.automation import ONLINE_SECONDS
+        from app.timeutil import now_utc
+        self.assertEqual(ONLINE_SECONDS, 60)
+        with self.app.app_context():
+            m = col("AOIMS_MACHINE").find_one({"CONTROL_FLG": True, "MACHINE_TYPE": {"$ne": "MILL_SELECTOR"}})
+            col("AOIMS_MACHINE").update_one({"MACHINE_ID": m["MACHINE_ID"]}, {"$set": {"DEVICE_KEY_HASH": "x", "LAST_SEEN": now_utc()}})
+            self.assertEqual(health.live(0)["METRICS"]["gateways"]["offline"], [])
+            col("AOIMS_MACHINE").update_one({"MACHINE_ID": m["MACHINE_ID"]}, {"$set": {"LAST_SEEN": now_utc() - timedelta(seconds=90)}})
+            self.assertEqual(health.live()["METRICS"]["gateways"]["offline"], [])          # kept 10 s
+            doc = health.live(0)                                                          # checked again
+            self.assertEqual(doc["METRICS"]["gateways"]["offline"], [m["MACHINE_ID"]])
+            self.assertEqual(doc["LEVEL"], "warn")
+            self.assertIs(health.latest(), doc)                                           # the menu shows the same
+            self.assertEqual(col("AOITS_HEALTH").count_documents({}), 0)                  # live checks are not saved
+        page = self.text("/automation/ai")
+        self.assertIn('data-live-refresh="15"', page)
+        for part in ("dash-kpis", "ai-health", "hl-devices", "ai-forecast", "ai-alerts", "ai-signals"):
+            self.assertIn('id="%s" data-live' % part, page)
+        self.assertNotIn('id="ai-ask" data-live', page)                                  # the question box is never swapped
+        self.assertIn("Live data, updated every 15 s", page)
+        self.assertIn('data-live-refresh="60"', self.text("/automation/ai/prices"))
+        self.assertIn('id="ma-live" data-live', self.text("/automation/ai/milling"))
+
+
+class Update64(Base):
+    """AI > hardware devices: only the operating branch's devices, and the mill selector with where it points."""
+
+    def setUp(self):
+        super().setUp()
+        self.login("admin")
+        self.client.get("/lang/en")
+
+    def test_devices_of_this_branch_with_selector(self):
+        from app.timeutil import now_utc
+        with self.app.app_context():
+            sel = col("AOIMS_MACHINE").find_one({"MACHINE_ID": "F2-SELECT"})              # admin works at factory 2
+            branch = sel["BRANCH_ID"]
+            col("AOIMS_MACHINE").update_one({"MACHINE_ID": sel["MACHINE_ID"]}, {"$set": {"DEVICE_KEY_HASH": "x", "LAST_SEEN": now_utc(),
+                                                                                       "SELECT_TO": "F2-MOTOR2"}})
+            others = [m["MACHINE_ID"] for m in col("AOIMS_MACHINE").find({"CONTROL_FLG": True}) if m["BRANCH_ID"] != branch]
+        page = self.text("/automation/ai")
+        card = page[page.index('id="hl-devices"'):]
+        card = card[:card.index("</section>")]
+        self.assertIn('data-device="%s"' % sel["MACHINE_ID"], card)
+        self.assertIn("dev-selector", card)
+        self.assertIn("<span>Points at</span><b>มอเตอร์หลัก 2</b>", card)
+        self.assertIn("F2-SELECT &middot; Online", card)
+        for mid in others:
+            self.assertNotIn('data-device="%s"' % mid, card)
+        if others:
+            self.assertIn("more devices are in other branches", card)
 
 
 if __name__ == "__main__":

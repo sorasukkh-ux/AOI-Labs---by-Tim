@@ -10,7 +10,7 @@ from ..models.automation import (COMMANDS, MACHINE_STATUSES, MACHINE_TYPES, RUNN
                                  Meter, elec_rate, paddy_milled, period_bounds, post_month_to_account, set_elec_rate)
 from ..models.base import ValidationError
 from ..security import can, current_user, operating_branch, require
-from ..timeutil import fmt_datetime, local_tz, now_local, now_utc, parse_local_datetime
+from ..timeutil import fmt_datetime, local_tz, now_local, now_utc, parse_local_datetime, to_local
 from .common import flash_error, flash_ok
 from ..models.variety import mat_name
 
@@ -316,7 +316,7 @@ def ai_screen():
         session["ai_answer"] = {"q": request.form.get("QUESTION"), "a": answer}
         return redirect(url_for("automation.ai_screen", _anchor="ai-ask"))
     from ..models import health
-    hl = health.latest()
+    hl = health.live()                                        # update 63: checked now (kept 10 s), not the 5-minute one
     hl_logs = health.recent_logs(20)
     for d in hl_logs:
         d["when"] = fmt_datetime(d.get("LAST_DATE"))
@@ -348,7 +348,8 @@ def ai_screen():
               "hold": sum(1 for o in signals if o["label"] == "hold")}
     return render_template("automation/ai.html", mill=mres["total"], mill_varieties=mill_by_variety, mill_pct=ma.pct,
                            can_mill=can("AD_MILLANALYSIS"), signals=signals, sig_counts=counts, health_hist=health_hist,
-                           api_hourly=monitor.api_hourly(24), fc_total=round(sum(f["kg"] for f in fc)), health=hl, health_logs=hl_logs, health_time=fmt_datetime(hl["CHECK_DATE"]),
+                           api_hourly=monitor.api_hourly(24), fc_total=round(sum(f["kg"] for f in fc)), health=hl, health_logs=hl_logs, health_time=to_local(hl["CHECK_DATE"]).strftime("%d/%m/%Y %H:%M:%S"),
+                           live_time=to_local(now_utc()).strftime("%H:%M:%S"),
                            health_q=t("hlAskQuestion"), supply=sp, supply_bars=sp_bars, can_ask_fetch=can(AI_MENU, "create"), forecast=fc, bars=bars, queue=ai.queue_load(branch), advice=advice,
                            alerts=alerts, configured=ai.ai_configured(), last=session.pop("ai_answer", None),
                            recent=ai.recent_questions(branch, _user_id()), can_ask=can(AI_MENU, "create"),
@@ -369,7 +370,7 @@ def ai_milling():
             return context
     else:
         context = service_info.dashboard_context("trade" if tab == "trade" else "milling")
-    return render_template("admin/milling_analysis.html", tab=tab, tabs=ANALYSIS_TABS, in_ai=True,
+    return render_template("admin/milling_analysis.html", tab=tab, tabs=ANALYSIS_TABS, in_ai=True, live_time=to_local(now_utc()).strftime("%H:%M:%S"),
                            can_ask=can(AI_MENU, "create") and ai.ai_configured(), **context)
 
 
@@ -429,7 +430,7 @@ def ai_prices():
     if answer and answer.get("sku") != code:
         answer = None
     last_fetch = export_price.latest_fetch()
-    return render_template("automation/ai_prices.html", a=a, code=code, period=period, periods=list(price_signal.PERIODS),
+    return render_template("automation/ai_prices.html", a=a, code=code, live_time=to_local(now_utc()).strftime("%H:%M:%S"), period=period, periods=list(price_signal.PERIODS),
                            cfg=cfg, overview=price_signal.overview(branch, cfg), src_names={x: t("psSrc_" + x) for x in price_signal.SOURCES}, items=items, sources=price_signal.SOURCES,
                            trea_keys={c: price_signal.trea_key(c, cfg, keys) for c in var.TRADED}, traded=var.TRADED,
                            last_fetch=fmt_datetime(last_fetch["FETCH_DATE"]) if last_fetch else None, entry=entry,

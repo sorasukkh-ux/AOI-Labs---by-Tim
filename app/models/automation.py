@@ -42,7 +42,7 @@ DEFAULT_MIN_HZ, DEFAULT_MAX_HZ = 30.0, 50.0
 CMD_PENDING, CMD_SENT, CMD_DONE, CMD_FAILED, CMD_EXPIRED = "P", "S", "D", "F", "X"
 CMD_TIMEOUT_SECONDS = 120          # a command nobody picked up in time is dropped (never runs late)
 SENT_TIMEOUT_SECONDS = 300         # update 51: a command the device took but never answered (gateway stopped) is failed
-ONLINE_SECONDS = 300               # a device that reported within 5 minutes is shown as connected
+ONLINE_SECONDS = 60                # update 63: a device that reported within 1 minute is connected (the gateway reports every second; was 5 minutes)
 ID_PATTERN = re.compile(r"^[A-Z0-9][A-Z0-9_-]{1,19}$")
 
 

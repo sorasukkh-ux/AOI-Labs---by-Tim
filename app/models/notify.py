@@ -265,3 +265,38 @@ def send_card(customer, browser_origin=None):
                                                  t_in("th", "custCardSub"), t_in("th", "custCardNote")) if doc["IMAGE_URL"] else None
     col(COL).insert_one(dict(doc))
     return send(doc)
+
+
+def send_receipt(orders, customer, browser_origin=None):
+    """Update 62: the receipt (Print Billing) of customer buying/selling orders to the customer's LINE, as a card
+    (Flex Message) with the LN_RECEIPT text as its alternative text. Saved in AOITS_NOTIFY (kind receipt, ORD_TYPE
+    BY / SL, ORD_ID the first order). The logo is shown only with a public https address; the card is sent anyway."""
+    from . import line_flex, line_msg
+    from .buysell_order import BuySellOrder
+    from .tv import short_name
+    from .variety import mat_name
+    from ..i18n import t_in
+    if not line_msg.active("LN_RECEIPT"):
+        return {"NOTIFY_FLG": ERROR, "ERROR": "lnLabelOff"}
+    first = orders[0]
+    type_th = t_in("th", "svcBuyLabel" if first.get("ORD_TYPE") == "BY" else "svcSellLabel")
+    numbers = ", ".join("#%s" % (o.get("QR_ID") or o["ORD_ID"]) for o in orders)
+    total = sum(BuySellOrder.amount(o) for o in orders)
+    date = to_local(now_utc()).strftime("%d/%m/%Y %H:%M")
+    lines = [(mat_name(l["MAT_CODE"], "th"), "{:,.2f}".format(l.get("ORD_QTY") or 0), "{:,.2f}".format(l.get("PRICING_UINT") or 0),
+              "{:,.2f}".format(l.get("ORD_AMOUNT") or 0))
+             for o in orders for l in BuySellOrder.items_of(o) if (l.get("ORD_QTY") or 0) > 0]
+    name = customer.get("CUST_NAME") or first["CUST_CODE"]
+    now = now_utc()
+    seq = Counter.next("NT-" + first["ORD_ID"])
+    doc = {"NOTIFY_ID": "NT-%s-%02d" % (first["ORD_ID"], seq), "ORD_ID": first["ORD_ID"], "ORD_TYPE": first.get("ORD_TYPE"),
+           "CUST_CODE": first["CUST_CODE"], "NOTIFY_KIND": "receipt", "NOTIFY_DATETIME": None, "NOTIFY_FLG": UNSENT,
+           "NOTIFY_MESSAGE": line_msg.text("LN_RECEIPT", no=numbers, name=short_name(name) or name, type=type_th,
+                                           total="{:,.2f}".format(total), date=date),
+           "ERROR": None, "REGIST_DATE": now, "LAST_UPDATE": now, "IMAGE_URL": None}
+    doc["NOTIFY_FLEX"] = line_flex.receipt("%s · %s" % (t_in("th", "receiptTitle"), type_th), numbers, name, date, lines,
+                                           "{:,.2f}".format(total), public_base(browser_origin),
+                                           {"no": t_in("th", "receiptOrderNo"), "customer": t_in("th", "receiptCustomer"),
+                                            "date": t_in("th", "receiptDate"), "total": t_in("th", "totalLabel")})
+    col(COL).insert_one(dict(doc))
+    return send(doc)

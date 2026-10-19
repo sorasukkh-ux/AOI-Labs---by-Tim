@@ -178,6 +178,27 @@
     window.print();
     if (!("onafterprint" in window)) done();
   });
+  // update 62: Send LINE in the receipt pop-up (the pop-up is filled later, so the click is caught on the page)
+  document.addEventListener("click", function (event) {
+    var button = event.target.closest("[data-receipt-line]");
+    if (!button || button.disabled) return;
+    var wrap = button.closest(".receipt-wrap") || document;
+    var status = wrap.querySelector("[data-receipt-line-status]");
+    var say = function (text, bad) {
+      if (!status) return;
+      status.hidden = false; status.textContent = text; status.className = "rc-line-status " + (bad ? "bad" : "ok");
+    };
+    var data = new FormData();
+    data.set("ids", button.getAttribute("data-ids") || "");
+    data.set("PUBLIC_BASE", window.location.origin);
+    data.set("csrf_token", button.getAttribute("data-csrf") || "");
+    button.disabled = true;
+    fetch(button.getAttribute("data-receipt-line"), { method: "POST", body: data, credentials: "same-origin",
+          headers: { "Accept": "application/json", "X-CSRF-Token": button.getAttribute("data-csrf") || "" } })
+      .then(function (r) { return r.json().catch(function () { return { ok: false, message: "LINE: error " + r.status }; }); })
+      .then(function (res) { say(res.message || "", !res.ok); button.disabled = false; })
+      .catch(function () { say("LINE: no connection", true); button.disabled = false; });
+  });
   document.querySelectorAll("[data-print]").forEach(function (button) {
     button.addEventListener("click", function () { window.print(); });
   });
@@ -243,6 +264,72 @@
   var auto = document.querySelector("[data-auto-refresh]");
   if (auto) setTimeout(function () { if (!overlay.classList.contains("show")) window.location.reload(); },
                        (Number(auto.getAttribute("data-auto-refresh")) || 30) * 1000);
+
+  // ----- update 63: live dashboards (AI). Every N seconds the same page is fetched again and each [data-live] part
+  // whose content changed is swapped in place (no reload, the scroll position stays). Paused while the tab is hidden,
+  // a pop-up is open, the user types in a field or has changed a field that is not sent yet. The bar shows the time of
+  // the last update, or that the server cannot be reached (a stopped server shows here within one round). -----
+  var liveRoot = document.querySelector("[data-live-refresh]");
+  if (liveRoot && window.fetch && window.DOMParser) {
+    var liveEvery = Math.max(5, Number(liveRoot.getAttribute("data-live-refresh")) || 15) * 1000;
+    var liveBar = document.querySelector("[data-live-clock]");
+    var liveBusy = false, lostSince = null;
+    var hhmmss = function (d) { return [d.getHours(), d.getMinutes(), d.getSeconds()].map(function (n) { return ("0" + n).slice(-2); }).join(":"); };
+    var setBar = function (state, text) {
+      if (!liveBar) return;
+      liveBar.className = "live-bar live-" + state;
+      liveBar.querySelector("span").textContent = text;
+    };
+    var dirty = function (part) {
+      return Array.prototype.some.call(part.querySelectorAll("input, select, textarea"), function (f) {
+        if (f.type === "hidden" || f.type === "submit" || f.type === "button") return false;
+        if (f.type === "checkbox" || f.type === "radio") return f.checked !== f.defaultChecked;
+        if (f.tagName === "SELECT") {                     // no option marked selected: the first one is the default
+          var opts = Array.prototype.slice.call(f.options), marked = opts.some(function (o) { return o.defaultSelected; });
+          return opts.some(function (o, i) { return o.selected !== (marked ? o.defaultSelected : i === 0 && !f.multiple); });
+        }
+        return f.value !== f.defaultValue;
+      });
+    };
+    var paused = function () {
+      var a = document.activeElement;
+      return document.hidden || overlay.classList.contains("show") || !!(a && a.matches && a.matches("input, select, textarea"));
+    };
+    var liveTick = function () {
+      if (liveBusy) return;
+      if (paused()) { if (!lostSince && liveBar) setBar("paused", liveBar.getAttribute("data-paused")); return; }
+      liveBusy = true;
+      fetch(window.location.href, { credentials: "same-origin", headers: { "X-AOI-Live": "1" }, cache: "no-store" })
+        .then(function (r) {
+          if (r.redirected && /\/login/.test(r.url)) { window.location.reload(); throw null; }   // signed out
+          if (!r.ok) throw new Error("HTTP " + r.status);
+          return r.text();
+        })
+        .then(function (html) {
+          var doc = new DOMParser().parseFromString(html, "text/html"), changed = [];
+          document.querySelectorAll("[data-live][id]").forEach(function (part) {
+            var fresh = doc.getElementById(part.id);
+            if (!fresh || fresh.outerHTML === part.outerHTML || dirty(part)) return;
+            part.replaceWith(document.importNode(fresh, true));
+            changed.push(part.id);
+          });
+          if (changed.length) document.dispatchEvent(new CustomEvent("aoi:live", { detail: changed }));
+          lostSince = null;
+          var served = doc.querySelector("[data-live-clock] span");               // the server's time (Thai time)
+          setBar("ok", served ? served.textContent : (liveBar ? liveBar.getAttribute("data-ok") : "") + " " + hhmmss(new Date()));
+        })
+        .catch(function (err) {
+          if (err === null) return;
+          if (!lostSince) lostSince = new Date();
+          var pill = document.querySelector(".dash-banner .dash-live[class*=\"lvl-\"]");          // the banner's level is not true any more
+          if (pill && liveBar) { pill.className = "dash-live lvl-crit"; pill.lastChild.textContent = liveBar.getAttribute("data-down"); }
+          setBar("lost", (liveBar ? liveBar.getAttribute("data-lost") : "") + " " + hhmmss(lostSince));
+        })
+        .then(function () { liveBusy = false; });
+    };
+    setInterval(liveTick, liveEvery);
+    document.addEventListener("visibilitychange", function () { if (!document.hidden) liveTick(); });
+  }
 
   // ----- order details pop-up -----
   document.addEventListener("click", function (event) {

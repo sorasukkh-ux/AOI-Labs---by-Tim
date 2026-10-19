@@ -3,19 +3,20 @@
 {% from "automation/_dash.html" import sparkline, sig_card %}
 {% block content %}
 {% set s = a.signal or {} %}{% set pos = a.position %}
-<div id="tab-ps" class="auto-page dash">
+<div id="tab-ps" class="auto-page dash" data-live-refresh="60">
 {{ page_head(none, url_for('automation.ai_screen')) }}
-<header class="dash-banner ps-banner">
+<header class="dash-banner ps-banner" id="ps-banner" data-live>
   <div><p class="dash-title">{{ t('psTitle') }}</p><p class="dash-subtitle">{{ branch_label(op_branch) }} &middot; {{ a.name }}{% if a.base %} &middot; {{ t('psSrc_' ~ a.base) }}{% endif %}</p></div>
   {% if s.label %}<span class="dash-live ps-live-{{ s.label }}"><i></i>{{ t('psLabel_' ~ s.label) }}</span>{% endif %}
 </header>
-<p class="desc-text dash-desc">{{ t('psDesc') }}</p><p class="cap-note dash-desc">{{ t('psDisclaimer') }}</p>
+<p class="desc-text dash-desc">{{ t('psDesc') }}</p>
+<p class="live-bar" data-live-clock data-ok="{{ t('liveOk', n=60) }}" data-lost="{{ t('liveLost') }}" data-paused="{{ t('livePaused') }}" data-down="{{ t('liveDown') }}"><i></i><span>{{ t('liveOk', n=60) }} {{ live_time }}</span></p><p class="cap-note dash-desc">{{ t('psDisclaimer') }}</p>
 <nav class="chips dash-nav">
   <a class="chip" href="#ps-chart">{{ t('psChart') }}</a><a class="chip" href="#ps-overview">{{ t('psOverview') }}</a>
   <a class="chip" href="#ps-sources">{{ t('psSources') }}</a><a class="chip" href="#ps-settings">{{ t('psSettings') }}</a><a class="chip" href="#ps-ask">{{ t('aiAsk') }}</a>
 </nav>
 
-<section class="card dash-card" id="ps-chart">
+<section class="card dash-card" id="ps-chart" data-live>
   <div class="ps-toolbar">
     <form method="get" class="ps-pick" action="{{ url_for('automation.ai_prices') }}">
       <label class="field"><span>{{ t('colProduct') }}</span><select name="sku" id="ps-sku" data-autosubmit>{% for c in traded %}<option value="{{ c }}"{% if c == code %} selected{% endif %}>{{ mat_name(c) }}</option>{% endfor %}</select></label>
@@ -94,7 +95,7 @@
   </div>
 </section>
 
-<section class="card dash-card mt14" id="ps-overview">
+<section class="card dash-card mt14" id="ps-overview" data-live>
   <div class="dash-head"><p class="card-title sub">{{ t('psOverview') }}</p></div>
   <div class="dash-sig-grid">
   {% for o in overview %}{% if o.label %}{{ sig_card(o, period, o.code == code) }}{% else %}
@@ -104,7 +105,7 @@
   <p class="cap-note">{{ t('psUnitNote') }}</p>
 </section>
 
-<div class="card dash-card mt14" id="ps-sources">
+<div class="card dash-card mt14" id="ps-sources" data-live>
   <p class="card-title sub">{{ t('psSrc_TREA') }}</p>
   <p class="desc-text">{{ t('psTreaDesc') }}</p>
   <p class="cap-note">{{ t('psTreaUrl') }} <a href="{{ export_url }}" rel="noopener" target="_blank">{{ export_url }}</a> &middot; {{ t('psLastFetch') }}: <b>{{ last_fetch or '-' }}</b> &middot; {{ t('psFx') }}: <b>{{ cfg.FX_USD_THB|plain if cfg.FX_USD_THB else t('psFxNone') }}</b></p>
