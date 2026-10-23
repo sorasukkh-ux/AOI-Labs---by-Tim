@@ -31,6 +31,7 @@
     <div class="scada-top-actions">
       <span class="scada-shift" id="scada-shift"></span>
       <span class="scada-clock" id="scada-clock"></span>
+      <a class="scada-btn" id="scada-3d" href="{{ url_for('automation.plant3d') }}">&#9651; {{ t('p3Open') }}</a>
       <button type="button" class="scada-btn" id="scada-full"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>{{ t('scFullScreen') }}</button>
     </div>
   </div>

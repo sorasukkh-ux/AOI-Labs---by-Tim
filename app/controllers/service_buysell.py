@@ -77,7 +77,14 @@ def _decorate(orders):
             if ref not in millings:
                 millings[ref] = MillingOrder.find(ref) or {}
             order["link_ml"] = millings[ref]
-        if bs.CLOSED in order["next_statuses"]:
+        # update 68: goods of an order linked to an open milling order stay in stock until that order is Closed
+        order["waits_ml"] = BuySellOrder.waits_for_milling(order) if order["ORD_TYPE"] == bs.SELL else None
+        if order["waits_ml"] and order["ORD_STATUS"] == bs.CLOSED:
+            order["held"] = Inventory.for_order(order["BRANCH_ID"], order["ORD_ID"])
+        if bs.CLOSED in order["next_statuses"] and order["waits_ml"] and (order["kept"] or BuySellOrder.is_linked(order)):
+            order["close_text"] = t("confirmCloseBsKeep", id=order["QR_ID"], ml=order["waits_ml"].get("QR_ID", ""),
+                                    stock=Inventory.describe(Inventory.for_order(order["BRANCH_ID"], order["ORD_ID"])) or "-")
+        elif bs.CLOSED in order["next_statuses"]:
             if order["kept"]:
                 order["close_text"] = t("confirmCloseBsOrder", id=order["QR_ID"], stock=Inventory.describe(order["kept"]))
             elif BuySellOrder.is_linked(order):

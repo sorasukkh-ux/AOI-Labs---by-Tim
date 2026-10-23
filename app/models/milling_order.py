@@ -304,6 +304,8 @@ class MillingOrder:
         if inbound:
             Inventory.inbound(branch_id, var.code(order.get("RICE_VARIETY"), var.RICE), inbound, lot_of(order["ORD_ID"]), order["ORD_ID"], "ML", MOVE_MILL, ope_user)
         updated = cls._save(order, values, ope_user)
+        if new_status in (flow.CLOSED, flow.CANCELLED):      # update 68: the take-home goods leave with the rice
+            BuySellOrder.release_with_milling(updated, ope_user)
         if new_status == flow.CLOSED:
             Inventory.release(branch_id, order["ORD_ID"], "ML", MOVE_MILL_PICKUP, ope_user)
             Account.post_milling_income(updated, descriptions or {"full": "", "fee": ""}, ope_user)

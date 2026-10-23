@@ -3888,5 +3888,102 @@ class Update65(Base):
         self.assertTrue(self.new_order()["ORD_ID"].endswith("-0001"))                    # numbering starts again
 
 
+class Update66(Base):
+    """Automation > SCADA > 3D plant view from the live SCADA data."""
+
+    def setUp(self):
+        super().setUp()
+        self.login("admin")
+        self.client.get("/lang/en")
+
+    def test_3d_view(self):
+        self.assertIn('id="scada-3d"', self.text("/automation/scada"))
+        page = self.text("/automation/scada/3d")
+        for part in ('id="plant3d"', 'id="p3-canvas"', "js/plant3d.js", 'data-url="/automation/scada.json"', "F2-SELECT"):
+            self.assertIn(part, page)
+        js = self.client.get("/static/js/plant3d.js")
+        self.assertEqual(js.status_code, 200)
+        js.close()
+        self.logout()
+        self.assertEqual(self.client.get("/automation/scada/3d").status_code, 302)          # signed in only
+
+
+class Update67(Base):
+    """LINE cannot load the QR picture (Codespaces port private): the staff are told how to fix it."""
+
+    def test_picture_problem(self):
+        from unittest import mock
+        from app.models import notify
+
+        class Resp:
+            def __init__(self, url, kind):
+                self.status, self.headers, self._url = 200, {"Content-Type": kind}, url
+            def geturl(self):
+                return self._url
+            def __enter__(self):
+                return self
+            def __exit__(self, *a):
+                return False
+        with self.app.app_context():
+            self.assertIsNone(notify.picture_problem("https://x.app.github.dev/line/qr/a.png"))     # tests: not checked
+            self.app.config["TESTING"] = False
+            try:
+                with mock.patch("urllib.request.urlopen", return_value=Resp("https://github.com/login?x", "text/html")):
+                    self.assertEqual(notify.picture_problem("https://x.app.github.dev/line/qr/a.png"), "private")
+                with mock.patch("urllib.request.urlopen", return_value=Resp("https://x/line/qr/a.png", "image/png")):
+                    self.assertIsNone(notify.picture_problem("https://x/line/qr/a.png"))
+            finally:
+                self.app.config["TESTING"] = True
+
+    def test_staff_told_when_picture_blocked(self):
+        import os
+        from unittest import mock
+        self.login("admin")
+        self.client.get("/lang/en")
+        with self.app.app_context():
+            col("AOIMS_CUSTOMER").update_one({"CUST_CODE": "C261001001"}, {"$set": {"LINE_USER_ID": "U" + "7" * 32}})
+        ord_id = self.new_order()["ORD_ID"]
+        with mock.patch.dict(os.environ, {"AOI_LINE_CHANNEL_TOKEN": "t", "AOI_PUBLIC_URL": "https://mill.example.com"}), \
+                mock.patch("app.models.notify._push", return_value=None), \
+                mock.patch("app.models.notify.picture_problem", return_value="private"):
+            self.post("/service/milling/%s/line-qr" % ord_id, {"PUBLIC_BASE": ""}, "/service/milling/")
+        self.assertIn("Port Visibility", self.text("/service/milling/%s" % ord_id))
+
+
+class Update68(Base):
+    """Take-home / linked goods stay in stock after the buying order is Closed, until the milling order is Closed."""
+
+    def setUp(self):
+        super().setUp()
+        self.login("admin")
+        self.client.get("/lang/en")
+
+    def stock(self):
+        return sorted((r["MAT_CODE"], r["INV_QTY"], r.get("SUB_2")) for r in self.db("AOINV_ONHAND"))
+
+    def test_take_home_leaves_with_the_rice(self):
+        ml = self.new_order(REGIST_PADDY="120", BRAN_ORDER="10", BROKE_ORDER="5", RICE_VARIETY="HM")["ORD_ID"]
+        sl = next(o for o in self.db("AOITS_ORDBUYSELL") if o.get("REF_ORD_ID") == ml)["ORD_ID"]
+        self.set_status(ml, "I", ACT_PADDY="120")
+        self.set_status(ml, "F", LOC_ID="00-001-001")
+        self.post("/service/buysell/%s/status" % sl, {"new_status": "P", "LOC_ID": "00-001-001", "INV_QTY_BRAN": "10", "INV_QTY_BROKEN": "5"}, "/service/buysell/")
+        self.post("/service/buysell/%s/status" % sl, {"new_status": "C"}, "/service/buysell/")
+        self.assertEqual(next(o for o in self.db("AOITS_ORDBUYSELL") if o["ORD_ID"] == sl)["ORD_STATUS"], "C")
+        kinds = [m for m, _q, _s in self.stock()]
+        self.assertEqual(sorted(kinds), ["BRAN", "BROKEN", "RICE_HM"])                 # paid, still waiting for pickup
+        self.assertIn("picked up with milling order", self.text("/service/buysell/?view=closed"))
+        self.assertTrue([a for a in self.db("AOITS_ACCOUNT") if a.get("REF_ORD_ID") == sl])    # the income is posted now
+        self.set_status(ml, "C")
+        self.assertEqual(self.stock(), [])                                               # everything left with the rice
+
+    def test_direct_order_released_at_close(self):
+        self.post("/inventory/new", {"MAT_CODE": "BRAN", "INV_QTY": "50", "LOC_ID": "01-001-001", "INV_STATUS": "A", "OPE_TYPE": "I", "REASON": "milling"}, "/inventory/new")
+        data = {"ORD_TYPE": "SL", "mode": "open", "CUST_CODE": "C261001001", "QTY_BRAN": "20", "csrf_token": self.token("/service/milling/new")}
+        sl = self.client.post("/service/buysell/new", data=data, headers={"Accept": "application/json"}).get_json()["billing_url"].split("ids=")[1]
+        self.post("/service/buysell/%s/status" % sl, {"new_status": "P"}, "/service/buysell/")
+        self.post("/service/buysell/%s/status" % sl, {"new_status": "C"}, "/service/buysell/")
+        self.assertEqual(self.stock(), [("BRAN", 30.0, None)])                           # not linked: left at Closed
+
+
 if __name__ == "__main__":
     unittest.main()

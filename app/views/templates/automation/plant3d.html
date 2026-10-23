@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% from "_macros.html" import page_head %}
+{# update 66: the plant in 3D from the live SCADA data (js/plant3d.js, own WebGL - no library, no internet) #}
+{% block content %}
+<div id="tab-plant3d" class="auto-page">
+{{ page_head(t('p3Title'), url_for('automation.scada')) }}
+<section class="scada plant3d" id="plant3d" data-url="{{ url_for('automation.scada_json') }}" data-scada-url="{{ url_for('automation.scada') }}"
+  data-initial='{{ data|tojson }}'
+  data-text='{{ {
+    "types": type_keys_text, "status": {"R": t("mcRunning"), "I": t("mcIdle"), "F": t("mcFault"), "M": t("mcMaintenance"), "O": t("mcOffline"), "DIS": t("scDisabled")},
+    "offline": t("p3Offline"), "noData": t("scNoData"), "kw": t("scRatedKw"), "feeds": t("scFeeds"), "outHz": t("mcLiveOutHz"), "amp": t("mcLiveAmp"),
+    "rpm": t("mcLiveRpm"), "setHz": t("mcLiveSetHz"), "fault": t("mcLiveFault"), "selTo": t("scSelectorTo"), "selNone": t("scSelectorNone"),
+    "hint": t("p3Hint"), "control": t("p3Control"), "updated": t("scUpdated"), "lost": t("scConnectionLost"), "noGL": t("p3NoGL")
+  }|tojson }}'>
+  <div class="scada-top">
+    <div class="scada-title">
+      <span class="scada-dot ok" id="p3-dot" aria-hidden="true"></span>
+      <div><b class="scada-brand">AOI 3D</b><span class="scada-sub">{{ t('p3Sub') }} &middot; {{ branch_label(branch) }} &middot; <span id="p3-updated"></span></span></div>
+    </div>
+    <div class="scada-top-actions">
+      <button type="button" class="scada-btn" id="p3-reset">{{ t('p3Reset') }}</button>
+      <button type="button" class="scada-btn" id="p3-top">{{ t('p3TopView') }}</button>
+      <button type="button" class="scada-btn" id="p3-spin">{{ t('p3Spin') }}</button>
+      <button type="button" class="scada-btn" id="p3-full">{{ t('scFullScreen') }}</button>
+    </div>
+  </div>
+  <div class="scada-kpis">
+    <div class="scada-kpi"><span>{{ t('scKpiRunning') }}</span><b data-k="running">-</b></div>
+    <div class="scada-kpi"><span>{{ t('scKpiMotor') }}</span><b data-k="motor">-</b></div>
+    <div class="scada-kpi"><span>{{ t('scKpiQueue') }}</span><b data-k="queue">-</b></div>
+    <div class="scada-kpi"><span>{{ t('scKpiPaddy') }}</span><b data-k="paddy">-</b></div>
+    <div class="scada-kpi"><span>{{ t('scKpiEnergy') }}</span><b data-k="energy">-</b></div>
+    <div class="scada-kpi"><span>{{ t('scKpiAlarms') }}</span><b data-k="alarms">-</b></div>
+  </div>
+  <div class="p3-body">
+    <div class="p3-wrap" id="p3-wrap"><canvas id="p3-canvas" aria-label="{{ t('p3Title') }}"></canvas><div class="p3-labels" id="p3-labels"></div></div>
+    <aside class="scada-panel p3-panel" id="p3-panel" aria-live="polite"></aside>
+  </div>
+  <div class="scada-legend" aria-hidden="true">
+    <span><i class="lg run"></i>{{ t('mcRunning') }}</span><span><i class="lg idle"></i>{{ t('mcIdle') }}</span>
+    <span><i class="lg fault"></i>{{ t('mcFault') }}</span><span><i class="lg dis"></i>{{ t('scDisabled') }}</span>
+    <span><i class="lg flow"></i>{{ t('scFlow') }}</span><span class="p3-howto">{{ t('p3Hint') }}</span>
+  </div>
+</section>
+</div>
+{% endblock %}
+{% block head %}<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&amp;family=IBM+Plex+Sans+Thai:wght@400;500;600&amp;display=swap">{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/plant3d.js') }}" defer></script>{% endblock %}

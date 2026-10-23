@@ -141,6 +141,26 @@ def public_base(browser_origin=None):
     return None
 
 
+def picture_problem(url):
+    """Update 67: can LINE fetch this picture? The server asks its own public address the way LINE does (no sign-in).
+    None = fine (or not checked: tests, no address); otherwise a short reason. A Codespaces port that is Private
+    answers with GitHub's sign-in page, so LINE shows the card with an empty picture."""
+    from flask import current_app
+    if not url or current_app.config.get("TESTING"):
+        return None
+    req = urllib.request.Request(url, headers={"User-Agent": "LineBotWebhook/2.0 (AOI picture check)"})
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            kind = resp.headers.get("Content-Type", "")
+            if resp.status == 200 and kind.startswith("image/"):
+                return None
+            return "private" if "github" in resp.geturl() or "text/html" in kind else "HTTP %s %s" % (resp.status, kind)
+    except urllib.error.HTTPError as exc:
+        return "private" if exc.code in (401, 403) else "HTTP %s" % exc.code
+    except Exception as exc:                                  # noqa: BLE001 - no answer at all
+        return "unreachable: %s" % str(exc)[:80]
+
+
 def qr_image_url(order, browser_origin=None):
     from flask import url_for
     base = public_base(browser_origin)

@@ -1313,3 +1313,36 @@ a.badge.from-milling.link { text-decoration: none; cursor: pointer; } a.badge.fr
 .staff-notice p { margin: 0 0 8px; font-size: 14px; }
 .staff-notice .sn-actions { display: flex; gap: 8px; justify-content: flex-end; }
 @media print { #staff-notices { display: none; } }
+
+/* update 66: 3D plant */
+.plant3d .scada-top-actions { flex-wrap: wrap; }
+a.scada-btn { text-decoration: none; }
+.p3-body { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 12px; margin-top: 12px; }
+.p3-wrap { position: relative; height: 62vh; min-height: 380px; border-radius: 14px; overflow: hidden; border: 1px solid var(--sc-line); background: #0e1729; touch-action: none; }
+.p3-wrap canvas { display: block; touch-action: none; cursor: grab; }
+.p3-wrap.p3-nogl::after { content: attr(data-msg); position: absolute; inset: 0; display: grid; place-items: center; color: var(--sc-sub); padding: 20px; text-align: center; }
+.p3-labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.p3-label { position: absolute; left: 0; top: 0; pointer-events: auto; cursor: pointer; white-space: nowrap; padding: 3px 8px 4px; border-radius: 8px;
+  background: rgba(8, 16, 32, 0.78); border: 1px solid rgba(96, 165, 250, 0.4); color: var(--sc-ink); font-size: 12px; line-height: 1.25; text-align: center; }
+.p3-label b { display: block; font-size: 12.5px; }
+.p3-label span { color: var(--sc-sub); font-size: 11px; }
+.p3-label.st-R { border-color: rgba(34, 197, 94, 0.8); } .p3-label.st-R span { color: #86efac; }
+.p3-label.st-F { border-color: #ef4444; } .p3-label.st-F span { color: #fca5a5; }
+.p3-label.st-off, .p3-label.st-dis { opacity: 0.7; }
+.p3-label.picked { box-shadow: 0 0 0 2px #38bdf8; }
+.p3-panel { min-height: 200px; }
+.p3-name { margin: 0; font-size: 18px; font-weight: 700; color: var(--sc-ink); }
+.p3-id { margin: 2px 0 8px; color: var(--sc-dim); font-size: 12px; }
+.p3-st { display: inline-block; margin: 0 0 10px; padding: 2px 10px; border-radius: 999px; font-weight: 600; background: rgba(127, 156, 196, 0.25); color: var(--sc-ink); }
+.p3-st.st-R { background: rgba(34, 197, 94, 0.25); color: #86efac; } .p3-st.st-F { background: rgba(239, 68, 68, 0.25); color: #fca5a5; }
+.p3-st.st-M { background: rgba(245, 158, 11, 0.25); color: #fcd34d; }
+.p3-row { display: flex; justify-content: space-between; gap: 10px; padding: 5px 0; border-bottom: 1px solid rgba(96, 165, 250, 0.15); font-size: 13px; color: var(--sc-sub); }
+.p3-row b { color: var(--sc-ink); }
+.p3-note { color: var(--sc-dim); font-size: 12px; }
+.p3-open { margin-top: 12px; width: 100%; justify-content: center; }
+.p3-howto { margin-left: auto; color: var(--sc-dim); }
+.plant3d:fullscreen, .plant3d.p3-pseudo-full { position: fixed; inset: 0; z-index: 1000; overflow: auto; border-radius: 0; }
+.plant3d:fullscreen .p3-wrap, .plant3d.p3-pseudo-full .p3-wrap { height: calc(100vh - 190px); }
+@media (max-width: 820px) { .p3-body { grid-template-columns: 1fr; } .p3-wrap { height: 52vh; } .p3-howto { display: none; } }
+.scada-btn.on { border-color: var(--sc-cyan); background: rgba(56, 189, 248, 0.18); }
+.p3-wrap, .p3-labels { -webkit-user-select: none; user-select: none; }

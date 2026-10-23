@@ -64,6 +64,33 @@ class BuySellOrder:
     def is_linked(order):
         return order.get("REF_ORD_TYPE") == "ML"
 
+    @staticmethod
+    def milling_id(order):
+        """Update 68: the milling order this order goes with - its take-home order, or linked by hand (LINK_ML_ID)."""
+        if order.get("REF_ORD_TYPE") == "ML" and order.get("REF_ORD_ID"):
+            return order["REF_ORD_ID"]
+        return order.get("LINK_ML_ID") or None
+
+    @classmethod
+    def waits_for_milling(cls, order):
+        """Update 68 (Tim): goods of an order linked to a milling order leave the stock when the milling order is
+        Closed (picked up with the rice), not when this order is Closed (paid). The milling order, when still open."""
+        from .milling_order import MillingOrder
+        ref = cls.milling_id(order)
+        milling = MillingOrder.find(ref) if ref else None
+        return milling if milling and milling.get("MILL_STATUS") not in ("C", "CC") else None
+
+    @classmethod
+    def release_with_milling(cls, milling, ope_user):
+        """Update 68: the milling order was Closed (or Cancelled) - the goods kept for its closed linked orders leave."""
+        released = []
+        for o in cls.for_milling(milling["ORD_ID"]) + cls.linked_by_hand(milling["ORD_ID"]):
+            if o["ORD_STATUS"] != CLOSED:
+                continue
+            move = MOVE_ORDER_CLOSE if cls.is_linked(o) else MOVE_SELLING
+            released += Inventory.release(o["BRANCH_ID"], o["ORD_ID"], o["ORD_TYPE"], move, ope_user)
+        return released
+
     # ---------- update 56: a customer buying order (SL) linked by hand to a milling order ----------
     @staticmethod
     def resolve_milling(branch_id, text, cust_code):
@@ -233,8 +260,11 @@ class BuySellOrder:
 
     @classmethod
     def _on_close(cls, order, ope_user, describe):
-        """Closed: stock leaves (selling orders) and the ledger entry is posted."""
-        if cls.is_linked(order):
+        """Closed: stock leaves (selling orders) and the ledger entry is posted. Update 68: an order linked to a
+        milling order that is still open keeps its goods in stock until that milling order is Closed."""
+        if order["ORD_TYPE"] == SELL and cls.waits_for_milling(order) and Inventory.for_order(order["BRANCH_ID"], order["ORD_ID"]):
+            pass                                             # paid now, handed over with the rice
+        elif cls.is_linked(order):
             Inventory.release(order["BRANCH_ID"], order["ORD_ID"], order["ORD_TYPE"], MOVE_ORDER_CLOSE, ope_user)
         elif order["ORD_TYPE"] == SELL and Inventory.for_order(order["BRANCH_ID"], order["ORD_ID"]):
             # update 56: picked at Prepared (Inventory Outbound) - the kept goods leave now

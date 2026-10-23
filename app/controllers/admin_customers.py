@@ -83,6 +83,8 @@ def customer_card_line(code):
     doc = notify.send_card(customer, request.form.get("PUBLIC_BASE"))
     if doc.get("NOTIFY_FLG") != notify.SENT:
         return jsonify({"ok": False, "message": t(notify.reason_key(doc.get("ERROR")))}), 422
+    if doc.get("IMAGE_URL") and notify.picture_problem(doc["IMAGE_URL"]):     # update 67
+        return jsonify({"ok": False, "message": t("lnPictureBlocked")}), 422
     return jsonify({"ok": True, "message": t("lnCardSent" if doc.get("IMAGE_URL") else "lnCardText")})
 
 

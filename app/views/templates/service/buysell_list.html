@@ -105,6 +105,7 @@
     </template>
     {% endif %}
 
+    {% if order.held %}<p class="bs-note" data-held>{{ t('heldForPickup', ml=order.waits_ml.QR_ID, stock=order.held|map(attribute='LOC_ID')|join(', '), qty=order.held|sum(attribute='INV_QTY')|num) }}</p>{% endif %}
     {% if order.kept %}<p class="bs-note" data-kept>{{ t('outboundKept', stock=order.kept|map(attribute='LOC_ID')|join(', '), qty=order.kept|sum(attribute='INV_QTY')|num) }}</p>{% endif %}
     {% if editable and order.ORD_TYPE == 'SL' and not order.milling and order.is_open %}
     {# update 56: link a customer buying order to a milling order of the same customer #}

@@ -163,6 +163,8 @@ def _send_label(order, browser_origin, force=False):
         return "lnLabelOff" if force else None
     if doc["NOTIFY_FLG"] != notify.SENT:
         return notify.reason_key(doc.get("ERROR"))
+    if image and notify.picture_problem(image):       # update 67: sent, but LINE cannot load the QR picture
+        return "lnPictureBlocked"
     return "lnLabelSent" if image else "lnLabelText"
 
 

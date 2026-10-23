@@ -340,6 +340,31 @@ are kept in `AOITS_SYSLOG` (14 days), the checks in `AOITS_HEALTH` (7 days).
 customer's LINE when "Also send to the customer's LINE" is ticked (shown for customers linked to LINE); "Send to LINE
 only" sends without printing. The same public https address is needed as for the queue QR (update 47).
 
+## Take-home goods leave with the rice (update 68)
+
+A customer buying order linked to a milling order (its take-home bran / broken rice, or linked by hand) keeps its
+goods in stock after it is Closed (paid) - the card says "still in stock, picked up with milling order #...". They
+leave the stock when the milling order is Closed (picked up with the rice) or Cancelled. An order that is not linked
+releases its stock at Closed, as before. The income is posted when the buying order is Closed.
+
+## LINE pictures need a public address (update 67)
+
+LINE fetches the QR picture of a queue card / customer card from the app's https address without signing in. In
+GitHub Codespaces a port is Private by default (also after it was removed and added again), so LINE gets GitHub's
+sign-in page and the card shows an empty space where the QR should be. Fix: Ports tab → port 5000 → Port Visibility →
+Public (or set AOI_PUBLIC_URL to a public address). After sending, the server now checks the picture address the way
+LINE does and tells the staff when it is blocked.
+
+## 3D plant (update 66)
+
+Automation > SCADA > **3D view** (/automation/scada/3d) draws the plant in 3D from the same live data as the SCADA
+(every 2 seconds): silos, conveyors, intake bin, sorter, the mill selector, main motor 1 / 2 with the mill, packer and
+AMR, placed by their SCADA column / row and joined by the FEEDS_TO pipes. Colours follow the status; a machine with
+a device moves only on fresh telemetry (the motor coupling turns at its output Hz, belts and the AMR move); rice flows
+in the pipes of running machines, from the selector only to the motor it points at, and the selector's chute turns to
+that motor. Drag to turn, pinch / scroll to zoom, two fingers to move, tap a machine for its details. Commands stay
+on the SCADA screen. Own small WebGL code (js/plant3d.js) - no library, works without internet.
+
 ## Cancel reason, list tabs, LINE link notice, clearing transactions (update 65)
 
 * Milling Order List: cancelling an order asks for the reason in the same pop-up (required, kept in CANCEL_REASON and

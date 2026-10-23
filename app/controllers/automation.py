@@ -173,6 +173,15 @@ def scada():
                            can_command=can(HARDWARE, "approve"), can_hardware=can(HARDWARE))
 
 
+@bp.route("/scada/3d")
+@require(SCADA)
+def plant3d():
+    """Update 66: the plant in 3D, live from scada.json (no commands here - they stay on the SCADA screen)."""
+    branch = operating_branch()
+    return render_template("automation/plant3d.html", data=scada_data(branch), branch=branch,
+                           type_keys_text={k: t(v) for k, v in TYPE_KEYS.items()})
+
+
 @bp.route("/scada.json")
 @require(SCADA)
 def scada_json():
