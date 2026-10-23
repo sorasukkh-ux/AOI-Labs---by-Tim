@@ -265,6 +265,56 @@
   if (auto) setTimeout(function () { if (!overlay.classList.contains("show")) window.location.reload(); },
                        (Number(auto.getAttribute("data-auto-refresh")) || 30) * 1000);
 
+  // ----- update 65: notices for the staff - a customer linked their LINE account. Asked every 20 s; the last time
+  // asked is kept in this browser, so a notice is not lost while the operator moves to another page. -----
+  var noticeBox = document.getElementById("staff-notices");
+  if (noticeBox && window.fetch) {
+    var KEY = "aoi-notice-since", since = noticeBox.getAttribute("data-since");
+    try {
+      var kept = window.localStorage.getItem(KEY);
+      if (kept && kept < since && Date.parse(since) - Date.parse(kept) < 30 * 60000) since = kept;
+    } catch (e) { /* private mode: from now on */ }
+    var fill = function (text, item) {
+      return text.replace("{name}", item.name).replace("{code}", item.code).replace("{when}", item.when).replace("{via}", item.via)
+                 .replace("{line}", item.line_name ? " (" + item.line_name + ")" : "");
+    };
+    var show = function (item) {
+      var card = document.createElement("div");
+      card.className = "staff-notice";
+      card.setAttribute("data-notice-cust", item.code);
+      var title = document.createElement("b"); title.textContent = "\uD83D\uDD17 " + noticeBox.getAttribute("data-title");
+      var body = document.createElement("p"); body.textContent = fill(noticeBox.getAttribute("data-text"), item);
+      var row = document.createElement("div"); row.className = "sn-actions";
+      if (item.url) {
+        var open = document.createElement("a"); open.className = "action small primary"; open.href = item.url;
+        open.textContent = noticeBox.getAttribute("data-open"); row.appendChild(open);
+      }
+      var close = document.createElement("button"); close.type = "button"; close.className = "action small";
+      close.textContent = noticeBox.getAttribute("data-close");
+      close.addEventListener("click", function () { card.remove(); });
+      row.appendChild(close);
+      card.appendChild(title); card.appendChild(body); card.appendChild(row);
+      noticeBox.appendChild(card);
+    };
+    var askNotices = function () {
+      if (document.hidden) return;
+      fetch(noticeBox.getAttribute("data-url") + "?since=" + encodeURIComponent(since), { credentials: "same-origin", cache: "no-store",
+            headers: { "Accept": "application/json" } })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (res) {
+          if (!res) return;
+          res.items.forEach(function (item) {
+            if (!noticeBox.querySelector('[data-notice-cust="' + item.code + '"]')) show(item);
+          });
+          since = res.now;
+          try { window.localStorage.setItem(KEY, since); } catch (e) { /* ignore */ }
+        })
+        .catch(function () { /* server away: asked again next round */ });
+    };
+    setTimeout(askNotices, 1500);
+    setInterval(askNotices, 20000);
+  }
+
   // ----- update 63: live dashboards (AI). Every N seconds the same page is fetched again and each [data-live] part
   // whose content changed is swapped in place (no reload, the scroll position stays). Paused while the tab is hidden,
   // a pop-up is open, the user types in a field or has changed a field that is not sent yet. The bar shows the time of

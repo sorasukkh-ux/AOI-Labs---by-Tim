@@ -112,6 +112,8 @@ class Base(unittest.TestCase):
             data["LOC_ID"] = "01-001-001"
         if status == "H":
             data["HOLD_REASON"] = "Machine check"
+        if status == "CC":
+            data["CANCEL_REASON"] = "Customer changed plan"
         if status == "I":
             data["SCAN_QR"] = "AOI-" + ord_id                # the QR label on the paddy (update 22)
         data.update(fields)
@@ -2183,7 +2185,7 @@ class Update22(Base):
         ord_id = self.new_order()["ORD_ID"]
         self.post("/service/milling/%s/cancel-request" % ord_id)
         self.post("/service/milling/%s/cancel-answer" % ord_id, {"answer": "approve", "reason": "Customer changed mind"})
-        self.post("/service/milling/%s/status" % ord_id, {"new_status": "CC"})
+        self.post("/service/milling/%s/status" % ord_id, {"new_status": "CC", "CANCEL_REASON": "Customer changed plan"})
         self.assertEqual([e["TO_STATUS"] for e in self.events(ord_id)], ["Q", "H", "CC"])
         self.assertEqual(self.events(ord_id)[1]["REASON"], "Customer changed mind")
 
@@ -3787,6 +3789,103 @@ class Update64(Base):
             self.assertNotIn('data-device="%s"' % mid, card)
         if others:
             self.assertIn("more devices are in other branches", card)
+
+
+class Update65(Base):
+    """Cancel reason; no pop-up on Update delivery details; buying/selling list tabs; LINE link notice; clearing."""
+    USER = "U" + "5" * 32
+
+    def setUp(self):
+        super().setUp()
+        self.login("admin")
+        self.client.get("/lang/en")
+
+    def trade(self, ord_type, cust="C261001001", **fields):
+        data = {"ORD_TYPE": ord_type, "mode": "open", "CUST_CODE": cust, "csrf_token": self.token("/service/milling/new")}
+        data.update(fields)
+        return self.client.post("/service/buysell/new", data=data, headers={"Accept": "application/json"})
+
+    def test_cancel_needs_a_reason(self):
+        ord_id = self.new_order()["ORD_ID"]
+        page = self.text("/service/milling/")
+        self.assertIn("CANCEL_REASON", page)
+        self.set_status(ord_id, "CC", CANCEL_REASON="")
+        self.assertEqual(self.order(ord_id)["MILL_STATUS"], "Q")                           # refused without a reason
+        self.set_status(ord_id, "CC", CANCEL_REASON="  Customer did not come  ")
+        saved = self.order(ord_id)
+        self.assertEqual((saved["MILL_STATUS"], saved["CANCEL_REASON"]), ("CC", "Customer did not come"))
+        event = [e for e in self.db("AOILOG_MILLSTATUS") if e["ORD_ID"] == ord_id][-1]
+        self.assertEqual((event["TO_STATUS"], event["REASON"]), ("CC", "Customer did not come"))
+        self.assertIn("Customer did not come", self.text("/service/milling/%s" % ord_id))
+
+    def test_update_delivery_details_has_no_popup(self):
+        ord_id = self.new_order(ORDER_TYPE="D", DELIVERY_ADDRESS="1 Road", DELIVERY_DISTANCE="3")["ORD_ID"]
+        for st in ("I", "F", "D"):
+            self.set_status(ord_id, st)
+        self.post("/service/milling/%s/delivery" % ord_id, {"action": "confirm", "DELIVERY_ADDRESS": "1 Road",
+                                                           "DELIVERY_DISTANCE": "3", "DELIVERY_ARRIVAL_TIME": "2026-10-09T15:30"})
+        self.text("/service/milling/?view=done")                                          # the confirmation notice is shown
+        self.post("/service/milling/%s/delivery" % ord_id, {"action": "reopen"})
+        self.assertFalse(self.order(ord_id)["DELIVERY_CONFIRM_FLG"])
+        self.assertNotIn("data-flash", self.text("/service/milling/?view=done"))
+
+    def test_buysell_list_tabs(self):
+        a = self.trade("SL", QTY_PADDY="5").get_json()["billing_url"].split("ids=")[1]
+        b = self.trade("SL", QTY_PADDY="6").get_json()["billing_url"].split("ids=")[1]
+        self.post("/service/buysell/%s/status" % b, {"new_status": "CC"}, "/service/buysell/")
+        page = self.text("/service/buysell/")
+        self.assertIn('id="bs-view-active"', page)
+        self.assertIn('data-order="%s"' % a, page)
+        self.assertNotIn('data-order="%s"' % b, page)
+        self.assertNotIn('data-bs-status-filter="C"', page)                                # only Open / Prepared / Unpaid
+        closed = self.text("/service/buysell/?view=closed")
+        self.assertIn('data-order="%s"' % b, closed)
+        self.assertNotIn('data-order="%s"' % a, closed)
+        self.assertIn('data-bs-status-filter="CC"', closed)
+        r = self.client.get("/service/buysell/?q=" + b)                                    # a search finds it in the other tab
+        self.assertEqual(r.status_code, 302)
+        self.assertIn("view=closed", r.headers["Location"])
+
+    def test_line_link_notice_for_staff(self):
+        import os
+        from unittest import mock
+        from datetime import timedelta
+        from app.timeutil import now_utc
+        page = self.text("/service/milling/")
+        self.assertIn('id="staff-notices"', page)
+        since = (now_utc() - timedelta(seconds=5)).isoformat()
+        self.assertEqual(self.client.get("/notices.json?since=" + since).get_json()["items"], [])
+        env = {"AOI_LINE_CHANNEL_TOKEN": "t", "AOI_LINE_CHANNEL_SECRET": "s", "AOI_LINE_OA_ID": "@x"}
+        with mock.patch.dict(os.environ, env), mock.patch("app.models.notify.profile", return_value={"displayName": "Tim K"}):
+            with self.app.app_context():
+                from app.models import line_link
+                line_link.answer_text(self.USER, "081-234-5678")
+        items = self.client.get("/notices.json?since=" + since).get_json()["items"]
+        self.assertEqual([(i["code"], i["line_name"], i["via"]) for i in items], [("C261001001", "Tim K", "sent their mobile number")])
+        self.assertEqual(items[0]["url"], "/admin/customers/C261001001")
+        later = self.client.get("/notices.json?since=" + since).get_json()["now"]
+        self.assertEqual(self.client.get("/notices.json?since=" + later).get_json()["items"], [])   # shown once
+
+    def test_clear_transactions_keeps_masters(self):
+        from scripts.clear_transactions import clear, plan
+        from app.db import get_db
+        ord_id = self.new_order()["ORD_ID"]
+        self.set_status(ord_id, "I")
+        self.set_status(ord_id, "F")
+        self.trade("SL", QTY_PADDY="5")
+        with self.app.app_context():
+            db = get_db()
+            customers, prices, machines = (db[n].count_documents({}) for n in ("AOIMS_CUSTOMER", "AOIMS_PRICE", "AOIMS_MACHINE"))
+            counts, counters = plan(db)
+            self.assertTrue(counts["AOITS_ORDMILLING"] and counts["AOINV_ONHAND"] and counts["AOITS_ORDBUYSELL"])
+            self.assertTrue(any(c.startswith("ML-") for c in counters))
+            done = clear(db, log=lambda *_: None)
+            self.assertEqual(done["AOITS_ORDMILLING"], counts["AOITS_ORDMILLING"])
+            for n in ("AOITS_ORDMILLING", "AOILOG_MILLSTATUS", "AOITS_ORDBUYSELL", "AOINV_ONHAND", "AOITS_ACCOUNT"):
+                self.assertEqual(db[n].count_documents({}), 0, n)
+            self.assertEqual((customers, prices, machines),
+                             tuple(db[n].count_documents({}) for n in ("AOIMS_CUSTOMER", "AOIMS_PRICE", "AOIMS_MACHINE")))
+        self.assertTrue(self.new_order()["ORD_ID"].endswith("-0001"))                    # numbering starts again
 
 
 if __name__ == "__main__":

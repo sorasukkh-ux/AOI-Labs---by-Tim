@@ -28,6 +28,9 @@ TYPE_KEYS = {bs.BUY: "svcBuyLabel", bs.SELL: "svcSellLabel"}
 MAT_KEYS = {code: KIND_KEYS[kind] for code, (kind, _v) in VAR_INFO.items()}          # kind label of each SKU (no variety)
 INV_STATUS_KEYS = {"A": "statusAvailable", "B": "statusBlocked", "U": "statusUnableShip"}
 LIST_FILTERS = (bs.OPEN, bs.PREPARED, bs.UNPAID, bs.CLOSED)
+# update 65 (Tim): the list in two tabs - orders in work (Open / Prepared / Unpaid) and ended ones (Closed / Cancelled)
+VIEWS = {"active": (bs.OPEN, bs.PREPARED, bs.UNPAID), "closed": (bs.CLOSED, bs.CANCELLED)}
+CLOSED_LIMIT = 200                                     # the closed tab shows the newest ones
 
 
 def _decorate(orders):
@@ -95,17 +98,36 @@ def _decorate(orders):
 @bp.route("/")
 @require(MENU)
 def order_list():
-    status = request.args.get("status") if request.args.get("status") in LIST_FILTERS else None
+    view = request.args.get("view") if request.args.get("view") in VIEWS else "active"
+    status = request.args.get("status") if request.args.get("status") in VIEWS[view] else None
     ord_type = request.args.get("type") if request.args.get("type") in (bs.BUY, bs.SELL) else None
-    orders = BuySellOrder.for_branch(operating_branch(), [status] if status else None, ord_type)
     q = (request.args.get("q") or "").strip()[:60]
-    orders = _decorate(BuySellOrder.sort_for_list(orders))
+    every = _decorate(BuySellOrder.sort_for_list(BuySellOrder.for_branch(operating_branch(), None, ord_type)))
     if q:
-        orders = [o for o in orders if _matches(o, q)]
-    return render_template("service/buysell_list.html", orders=orders, q=q,
-                           status=status, ord_type=ord_type, filters=LIST_FILTERS, status_keys=BS_STATUS_KEYS,
+        every = [o for o in every if _matches(o, q)]
+    counts = {v: sum(1 for o in every if o["ORD_STATUS"] in sts) for v, sts in VIEWS.items()}
+    if q and not counts[view]:
+        # a searched / scanned order that is in the other tab (a closed take-home order, say): open that tab
+        other = next((v for v in VIEWS if v != view and counts[v]), None)
+        if other:
+            return redirect(url_for("service_buysell.order_list", view=None if other == "active" else other, type=ord_type, q=q))
+    orders = [o for o in every if o["ORD_STATUS"] in VIEWS[view]]
+    status_counts = {s: sum(1 for o in orders if o["ORD_STATUS"] == s) for s in VIEWS[view]}
+    if status:
+        orders = [o for o in orders if o["ORD_STATUS"] == status]
+    if view == "closed":                                 # the most recently ended first
+        orders = sorted(orders, key=lambda o: -o["LAST_UPDATE"].timestamp())[:CLOSED_LIMIT]
+    return render_template("service/buysell_list.html", orders=orders, q=q, view=view, view_arg=None if view == "active" else view,
+                           views=list(VIEWS), counts=counts, status_counts=status_counts, closed_limit=CLOSED_LIMIT,
+                           status=status, ord_type=ord_type, filters=VIEWS[view], status_keys=BS_STATUS_KEYS,
                            status_class=BS_STATUS_CLASS, type_keys=TYPE_KEYS, mat_keys=MAT_KEYS,
                            inv_status_keys=INV_STATUS_KEYS, can_edit=can(MENU, "edit"), can_cancel=can(MENU, "delete"))
+
+
+def _back_to_list():
+    return redirect(url_for("service_buysell.order_list", status=request.form.get("status_filter") or None,
+                            type=request.form.get("type_filter") or None, q=request.form.get("q_filter") or None,
+                            view=request.form.get("view_filter") or None))
 
 
 def _matches(order, q):
@@ -135,8 +157,7 @@ def maintain(ord_id):
         flash_error(error)
     else:
         flash_ok("msgOrderUpdated", id=order["QR_ID"])
-    return redirect(url_for("service_buysell.order_list", status=request.form.get("status_filter") or None,
-                            type=request.form.get("type_filter") or None, q=request.form.get("q_filter") or None))
+    return _back_to_list()
 
 
 @bp.route("/<ord_id>/link", methods=["POST"])
@@ -152,8 +173,7 @@ def link(ord_id):
         flash_error(error)
     else:
         flash_ok("msgLinkMlSaved" if saved.get("LINK_ML_ID") else "msgLinkMlRemoved", id=order["QR_ID"])
-    return redirect(url_for("service_buysell.order_list", status=request.form.get("status_filter") or None,
-                            type=request.form.get("type_filter") or None, q=request.form.get("q_filter") or None))
+    return _back_to_list()
 
 
 @bp.route("/<ord_id>/status", methods=["POST"])
@@ -177,8 +197,7 @@ def change_status(ord_id):
                 and can("SV_MILLSTATUS") and not BuySellOrder.open_for_milling([order["REF_ORD_ID"]]).get(order["REF_ORD_ID"]):
             from flask import flash
             flash(url_for("service_milling.order_list", q="AOI-" + order["REF_ORD_ID"]), "milling")
-    return redirect(url_for("service_buysell.order_list", status=request.form.get("status_filter") or None,
-                            type=request.form.get("type_filter") or None, q=request.form.get("q_filter") or None))
+    return _back_to_list()
 
 
 # ---------- Customer Service > Buy / Sell (registration) ----------

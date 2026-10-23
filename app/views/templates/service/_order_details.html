@@ -11,6 +11,9 @@
   {% if order.MILL_STATUS == 'H' %}
   <div class="od-row"><span class="od-label">{{ t('lblHoldReason') }}</span><span class="od-value" id="od-hold-reason">{{ order.HOLD_REASON or '-' }}</span></div>
   {% endif %}
+  {% if order.MILL_STATUS == 'CC' %}
+  <div class="od-row"><span class="od-label">{{ t('lblCancelReason') }}</span><span class="od-value" id="od-cancel-reason">{{ order.CANCEL_REASON or '-' }}</span></div>
+  {% endif %}
   {% if order.CANCEL_REQ_FLG == 'R' %}
   <div class="od-row"><span class="od-label">{{ t('detRejectReason') }}</span><span class="od-value">{{ order.CANCEL_REJECT_REASON or '-' }}</span></div>
   {% endif %}

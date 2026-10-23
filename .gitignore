@@ -11,3 +11,4 @@ venv/
 .gateways.local.json
 gateways.json
 pi.json
+backups/

@@ -73,8 +73,11 @@ def create_app(overrides=None):
         if user:
             from .models.role import Role
             role_name = (Role.find(user["ROLE_CODE"]) or {}).get("ROLE_NAME") or user["ROLE_CODE"]
+        from .controllers.home import notices_allowed
         return {"lang": i18n.get_lang(), "user": user, "role_name": role_name, "op_branch": security.operating_branch(),
-                "db_is_memory": app.config["DB_BACKEND"] == "memory"}
+                "db_is_memory": app.config["DB_BACKEND"] == "memory",
+                "staff_notices": notices_allowed(user),           # update 65: LINE link notices for the staff
+                "now_iso": timeutil.now_utc().isoformat()}
 
     @app.template_filter("num")
     def number_filter(value, places=2):

@@ -340,6 +340,24 @@ are kept in `AOITS_SYSLOG` (14 days), the checks in `AOITS_HEALTH` (7 days).
 customer's LINE when "Also send to the customer's LINE" is ticked (shown for customers linked to LINE); "Send to LINE
 only" sends without printing. The same public https address is needed as for the queue QR (update 47).
 
+## Cancel reason, list tabs, LINE link notice, clearing transactions (update 65)
+
+* Milling Order List: cancelling an order asks for the reason in the same pop-up (required, kept in CANCEL_REASON and
+  on the CC status event; shown on the card and in the order details). An approved cancellation request suggests
+  its hold reason. "Update delivery details" only opens the fields again - no "order updated" pop-up.
+* Buying / Selling Order List: two tabs - Open / Prepared / Unpaid, and Closed / Cancelled (newest first, the
+  newest 200). A search finds an order in the other tab.
+* When a customer links their LINE account, the staff (Customer Service, order lists, Customers rights) get a notice
+  on whatever page they have open (asked every 20 s): name, code, LINE name, how they linked, and "Open customer".
+* Start again with clean data, keeping customers and every master:
+  ```
+  python -m scripts.clear_transactions          # shows what would be deleted
+  python -m scripts.clear_transactions --yes    # backs up to backups/ (not sent to GitHub), then deletes
+  ```
+  It deletes milling and buying/selling orders with their history, QR prints, LINE messages, stock and the ledger,
+  and restarts their running numbers (add --machine-data for machine commands, telemetry, meter readings and
+  health history). Stop the server first.
+
 ## Hardware devices card (update 64)
 
 AI > Hardware devices shows only the devices of the branch you work in (each factory has its own "main motor 1 / 2",

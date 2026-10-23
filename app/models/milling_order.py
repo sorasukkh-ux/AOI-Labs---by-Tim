@@ -167,6 +167,7 @@ class MillingOrder:
             "ORDER_TYPE": data["order_type"], "BRANCH_ID": branch_id,
             "MILL_STATUS": flow.QUEUE, "MILL_PRIORITY": data["priority"],
             "CANCEL_REQ_FLG": flow.REQ_NONE, "CANCEL_REQ_DATE": None, "CANCEL_ANS_DATE": None, "CANCEL_REJECT_REASON": None,
+            "CANCEL_REASON": None,
             "HOLD_REASON": None, "DELIVERY_CONFIRM_FLG": False, "DELIVERY_ARRIVAL_TIME": None,
             "CUST_CODE": data["customer"]["CUST_CODE"],
             "REGIST_PADDY": data["paddy"], "UOM_CODE": "KG", "RICE_VARIETY": data["variety"],
@@ -217,7 +218,8 @@ class MillingOrder:
         saved = cls.find(order["ORD_ID"])
         if saved["MILL_STATUS"] != order["MILL_STATUS"]:     # every status change is kept for the timeline / analysis
             mill_event.record(saved, order["MILL_STATUS"], ope_user,
-                              reason=values.get("HOLD_REASON") if saved["MILL_STATUS"] == flow.HOLD else None,
+                              reason=values.get("HOLD_REASON") if saved["MILL_STATUS"] == flow.HOLD
+                              else (values.get("CANCEL_REASON") if saved["MILL_STATUS"] == flow.CANCELLED else None),
                               scanned="SCAN_DATE" in values)
         return saved
 
@@ -287,6 +289,11 @@ class MillingOrder:
             values["HOLD_REASON"] = None                     # the reason belongs to the hold that ends now
             if new_status in (flow.QUEUE, flow.IN_PROCESS):
                 values["CANCEL_REQ_FLG"] = flow.REQ_NONE     # resumed: an approved cancellation is dropped
+        if new_status == flow.CANCELLED:                     # update 65 (Tim): a cancellation always says why
+            reason = clean_text((form or {}).get("CANCEL_REASON"), 300)
+            if not reason:
+                raise ValidationError("errCancelReason")
+            values["CANCEL_REASON"] = reason
         if new_status == flow.IN_PROCESS:
             values.update(cls._scan(order, form))
         inbound = None

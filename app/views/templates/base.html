@@ -63,6 +63,10 @@
     <button type="button" class="action qs-cancel" data-scan-close>{{ t('btnCancel') }}</button>
   </div>
 </div>
+{# update 65: a customer linked their LINE account -> a notice for the staff on every page #}
+{% if staff_notices %}<div id="staff-notices" data-url="{{ url_for('home.notices') }}"
+  data-since="{{ now_iso }}" data-title="{{ t('lnLinkedNoticeTitle') }}" data-text="{{ t('lnLinkedNoticeText') }}"
+  data-open="{{ t('lnLinkedNoticeOpen') }}" data-close="{{ t('btnDismiss') }}" aria-live="polite"></div>{% endif %}
 <script src="{{ url_for('static', filename='js/qr.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/label.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/app.js') }}" defer></script>

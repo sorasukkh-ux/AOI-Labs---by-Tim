@@ -367,7 +367,8 @@ def _run(ord_id, action, ok_key="msgOrderUpdated"):
     except ValidationError as error:
         flash_error(error)
     else:
-        flash_ok(ok_key, id=order["QR_ID"])
+        if ok_key:                                   # update 65: None = no "updated" pop-up (opening a form again)
+            flash_ok(ok_key, id=order["QR_ID"])
         _flash_line(order, started)
     return _back(order["ORD_ID"])
 
@@ -450,7 +451,8 @@ def change_type(ord_id):
 def update_delivery(ord_id):
     """Ready for Delivery: confirm the delivery time (action=confirm) or reopen it after a failed delivery (action=reopen)."""
     if request.form.get("action") == "reopen":
-        return _run(ord_id, lambda order: MillingOrder.reopen_delivery(order["ORD_ID"], operating_branch(), _user_id()))
+        # update 65 (Tim): "Update delivery details" only opens the fields again - no "order updated" pop-up
+        return _run(ord_id, lambda order: MillingOrder.reopen_delivery(order["ORD_ID"], operating_branch(), _user_id()), None)
     return _run(ord_id, lambda order: MillingOrder.confirm_delivery(
         order["ORD_ID"], operating_branch(), request.form, _user_id()), "msgDeliveryConfirmed")
 

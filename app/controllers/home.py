@@ -76,3 +76,46 @@ def pending(menu_code):
     if not RoleAuth.can(current_user()["ROLE_CODE"], menu_code, "view"):
         abort(403)
     return render_template("pending.html", menu=menu, label_key=LABEL_KEYS.get(menu_code), group=menu.get("MENU_GROUP"))
+
+
+# ---------- update 65: notices for the staff (a customer linked their LINE account) ----------
+NOTICE_MENUS = ("SV_SERVICE", "SV_MILLSTATUS", "SV_BSSTATUS", "AD_CUSTOMER")
+NOTICE_MAX_MINUTES = 30                          # a page opened later does not show older links
+
+
+def notices_allowed(user):
+    return bool(user) and any(RoleAuth.can(user["ROLE_CODE"], m, "view") for m in NOTICE_MENUS)
+
+
+@bp.route("/notices.json")
+@require_login
+def notices():
+    """Customers who linked their LINE account after `since` (ISO time, UTC), for the toast on every staff page.
+    Answers {"now": ISO, "items": [{code, name, line_name, via, when, url}]}."""
+    from datetime import datetime, timedelta, timezone
+    from flask import jsonify
+    from ..i18n import t
+    from ..models.base import col, NO_ID
+    from ..models.customer import Customer
+    from ..timeutil import now_utc, to_local
+    now = now_utc()
+    if not notices_allowed(current_user()):
+        return jsonify({"now": now.isoformat(), "items": []})
+    try:
+        since = datetime.fromisoformat(request.args.get("since", "").replace(" ", "+"))   # an unencoded "+00:00"
+        if since.tzinfo is None:
+            since = since.replace(tzinfo=timezone.utc)
+    except ValueError:
+        since = now
+    since = max(since, now - timedelta(minutes=NOTICE_MAX_MINUTES))
+    if now.tzinfo is None:                       # the memory database keeps naive UTC times
+        since = since.replace(tzinfo=None)
+    items = []
+    for c in col(Customer.COL).find({"LINE_LINK_DATE": {"$gt": since}}, NO_ID).sort([("LINE_LINK_DATE", 1)]).limit(20):
+        if not c.get("LINE_USER_ID"):
+            continue
+        can_open = RoleAuth.can(current_user()["ROLE_CODE"], "AD_CUSTOMER", "view")
+        items.append({"code": c["CUST_CODE"], "name": c.get("CUST_NAME") or c["CUST_CODE"], "line_name": c.get("LINE_DISPLAY_NAME"),
+                      "via": t("lnVia_" + (c.get("LINE_LINK_VIA") or "TICKET")), "when": to_local(c["LINE_LINK_DATE"]).strftime("%H:%M"),
+                      "url": url_for("admin_customers.customer_view", code=c["CUST_CODE"]) if can_open else None})
+    return jsonify({"now": now.isoformat(), "items": items})

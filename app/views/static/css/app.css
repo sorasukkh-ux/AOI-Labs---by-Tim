@@ -1303,3 +1303,13 @@ a.badge.from-milling.link { text-decoration: none; cursor: pointer; } a.badge.fr
 .live-bar i { display: none; }
 .live-bar.live-paused { background: #eef2f6; color: #5b6b7f; }
 .live-bar.live-lost { background: #fdecec; color: #b42318; font-weight: 600; }
+
+/* update 65: staff notices (a customer linked their LINE account) - stay until closed */
+#staff-notices { position: fixed; right: 16px; bottom: 16px; z-index: 900; display: flex; flex-direction: column; gap: 10px;
+  width: min(360px, calc(100vw - 32px)); }
+.staff-notice { background: var(--surface, #fff); border: 1px solid var(--border, #dde4ec); border-left: 5px solid #06C755;
+  border-radius: 12px; padding: 12px 14px; box-shadow: 0 8px 24px rgba(16,32,44,.18); }
+.staff-notice b { display: block; margin-bottom: 4px; }
+.staff-notice p { margin: 0 0 8px; font-size: 14px; }
+.staff-notice .sn-actions { display: flex; gap: 8px; justify-content: flex-end; }
+@media print { #staff-notices { display: none; } }

@@ -78,7 +78,7 @@
             {% elif nxt == 'I' %}data-form="start-{{ order.ORD_ID }}"
             {% elif nxt == 'D' %}data-form="ready-{{ order.ORD_ID }}"
             {% elif nxt == 'H' %}data-prompts='{{ [{"name": "HOLD_REASON", "label": t("holdReasonPrompt", id=order.QR_ID), "value": "", "required": true, "required_text": t("errHoldReason")}]|tojson }}'
-            {% elif nxt == 'CC' %}data-confirm="{{ t('confirmCancelOrder', id=order.QR_ID) }}"
+            {% elif nxt == 'CC' %}data-prompts='{{ [{"name": "CANCEL_REASON", "label": t("confirmCancelOrder", id=order.QR_ID) ~ "\n\n" ~ t("cancelReasonPrompt"), "value": order.HOLD_REASON if order.CANCEL_REQ_FLG == "A" else "", "required": true, "required_text": t("errCancelReason")}]|tojson }}'
             {% elif nxt == 'C' %}data-confirm="{{ t('confirmCloseOrder', id=order.QR_ID) }}"
             {% elif nxt == 'Q' and order.CANCEL_REQ_FLG == 'A' %}data-confirm="{{ t('confirmRequeueApproved', id=order.QR_ID) }}"{% endif %}>{{ t(status_keys[nxt]) }}</option>
           {% endif %}
@@ -114,6 +114,9 @@
     {% endif %}
     {% if order.MILL_STATUS == 'H' and order.HOLD_REASON %}
     <p class="hold-reason-note"><b>{{ t('lblHoldReason') }}:</b> {{ order.HOLD_REASON }}</p>
+    {% endif %}
+    {% if order.MILL_STATUS == 'CC' and order.CANCEL_REASON %}
+    <p class="hold-reason-note cancel-reason-note"><b>{{ t('lblCancelReason') }}:</b> {{ order.CANCEL_REASON }}</p>
     {% endif %}
 
     {% if editable and 'I' in order.next_statuses %}
