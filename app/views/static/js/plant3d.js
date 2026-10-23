@@ -457,7 +457,13 @@
   document.getElementById("p3-reset").addEventListener("click", function () { cam = JSON.parse(JSON.stringify(HOME)); fit(); });
   document.getElementById("p3-top").addEventListener("click", function () { cam.pitch = 1.45; cam.yaw = 0; });
   var spinBtn = document.getElementById("p3-spin");
-  spinBtn.addEventListener("click", function () { spinOn = !spinOn; spinBtn.classList.toggle("on", spinOn); });
+  // update 70: auto-rotate is remembered in this browser (also for the 3D view inside SCADA)
+  try { spinOn = window.localStorage.getItem("aoi-3d-spin") === "1"; } catch (e) { spinOn = false; }
+  spinBtn.classList.toggle("on", spinOn); spinBtn.setAttribute("aria-pressed", spinOn ? "true" : "false");
+  spinBtn.addEventListener("click", function () {
+    spinOn = !spinOn; spinBtn.classList.toggle("on", spinOn); spinBtn.setAttribute("aria-pressed", spinOn ? "true" : "false");
+    try { window.localStorage.setItem("aoi-3d-spin", spinOn ? "1" : "0"); } catch (e) { /* private mode */ }
+  });
   var full = document.getElementById("p3-full");
   full.addEventListener("click", function () {
     var fs = document.fullscreenElement || document.webkitFullscreenElement;

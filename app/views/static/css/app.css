@@ -1361,3 +1361,6 @@ body.embed .scada > .scada-top, body.embed #scada-list-card { display: none !imp
 body.embed .scada { border-radius: 0; margin: 0; }
 body.embed .scada { min-height: 100vh; box-sizing: border-box; }
 html:has(body.embed) { background: #050b16; }
+/* update 70: the 3D view shown inside SCADA (full screen) keeps its own buttons (reset, top view, auto-rotate) */
+body.embed .plant3d > .scada-top { display: flex !important; justify-content: flex-end; margin-bottom: 4px; }
+body.embed .plant3d .scada-title, body.embed .plant3d .view-switch, body.embed #p3-full { display: none !important; }
