@@ -3897,7 +3897,7 @@ class Update66(Base):
         self.client.get("/lang/en")
 
     def test_3d_view(self):
-        self.assertIn('id="scada-3d"', self.text("/automation/scada"))
+        self.assertIn('data-view="3d"', self.text("/automation/scada"))                     # update 69: the switch
         page = self.text("/automation/scada/3d")
         for part in ('id="plant3d"', 'id="p3-canvas"', "js/plant3d.js", 'data-url="/automation/scada.json"', "F2-SELECT"):
             self.assertIn(part, page)
@@ -3983,6 +3983,20 @@ class Update68(Base):
         self.post("/service/buysell/%s/status" % sl, {"new_status": "P"}, "/service/buysell/")
         self.post("/service/buysell/%s/status" % sl, {"new_status": "C"}, "/service/buysell/")
         self.assertEqual(self.stock(), [("BRAN", 30.0, None)])                           # not linked: left at Closed
+
+
+class Update69(Base):
+    """SCADA <-> AOI 3D switch; a screen shown inside the other one (embed=1) has no page header."""
+
+    def test_switch_and_embed(self):
+        self.login("admin")
+        for path in ("/automation/scada", "/automation/scada/3d"):
+            page = self.text(path)
+            self.assertIn("data-view-switch", page)
+            self.assertIn('data-view="scada"', page)
+            self.assertIn('data-view="3d"', page)
+            self.assertIn('<body class="embed"', self.text(path + "?embed=1"))
+        self.assertNotIn('class="embed"', self.text("/?embed=1"))                          # only these two screens
 
 
 if __name__ == "__main__":

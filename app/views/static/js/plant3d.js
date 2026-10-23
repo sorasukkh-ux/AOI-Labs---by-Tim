@@ -315,6 +315,8 @@
   var last = performance.now(), t = 0;
   function frame(now) {
     var dt = Math.min(0.1, (now - last) / 1000); last = now; t += dt;
+    if (!wrap.clientWidth) { requestAnimationFrame(frame); return; }          // hidden (SCADA shown in full screen)
+    if (wrap.clientWidth !== W || wrap.clientHeight !== H) resize();
     if (spinOn) cam.yaw += dt * 0.15;
     camera();
     gl.clearColor(FOG[0], FOG[1], FOG[2], 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);

@@ -18,6 +18,11 @@
       <div><b class="scada-brand">AOI 3D</b><span class="scada-sub">{{ t('p3Sub') }} &middot; {{ branch_label(branch) }} &middot; <span id="p3-updated"></span></span></div>
     </div>
     <div class="scada-top-actions">
+      {# update 69: switch between SCADA and AOI 3D - in full screen the other view opens inside this one #}
+      <div class="view-switch" data-view-switch role="tablist" aria-label="{{ t('vsLabel') }}">
+        <a role="tab" href="{{ url_for('automation.scada') }}" data-view="scada"{% if request.endpoint == 'automation.scada' %} class="on" aria-selected="true"{% endif %}>SCADA</a>
+        <a role="tab" href="{{ url_for('automation.plant3d') }}" data-view="3d"{% if request.endpoint == 'automation.plant3d' %} class="on" aria-selected="true"{% endif %}>AOI 3D</a>
+      </div>
       <button type="button" class="scada-btn" id="p3-reset">{{ t('p3Reset') }}</button>
       <button type="button" class="scada-btn" id="p3-top">{{ t('p3TopView') }}</button>
       <button type="button" class="scada-btn" id="p3-spin">{{ t('p3Spin') }}</button>

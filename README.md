@@ -340,6 +340,12 @@ are kept in `AOITS_SYSLOG` (14 days), the checks in `AOITS_HEALTH` (7 days).
 customer's LINE when "Also send to the customer's LINE" is ticked (shown for customers linked to LINE); "Send to LINE
 only" sends without printing. The same public https address is needed as for the queue QR (update 47).
 
+## SCADA / AOI 3D switch (update 69)
+
+Both screens have a **SCADA | AOI 3D** switch at the top. Outside full screen it opens the other screen. In full
+screen the other view opens inside the current one (the same screen with ?embed=1, without the page header), so the
+full screen stays; tap the first tab to come back. Leaving full screen returns to the screen's own view.
+
 ## Take-home goods leave with the rice (update 68)
 
 A customer buying order linked to a milling order (its take-home bran / broken rice, or linked by hand) keeps its

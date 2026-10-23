@@ -265,6 +265,38 @@
   if (auto) setTimeout(function () { if (!overlay.classList.contains("show")) window.location.reload(); },
                        (Number(auto.getAttribute("data-auto-refresh")) || 30) * 1000);
 
+  // ----- update 69: SCADA <-> AOI 3D. Out of full screen the tab opens the other page; in full screen the other view
+  // opens inside this one (a frame of the same screen without its own header), so the full screen stays. -----
+  document.querySelectorAll("[data-view-switch]").forEach(function (sw) {
+    var host = sw.closest(".scada");
+    if (!host) return;
+    var own = sw.querySelector("a.on"), frame = null;
+    var isFull = function () { var f = document.fullscreenElement || document.webkitFullscreenElement; return f === host || host.classList.contains("p3-pseudo-full"); };
+    var mark = function (a) { sw.querySelectorAll("a").forEach(function (x) { x.classList.toggle("on", x === a); x.setAttribute("aria-selected", x === a ? "true" : "false"); }); };
+    var back = function () {
+      if (frame) { frame.remove(); frame = null; }
+      host.classList.remove("vs-other"); mark(own);
+      window.dispatchEvent(new Event("resize"));
+    };
+    sw.addEventListener("click", function (e) {
+      var a = e.target.closest("a[data-view]");
+      if (!a) return;
+      if (a === own) { e.preventDefault(); back(); return; }
+      if (!isFull()) return;                              // a normal link to the other screen
+      e.preventDefault();
+      if (!frame) {
+        frame = document.createElement("iframe");
+        frame.className = "vs-frame"; frame.title = a.textContent;
+        frame.src = a.getAttribute("href") + (a.getAttribute("href").indexOf("?") < 0 ? "?" : "&") + "embed=1";
+        host.appendChild(frame);
+      }
+      host.classList.add("vs-other"); mark(a);
+    });
+    ["fullscreenchange", "webkitfullscreenchange"].forEach(function (ev) {
+      document.addEventListener(ev, function () { if (!isFull() && frame) back(); });
+    });
+  });
+
   // ----- update 65: notices for the staff - a customer linked their LINE account. Asked every 20 s; the last time
   // asked is kept in this browser, so a notice is not lost while the operator moves to another page. -----
   var noticeBox = document.getElementById("staff-notices");
