@@ -23,9 +23,11 @@
         <a role="tab" href="{{ url_for('automation.scada') }}" data-view="scada"{% if request.endpoint == 'automation.scada' %} class="on" aria-selected="true"{% endif %}>SCADA</a>
         <a role="tab" href="{{ url_for('automation.plant3d') }}" data-view="3d"{% if request.endpoint == 'automation.plant3d' %} class="on" aria-selected="true"{% endif %}>AOI 3D</a>
       </div>
+      <span class="p3-tools">
       <button type="button" class="scada-btn" id="p3-reset">{{ t('p3Reset') }}</button>
       <button type="button" class="scada-btn" id="p3-top">{{ t('p3TopView') }}</button>
       <button type="button" class="scada-btn" id="p3-spin">{{ t('p3Spin') }}</button>
+      </span>
       <button type="button" class="scada-btn" id="p3-full">{{ t('scFullScreen') }}</button>
     </div>
   </div>

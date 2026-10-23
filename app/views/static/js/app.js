@@ -272,7 +272,11 @@
     if (!host) return;
     var own = sw.querySelector("a.on"), frame = null;
     var isFull = function () { var f = document.fullscreenElement || document.webkitFullscreenElement; return f === host || host.classList.contains("p3-pseudo-full"); };
-    var mark = function (a) { sw.querySelectorAll("a").forEach(function (x) { x.classList.toggle("on", x === a); x.setAttribute("aria-selected", x === a ? "true" : "false"); }); };
+    var brand = host.querySelector(".scada-brand"), brandText = brand ? brand.textContent : "";
+    var mark = function (a) {
+      sw.querySelectorAll("a").forEach(function (x) { x.classList.toggle("on", x === a); x.setAttribute("aria-selected", x === a ? "true" : "false"); });
+      if (brand) brand.textContent = a === own ? brandText : (a.getAttribute("data-view") === "3d" ? "AOI 3D" : "AOI SCADA");   // update 71
+    };
     var back = function () {
       if (frame) { frame.remove(); frame = null; }
       host.classList.remove("vs-other"); mark(own);

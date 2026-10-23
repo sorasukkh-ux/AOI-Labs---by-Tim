@@ -346,7 +346,8 @@ Both screens have a **SCADA | AOI 3D** switch at the top. Outside full screen it
 screen the other view opens inside the current one (the same screen with ?embed=1, without the page header), so the
 full screen stays; tap the first tab to come back. Leaving full screen returns to the screen's own view.
 Update 70: the 3D view inside SCADA keeps its Reset view / Top view / Auto-rotate buttons; Auto-rotate is
-remembered in the browser.
+remembered in the browser. Update 71: the 3D full screen fits the screen (no scrolling; the 3D area takes the
+rest), also inside SCADA; while SCADA is shown inside the 3D screen, the 3D buttons hide and the title follows the view.
 
 ## Take-home goods leave with the rice (update 68)
 

@@ -1342,7 +1342,7 @@ a.scada-btn { text-decoration: none; }
 .p3-open { margin-top: 12px; width: 100%; justify-content: center; }
 .p3-howto { margin-left: auto; color: var(--sc-dim); }
 .plant3d:fullscreen, .plant3d.p3-pseudo-full { position: fixed; inset: 0; z-index: 1000; overflow: auto; border-radius: 0; }
-.plant3d:fullscreen .p3-wrap, .plant3d.p3-pseudo-full .p3-wrap { height: calc(100vh - 190px); }
+
 @media (max-width: 820px) { .p3-body { grid-template-columns: 1fr; } .p3-wrap { height: 52vh; } .p3-howto { display: none; } }
 .scada-btn.on { border-color: var(--sc-cyan); background: rgba(56, 189, 248, 0.18); }
 .p3-wrap, .p3-labels { -webkit-user-select: none; user-select: none; }
@@ -1364,3 +1364,23 @@ html:has(body.embed) { background: #050b16; }
 /* update 70: the 3D view shown inside SCADA (full screen) keeps its own buttons (reset, top view, auto-rotate) */
 body.embed .plant3d > .scada-top { display: flex !important; justify-content: flex-end; margin-bottom: 4px; }
 body.embed .plant3d .scada-title, body.embed .plant3d .view-switch, body.embed #p3-full { display: none !important; }
+
+/* update 71: full screen fits the screen (no scrolling): header, KPIs, the 3D area (takes the rest), legend.
+   The same for the 3D view inside SCADA and for SCADA inside the 3D view. The 3D buttons hide while SCADA is shown. */
+.p3-tools { display: contents; }
+.scada.vs-other .p3-tools { display: none; }
+.plant3d:fullscreen, .plant3d.p3-pseudo-full, body.embed .plant3d { display: flex; flex-direction: column; gap: 10px; height: 100vh; box-sizing: border-box; overflow: hidden; }
+.plant3d:-webkit-full-screen { display: flex; flex-direction: column; gap: 10px; height: 100vh; box-sizing: border-box; overflow: hidden; }
+.plant3d:fullscreen > *, .plant3d.p3-pseudo-full > *, body.embed .plant3d > * { flex: none; }
+.plant3d:fullscreen .p3-body, .plant3d.p3-pseudo-full .p3-body, body.embed .plant3d .p3-body { flex: 1 1 auto; min-height: 0; margin-top: 0; }
+.plant3d:-webkit-full-screen .p3-body { flex: 1 1 auto; min-height: 0; margin-top: 0; }
+.plant3d:fullscreen .p3-wrap, .plant3d.p3-pseudo-full .p3-wrap, body.embed .plant3d .p3-wrap { height: 100%; min-height: 0; }
+.plant3d:-webkit-full-screen .p3-wrap { height: 100%; min-height: 0; }
+.plant3d:fullscreen .p3-panel, .plant3d.p3-pseudo-full .p3-panel, body.embed .plant3d .p3-panel { overflow: auto; min-height: 0; }
+body.embed .plant3d { min-height: 0; padding: 14px 22px; }
+.scada.vs-other:fullscreen { display: flex; flex-direction: column; gap: 10px; height: 100vh; box-sizing: border-box; overflow: hidden; }
+.scada.vs-other:-webkit-full-screen { display: flex; flex-direction: column; gap: 10px; height: 100vh; box-sizing: border-box; overflow: hidden; }
+.scada.vs-other:fullscreen .vs-frame, .scada.vs-other.p3-pseudo-full .vs-frame { flex: 1 1 auto; height: auto; min-height: 0; }
+.scada.vs-other:-webkit-full-screen .vs-frame { flex: 1 1 auto; height: auto; min-height: 0; }
+.scada:-webkit-full-screen { border-radius: 0; padding: 28px; overflow: auto; }
+.plant3d.p3-pseudo-full.vs-other, .plant3d.vs-other:fullscreen { padding: 22px; }
