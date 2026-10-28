@@ -340,6 +340,10 @@ are kept in `AOITS_SYSLOG` (14 days), the checks in `AOITS_HEALTH` (7 days).
 customer's LINE when "Also send to the customer's LINE" is ticked (shown for customers linked to LINE); "Send to LINE
 only" sends without printing. The same public https address is needed as for the queue QR (update 47).
 
+## Logo opens the home page (update 76)
+
+Tapping the AOI logo (or the system name) at the top left of any screen opens the home menu.
+
 ## The mill's own trading on Price analysis (update 75)
 
 AI > Price analysis has a new card **The mill's trading in AOI** for the SKU and period chosen: what the mill bought

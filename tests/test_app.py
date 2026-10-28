@@ -4190,5 +4190,14 @@ class Update75(Base):
         self.assertEqual(paddy["own_buy_kg"], 100.0)
 
 
+class Update76(Base):
+    """The logo at the top left opens the home page."""
+
+    def test_logo_link(self):
+        self.login("admin")
+        for path in ("/service/milling/", "/automation/ai", "/inventory/"):
+            self.assertRegex(self.text(path), r'<a class="brand-row brand-home" href="/"')
+
+
 if __name__ == "__main__":
     unittest.main()

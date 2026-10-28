@@ -1398,3 +1398,6 @@ body.embed .plant3d { min-height: 0; padding: 14px 22px; }
 .ps-trade-chart text.l { font-size: 12px; fill: var(--text-secondary); }
 .ps-trade-chart text.lg { font-size: 13px; font-weight: 600; } .ps-trade-chart text.lg.buy { fill: #16a34a; } .ps-trade-chart text.lg.sell { fill: #dc2626; }
 .ps-trade-notes { margin: 10px 0 0; padding-left: 20px; color: var(--text-secondary); display: grid; gap: 4px; }
+
+a.brand-home { color: inherit; text-decoration: none; }   /* update 76 */
+a.brand-home:hover .brand-logo, a.brand-home:focus-visible .brand-logo { box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.25); }

@@ -11,13 +11,14 @@
 {% set embedded = request.args.get('embed') == '1' and request.endpoint in ('automation.scada', 'automation.plant3d') %}<body{% if embedded %} class="embed"{% elif request.endpoint in ('automation.ai_screen', 'automation.ai_prices', 'automation.plant3d') %} class="wide"{% endif %}{% if request.path.startswith('/admin') or (request.endpoint == 'home.index' and request.args.get('g') == 'AD') or request.endpoint == 'automation.hardware' %} data-quick-jump="{{ t('qjLabel') }}" data-quick-top="{{ t('qjTop') }}"{% endif %}>
 
 <div class="top-row">
-  <div class="brand-row">
+  {# update 76: the logo (and name) open the home page #}
+  <a class="brand-row brand-home" href="{{ url_for('home.index') }}" title="{{ t('backHomeLabel') }}" id="brand-home">
     <img class="brand-logo" src="{{ url_for('static', filename='img/logo.png') }}" alt="AOI logo">
     <div>
       <h1>{{ t('title') }}</h1>
       <p class="sub">{{ t('subtitle') }}</p>
     </div>
-  </div>
+  </a>
   <div class="lang-toggle">
     <a class="lang-btn{% if lang == 'th' %} active{% endif %}" href="{{ url_for('auth.set_language', code='th', next=request.full_path.rstrip('?')) }}" lang="th">ไทย</a>
     <a class="lang-btn{% if lang == 'en' %} active{% endif %}" href="{{ url_for('auth.set_language', code='en', next=request.full_path.rstrip('?')) }}" lang="en">EN</a>
