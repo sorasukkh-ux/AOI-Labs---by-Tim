@@ -667,7 +667,7 @@ class Update4(Base):
         self.assertEqual(cards("/service/milling/?view=closed"), [c, b])                         # newest change first
         self.assertEqual(cards("/service/milling/?view=closed&status=C"), [b])
         self.assertEqual(cards("/service/milling/?status=C"), [a])                               # not an active status
-        r = self.client.get("/service/milling/?q=AOI-" + b)                                      # a closed label scanned
+        r = self.client.get("/service/milling/?go=1&q=AOI-" + b)                                      # a closed label scanned
         self.assertIn("view=closed", r.headers["Location"])
         self.assertEqual(cards(r.headers["Location"]), [b])
         resp = self.set_status(a, "H", back="list", view_filter="closed")
@@ -974,8 +974,11 @@ class Update6(Base):
         body = self.trade("BY", QTY_PADDY="500", QTY_BRAN="20").get_json()
         self.assertTrue(body["ok"], body)
         orders = self.bs()
-        self.assertEqual([(o["ORD_TYPE"], o["MAT_CODE"], o["ORD_QTY"], o["PRICING_UINT"], o["ORD_AMOUNT"], o["ORD_STATUS"]) for o in orders],
-                         [("BY", "PADDY", 500.0, 16.15, 8075.0, "O"), ("BY", "BRAN", 20.0, 7.68, 153.6, "O")])
+        # update 74: one order with a line per product
+        self.assertEqual(len(orders), 1)
+        self.assertEqual([(l["MAT_CODE"], l["ORD_QTY"], l["PRICING_UINT"], l["ORD_AMOUNT"]) for l in orders[0]["ORD_ITEMS"]],
+                         [("PADDY", 500.0, 16.15, 8075.0), ("BRAN", 20.0, 7.68, 153.6)])
+        self.assertEqual((orders[0]["ORD_TYPE"], orders[0]["ORD_AMOUNT"], orders[0]["ORD_STATUS"]), ("BY", 8228.6, "O"))
         self.assertRegex(orders[0]["ORD_ID"], r"^BY-\d{8}-0001$")
         self.assertIsNone(orders[0]["REF_ORD_ID"])
         self.assertEqual(body["list_url"], "/service/buysell/")
@@ -3842,7 +3845,8 @@ class Update65(Base):
         self.assertIn('data-order="%s"' % b, closed)
         self.assertNotIn('data-order="%s"' % a, closed)
         self.assertIn('data-bs-status-filter="CC"', closed)
-        r = self.client.get("/service/buysell/?q=" + b)                                    # a search finds it in the other tab
+        r = self.client.get("/service/buysell/?go=1&q=" + b)                              # a search finds it in the other tab
+        self.assertEqual(self.client.get("/service/buysell/?q=" + b).status_code, 200)          # update 73: a tab tapped later stays
         self.assertEqual(r.status_code, 302)
         self.assertIn("view=closed", r.headers["Location"])
 
@@ -3997,6 +4001,144 @@ class Update69(Base):
             self.assertIn('data-view="3d"', page)
             self.assertIn('<body class="embed"', self.text(path + "?embed=1"))
         self.assertNotIn('class="embed"', self.text("/?embed=1"))                          # only these two screens
+
+
+class Update72(Base):
+    """Cancelled milling order: the customer's goods (rice, take-home bran / broken rice) become the mill's stock,
+    status Pending maintenance."""
+
+    def setUp(self):
+        super().setUp()
+        self.login("admin")
+        self.client.get("/lang/en")
+
+    def stock(self):
+        return sorted((r["MAT_CODE"], r["INV_QTY"], r.get("SUB_2"), r["INV_STATUS"]) for r in self.db("AOINV_ONHAND"))
+
+    def finished_with_take_home(self):
+        ml = self.new_order(REGIST_PADDY="120", BRAN_ORDER="10", BROKE_ORDER="5", RICE_VARIETY="HM")["ORD_ID"]
+        sl = next(o for o in self.db("AOITS_ORDBUYSELL") if o.get("REF_ORD_ID") == ml)["ORD_ID"]
+        self.set_status(ml, "I", ACT_PADDY="120")
+        self.set_status(ml, "F", LOC_ID="00-001-001")
+        self.post("/service/buysell/%s/status" % sl, {"new_status": "P", "LOC_ID": "00-001-001", "INV_QTY_BRAN": "10", "INV_QTY_BROKEN": "5"}, "/service/buysell/")
+        return ml, sl
+
+    def test_cancel_milling_makes_stock_pending(self):
+        ml, sl = self.finished_with_take_home()
+        self.post("/service/buysell/%s/status" % sl, {"new_status": "C"}, "/service/buysell/")
+        self.set_status(ml, "CC")
+        self.assertEqual(self.order(ml)["MILL_STATUS"], "CC")
+        self.assertEqual([x[:1] + x[2:] for x in self.stock()], [("BRAN", None, "P"), ("BROKEN", None, "P"), ("RICE_HM", None, "P")])
+        self.assertEqual([x[1] for x in self.stock()][:2], [10.0, 5.0])
+        moves = [(l["MAT_CODE"], l["ORI_STATUS"], l["NEW_STATUS"]) for l in self.db("AOILOG_ONHAND") if l["NEW_STATUS"] == "P"]
+        self.assertEqual(len(moves), 3)
+        page = self.text("/inventory/")
+        self.assertIn("Pending maintenance", page)
+
+    def test_cancel_take_home_order_makes_stock_pending(self):
+        ml, sl = self.finished_with_take_home()
+        self.post("/service/buysell/%s/status" % sl, {"new_status": "CC"}, "/service/buysell/")
+        self.assertEqual([x for x in self.stock() if x[0] != "RICE_HM"], [("BRAN", 10.0, None, "P"), ("BROKEN", 5.0, None, "P")])
+        self.assertEqual([x[2:] for x in self.stock() if x[0] == "RICE_HM"], [(ml, "A")])       # the rice is still the customer's
+
+    def test_seed_moves_old_kept_stock(self):
+        from scripts.seed import pending_for_cancelled
+        from app.db import get_db
+        ml, sl = self.finished_with_take_home()
+        with self.app.app_context():
+            col("AOITS_ORDMILLING").update_one({"ORD_ID": ml}, {"$set": {"MILL_STATUS": "CC"}})     # cancelled before update 72
+            self.assertEqual(pending_for_cancelled(get_db()), 3)
+        self.assertTrue(all(x[2] is None and x[3] == "P" for x in self.stock()))
+
+
+class Update73(Base):
+    """With a search in the box, tapping another tab of the milling list stays on that tab (no jump back)."""
+
+    def test_tabs_with_search(self):
+        self.login("admin")
+        ord_id = self.new_order()["ORD_ID"]
+        self.set_status(ord_id, "CC")
+        self.assertEqual(self.client.get("/service/milling/?go=1&q=AOI-" + ord_id).status_code, 302)   # search: to its tab
+        for view in ("", "&view=done"):
+            r = self.client.get("/service/milling/?q=AOI-%s%s" % (ord_id, view))                  # tab tapped: stays
+            self.assertEqual(r.status_code, 200)
+        self.assertEqual(self.client.get("/service/milling/?find=1&q=AOI-" + ord_id).status_code, 302)  # return links find it
+
+
+class Update74(Base):
+    """One buying/selling order per registration (a line per SKU); empty customer search lists everyone;
+    the milling list follows a searched order to its new tab; the LINE QR picture is RGB."""
+
+    def setUp(self):
+        super().setUp()
+        self.login("admin")
+        self.client.get("/lang/en")
+
+    def trade(self, ord_type, mode="open", **fields):
+        data = {"ORD_TYPE": ord_type, "mode": mode, "CUST_CODE": "C261001001", "csrf_token": self.token("/service/milling/new")}
+        data.update(fields)
+        return self.client.post("/service/buysell/new", data=data, headers={"Accept": "application/json"})
+
+    def stock(self):
+        return sorted((r["MAT_CODE"], r["INV_QTY"], r.get("SUB_2")) for r in self.db("AOINV_ONHAND"))
+
+    def test_one_order_with_lines_through_the_flow(self):
+        self.trade("BY", QTY_PADDY="100", QTY_BRAN="40")
+        by = self.db("AOITS_ORDBUYSELL")[0]
+        self.assertEqual([l["MAT_CODE"] for l in by["ORD_ITEMS"]], ["PADDY", "BRAN"])
+        self.post("/service/buysell/%s/status" % by["ORD_ID"], {"new_status": "P", "LOC_ID": "01-001-001", "INV_QTY_PADDY": "100", "INV_QTY_BRAN": "40"}, "/service/buysell/")
+        self.assertEqual(self.stock(), [("BRAN", 40.0, None), ("PADDY", 100.0, None)])          # the mill's own stock
+        self.post("/service/buysell/%s/status" % by["ORD_ID"], {"new_status": "C"}, "/service/buysell/")
+        self.trade("SL", QTY_PADDY="30", QTY_BRAN="10")
+        sl = next(o for o in self.db("AOITS_ORDBUYSELL") if o["ORD_TYPE"] == "SL")
+        page = self.text("/service/buysell/")
+        self.assertIn('name="OUT_LOC_PADDY"', page)
+        self.assertIn('name="OUT_LOC_BRAN"', page)
+        self.post("/service/buysell/%s/status" % sl["ORD_ID"], {"new_status": "P"}, "/service/buysell/")
+        self.assertEqual(self.stock(), [("BRAN", 10.0, sl["ORD_ID"]), ("BRAN", 30.0, None), ("PADDY", 30.0, sl["ORD_ID"]), ("PADDY", 70.0, None)])
+        self.post("/service/buysell/%s/status" % sl["ORD_ID"], {"new_status": "C"}, "/service/buysell/")
+        self.assertEqual(self.stock(), [("BRAN", 30.0, None), ("PADDY", 70.0, None)])
+        income = [a for a in self.db("AOITS_ACCOUNT") if a.get("REF_ORD_ID") == sl["ORD_ID"]]
+        self.assertEqual([a["ACC_AMOUNT"] for a in income], [sl["ORD_AMOUNT"]])
+        self.assertIn("Paddy", self.text("/service/buysell/billing?ids=" + sl["ORD_ID"]))
+
+    def test_short_stock_refuses_the_whole_order(self):
+        self.trade("BY", mode="close", QTY_PADDY="10", LOC_ID="01-001-001")
+        self.trade("SL", QTY_PADDY="5", QTY_BRAN="5")
+        sl = next(o for o in self.db("AOITS_ORDBUYSELL") if o["ORD_TYPE"] == "SL")
+        r = self.post("/service/buysell/%s/status" % sl["ORD_ID"], {"new_status": "P"}, "/service/buysell/")
+        self.assertIn("Rice bran: Not enough stock", self.text(r.headers["Location"]))
+        self.assertEqual(self.stock(), [("PADDY", 10.0, None)])                                  # nothing was kept
+
+    def test_close_now_releases_every_line(self):
+        self.trade("BY", mode="close", QTY_PADDY="50", QTY_BRAN="20", LOC_ID="01-001-001")
+        self.assertEqual(self.stock(), [("BRAN", 20.0, None), ("PADDY", 50.0, None)])
+        self.trade("SL", mode="close", QTY_PADDY="5", QTY_BRAN="5")
+        self.assertEqual(self.stock(), [("BRAN", 15.0, None), ("PADDY", 45.0, None)])
+        self.assertEqual(len(self.db("AOITS_ORDBUYSELL")), 2)
+
+    def test_empty_customer_search_lists_everyone(self):
+        with self.app.app_context():
+            for i in range(12):
+                col("AOIMS_CUSTOMER").insert_one({"CUST_CODE": "C2699%05d" % i, "CUST_NAME": "แม่อ๋อย %02d" % i, "CUST_STATUS": "A"})
+            total = col("AOIMS_CUSTOMER").count_documents({"CUST_STATUS": {"$ne": "D"}})
+        found = self.client.get("/service/milling/customers.json?q=").get_json()["customers"]
+        self.assertEqual(len(found), total)
+        self.assertIn("แม่อ๋อย 11", [c["name"] for c in found])
+
+    def test_list_follows_the_searched_order(self):
+        ord_id = self.new_order()["ORD_ID"]
+        r = self.post("/service/milling/%s/status" % ord_id, {"new_status": "CC", "CANCEL_REASON": "x", "back": "list",
+                                                              "q_filter": "AOI-" + ord_id}, "/service/milling/")
+        self.assertIn("find=1", r.headers["Location"])
+        r2 = self.client.get(r.headers["Location"])
+        self.assertEqual(r2.status_code, 302)
+        self.assertIn("view=closed", r2.headers["Location"])
+
+    def test_qr_png_is_rgb(self):
+        from app.models import qr_png
+        data = qr_png.png("AOI-ML-20261027-0002")
+        self.assertEqual(data[25], 2)                                                            # IHDR colour type: RGB
 
 
 if __name__ == "__main__":

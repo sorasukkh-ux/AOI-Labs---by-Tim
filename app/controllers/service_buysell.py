@@ -26,7 +26,7 @@ BS_STATUS_KEYS = {bs.OPEN: "bsStatusOpen", bs.PREPARED: "bsStatusPrepared", bs.U
 BS_STATUS_CLASS = {bs.OPEN: "open", bs.PREPARED: "prepared", bs.UNPAID: "unpaid", bs.CLOSED: "completed", bs.CANCELLED: "cancelled"}
 TYPE_KEYS = {bs.BUY: "svcBuyLabel", bs.SELL: "svcSellLabel"}
 MAT_KEYS = {code: KIND_KEYS[kind] for code, (kind, _v) in VAR_INFO.items()}          # kind label of each SKU (no variety)
-INV_STATUS_KEYS = {"A": "statusAvailable", "B": "statusBlocked", "U": "statusUnableShip"}
+INV_STATUS_KEYS = {"A": "statusAvailable", "B": "statusBlocked", "U": "statusUnableShip", "P": "statusPendingMaint"}
 LIST_FILTERS = (bs.OPEN, bs.PREPARED, bs.UNPAID, bs.CLOSED)
 # update 65 (Tim): the list in two tabs - orders in work (Open / Prepared / Unpaid) and ended ones (Closed / Cancelled)
 VIEWS = {"active": (bs.OPEN, bs.PREPARED, bs.UNPAID), "closed": (bs.CLOSED, bs.CANCELLED)}
@@ -68,9 +68,14 @@ def _decorate(orders):
         order["needs_inbound"] = BuySellOrder.needs_inbound(order)
         # update 56: a customer buying order picks its goods from stock at Prepared (Inventory Outbound)
         order["needs_outbound"] = order["ORD_TYPE"] == bs.SELL and not BuySellOrder.is_linked(order) and bs.PREPARED in order["next_statuses"]
-        if order["needs_outbound"]:
-            order["free_stock"] = Inventory.free_stock(order["BRANCH_ID"], order["MAT_CODE"])
-            order["free_total"] = round(sum(r["INV_QTY"] for r in order["free_stock"]), 3)
+        if order["needs_outbound"]:                       # update 74: the free stock of every line
+            order["out_lines"] = []
+            for l in order["lines"]:
+                if l["ORD_QTY"] <= 0:
+                    continue
+                free = Inventory.free_stock(order["BRANCH_ID"], l["MAT_CODE"])
+                order["out_lines"].append(dict(l, free_stock=free, free_total=round(sum(r["INV_QTY"] for r in free), 3)))
+            order["out_ready"] = all(x["free_total"] >= x["ORD_QTY"] for x in order["out_lines"])
         order["kept"] = Inventory.for_order(order["BRANCH_ID"], order["ORD_ID"]) if order["ORD_TYPE"] == bs.SELL and not BuySellOrder.is_linked(order) else []
         if order.get("LINK_ML_ID"):                       # update 56: linked by hand to a milling order
             ref = order["LINK_ML_ID"]
@@ -91,11 +96,13 @@ def _decorate(orders):
                 order["close_text"] = t("confirmCloseBsOrder", id=order["QR_ID"],
                                         stock=Inventory.describe(Inventory.for_order(order["BRANCH_ID"], order["ORD_ID"])) or "-")
             elif order["ORD_TYPE"] == bs.SELL:
-                check = BuySellOrder.stock_check(order["BRANCH_ID"], [{"mat": order["MAT_CODE"], "qty": order["ORD_QTY"]}])[0]
-                text = t("confirmCloseSellDirect", id=order["QR_ID"], qty="%.2f" % order["ORD_QTY"],
-                         mat=mat_name(order["MAT_CODE"]), available="%.2f" % check["available"])
-                if check["short"]:
-                    text += "\n\n" + t("insufficientStockWarning", available="%.2f" % check["available"], needed="%.2f" % order["ORD_QTY"])
+                checks = BuySellOrder.stock_check(order["BRANCH_ID"], [{"mat": l["MAT_CODE"], "qty": l["ORD_QTY"]}
+                                                                       for l in order["lines"] if l["ORD_QTY"] > 0])
+                text = "\n".join(t("confirmCloseSellDirect", id=order["QR_ID"], qty="%.2f" % c["qty"], mat=mat_name(c["mat"]),
+                                    available="%.2f" % c["available"]) for c in checks)
+                for c in checks:
+                    if c["short"]:
+                        text += "\n\n" + t("insufficientStockWarning", available="%.2f" % c["available"], needed="%.2f" % c["qty"])
                 order["close_text"] = text
             else:
                 order["close_text"] = t("confirmCloseBuy", id=order["QR_ID"], amount="%.2f" % order["amount"])
@@ -113,11 +120,11 @@ def order_list():
     if q:
         every = [o for o in every if _matches(o, q)]
     counts = {v: sum(1 for o in every if o["ORD_STATUS"] in sts) for v, sts in VIEWS.items()}
-    if q and not counts[view]:
+    if q and not counts[view] and "1" in (request.args.get("go"), request.args.get("find")):     # update 73: right after the search only
         # a searched / scanned order that is in the other tab (a closed take-home order, say): open that tab
         other = next((v for v in VIEWS if v != view and counts[v]), None)
         if other:
-            return redirect(url_for("service_buysell.order_list", view=None if other == "active" else other, type=ord_type, q=q))
+            return redirect(url_for("service_buysell.order_list", view=None if other == "active" else other, type=ord_type, q=q, go=1))
     orders = [o for o in every if o["ORD_STATUS"] in VIEWS[view]]
     status_counts = {s: sum(1 for o in orders if o["ORD_STATUS"] == s) for s in VIEWS[view]}
     if status:
@@ -134,7 +141,7 @@ def order_list():
 def _back_to_list():
     return redirect(url_for("service_buysell.order_list", status=request.form.get("status_filter") or None,
                             type=request.form.get("type_filter") or None, q=request.form.get("q_filter") or None,
-                            view=request.form.get("view_filter") or None))
+                            view=request.form.get("view_filter") or None, find=1 if request.form.get("q_filter") else None))
 
 
 def _matches(order, q):
@@ -203,7 +210,7 @@ def change_status(ord_id):
         if order.get("REF_ORD_TYPE") == "ML" and order.get("REF_ORD_ID") and new_status in (bs.CLOSED, bs.CANCELLED) \
                 and can("SV_MILLSTATUS") and not BuySellOrder.open_for_milling([order["REF_ORD_ID"]]).get(order["REF_ORD_ID"]):
             from flask import flash
-            flash(url_for("service_milling.order_list", q="AOI-" + order["REF_ORD_ID"]), "milling")
+            flash(url_for("service_milling.order_list", q="AOI-" + order["REF_ORD_ID"], find=1), "milling")
     return _back_to_list()
 
 
@@ -234,7 +241,7 @@ def register():
     except ValidationError as error:
         return _json_error(error)
     ids = [o["ORD_ID"] for o in orders]
-    message = t("bsClosedMsg", count=len(orders)) if close else t("confirmOrderCreated", count=len(orders))
+    message = t("bsClosedMsg", count=sum(len(BuySellOrder.items_of(o)) for o in orders)) if close else t("confirmOrderCreated", count=sum(len(BuySellOrder.items_of(o)) for o in orders))
     return jsonify({"ok": True, "ids": ids, "closed": close, "message": message,
                     "list_url": url_for("service_buysell.order_list") if can(MENU) else None,
                     "billing_url": url_for("service_buysell.billing", ids=",".join(ids)),

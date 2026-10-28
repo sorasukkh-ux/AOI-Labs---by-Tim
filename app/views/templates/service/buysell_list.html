@@ -12,6 +12,7 @@
 {{ page_head(t('updateBuySellStatusTitle'), url_for('home.index', g='SV')) }}
 <form method="get" action="{{ url_for('service_buysell.order_list') }}" class="card mt14 bs-search" id="bs-search-form">
   {% if view_arg %}<input type="hidden" name="view" value="{{ view_arg }}">{% endif %}{% if status %}<input type="hidden" name="status" value="{{ status }}">{% endif %}{% if ord_type %}<input type="hidden" name="type" value="{{ ord_type }}">{% endif %}
+  <input type="hidden" name="go" value="1">
   <label class="field-label" for="bs-search">{{ t('bsSearchLabel') }}</label>
   <div class="row-inline">
     <input type="search" id="bs-search" name="q" value="{{ q }}" placeholder="{{ t('bsSearchPh') }}" autocapitalize="characters" spellcheck="false" data-scan="submit">
@@ -49,10 +50,10 @@
     <div class="who">
       <span class="ord-id">#{{ order.QR_ID }}</span>
       <span class="badge {{ 'buy-type' if order.ORD_TYPE == 'BY' else 'sell-type' }}">{{ t(type_keys[order.ORD_TYPE]) }}</span>
-      {% if order.milling %}{% if can('SV_MILLSTATUS') %}<a class="badge from-milling link" href="{{ url_for('service_milling.order_list', q='AOI-' ~ order.REF_ORD_ID) }}" data-milling-link title="{{ t('tabUpdateStatus') }}">{{ t('fromMillingBadge', id=order.milling.get('QR_ID', order.REF_ORD_ID)) }} &rarr;</a>
+      {% if order.milling %}{% if can('SV_MILLSTATUS') %}<a class="badge from-milling link" href="{{ url_for('service_milling.order_list', q='AOI-' ~ order.REF_ORD_ID, find=1) }}" data-milling-link title="{{ t('tabUpdateStatus') }}">{{ t('fromMillingBadge', id=order.milling.get('QR_ID', order.REF_ORD_ID)) }} &rarr;</a>
       {% else %}<span class="badge from-milling">{{ t('fromMillingBadge', id=order.milling.get('QR_ID', order.REF_ORD_ID)) }}</span>{% endif %}
       {% else %}<span class="badge manual">{{ t('newServiceOrderBadge') }}</span>{% endif %}
-      {% if order.link_ml %}{% if can('SV_MILLSTATUS') %}<a class="badge from-milling link" href="{{ url_for('service_milling.order_list', q='AOI-' ~ order.LINK_ML_ID) }}" data-link-ml="{{ order.LINK_ML_ID }}">{{ t('linkMlBadge', id=order.link_ml.get('QR_ID', order.LINK_ML_ID)) }} &rarr;</a>
+      {% if order.link_ml %}{% if can('SV_MILLSTATUS') %}<a class="badge from-milling link" href="{{ url_for('service_milling.order_list', q='AOI-' ~ order.LINK_ML_ID, find=1) }}" data-link-ml="{{ order.LINK_ML_ID }}">{{ t('linkMlBadge', id=order.link_ml.get('QR_ID', order.LINK_ML_ID)) }} &rarr;</a>
       {% else %}<span class="badge from-milling" data-link-ml="{{ order.LINK_ML_ID }}">{{ t('linkMlBadge', id=order.link_ml.get('QR_ID', order.LINK_ML_ID)) }}</span>{% endif %}{% endif %}
       <span class="ord-cust">{{ order.customer.get('CUST_NAME', order.CUST_CODE) }} &middot; {{ order.lines_text or (material ~ ' ' ~ order.ORD_QTY|num ~ ' kg') }} &middot; <span class="bs-amount">{{ order.amount|num }} THB</span> &middot; {{ order.registered_text }}</span>
     </div>
@@ -123,22 +124,24 @@
         <input type="hidden" name="new_status" value="P">
         <p class="od-title">{{ t('outboundTitle', id=order.QR_ID) }}</p>
         <p class="cap-note">{{ t('outboundNote') }}</p>
-        <div class="od-row"><span class="od-label">{{ t('lblSkuName') }}</span><span class="od-value">{{ material }}</span></div>
-        <div class="od-row"><span class="od-label">{{ t('colQty') }}</span><span class="od-value">{{ order.ORD_QTY|num }} kg</span></div>
         <div class="od-row"><span class="od-label">{{ t('colCustomer') }}</span><span class="od-value">{{ order.customer.get('CUST_NAME', order.CUST_CODE) }}</span></div>
-        <div class="od-row"><span class="od-label">{{ t('outboundFree') }}</span><span class="od-value{% if order.free_total < order.ORD_QTY %} bad{% endif %}">{{ order.free_total|num }} kg</span></div>
-        {% if order.free_stock %}
+        {# update 74: a line per SKU - the stock of each, and where to take it from #}
+        {% for l in order.out_lines %}
+        <p class="od-section">{{ l.name }} &middot; {{ l.ORD_QTY|num }} kg</p>
+        <div class="od-row"><span class="od-label">{{ t('outboundFree') }}</span><span class="od-value{% if l.free_total < l.ORD_QTY %} bad{% endif %}">{{ l.free_total|num }} kg</span></div>
+        {% if l.free_stock %}
         <div class="field-row">
-          <label class="field-label" for="out-loc-{{ order.ORD_ID }}">{{ t('outboundFrom') }}</label>
-          <select id="out-loc-{{ order.ORD_ID }}" name="OUT_LOC">
+          <label class="field-label" for="out-loc-{{ order.ORD_ID }}-{{ l.MAT_CODE }}">{{ t('outboundFrom') }}</label>
+          <select id="out-loc-{{ order.ORD_ID }}-{{ l.MAT_CODE }}" name="OUT_LOC_{{ l.MAT_CODE }}">
             <option value="">{{ t('outboundFifo') }}</option>
-            {% for r in order.free_stock %}<option value="{{ r.LOC_ID }}">{{ r.LOC_ID }} &middot; {{ r.INV_QTY|num }} kg{% if r.SUB_1 %} &middot; {{ r.SUB_1 }}{% endif %}</option>{% endfor %}
+            {% for r in l.free_stock %}<option value="{{ r.LOC_ID }}">{{ r.LOC_ID }} &middot; {{ r.INV_QTY|num }} kg{% if r.SUB_1 %} &middot; {{ r.SUB_1 }}{% endif %}</option>{% endfor %}
           </select>
         </div>
         {% else %}<p class="notice error">{{ t('outboundNone') }}</p>{% endif %}
+        {% endfor %}
         <div class="btn-pair">
           <button type="button" class="action" data-modal-close>{{ t('btnCancel') }}</button>
-          <button type="submit" class="action primary"{% if not order.free_stock %} disabled{% endif %}>{{ t('outboundConfirm') }}</button>
+          <button type="submit" class="action primary"{% if not order.out_ready %} disabled{% endif %}>{{ t('outboundConfirm') }}</button>
         </div>
       </form>
     </template>

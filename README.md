@@ -340,6 +340,33 @@ are kept in `AOITS_SYSLOG` (14 days), the checks in `AOITS_HEALTH` (7 days).
 customer's LINE when "Also send to the customer's LINE" is ticked (shown for customers linked to LINE); "Send to LINE
 only" sends without printing. The same public https address is needed as for the queue QR (update 47).
 
+## One order per registration, all customers listed, QR picture (update 74)
+
+* Buy / Sell on Customer Service: everything registered together for one customer is **one order** with a line per
+  SKU (before: one order per SKU). Prepared receives every line into stock (customer selling) or takes every line
+  out of stock and keeps it (customer buying - a "take from" choice per SKU; refused when any SKU is short, nothing is
+  kept then); Closed posts the total. Orders registered earlier stay as they are.
+* Customer search on Customer Service: with no name typed, the list shows every customer (it scrolls); a typed name
+  shows the first 50 matches (it was 8, so names further down the alphabet were missing).
+* Milling / Buying-Selling lists with a search: after a status change the list follows the order to the tab it moved
+  to; the "close when ..." note names the open buying/selling order and its status (e.g. Unpaid) and links to it.
+* The QR picture sent to LINE is now an RGB PNG (it was grey-scale). If the queue card still shows no QR, port 5000 of
+  the Codespace must be Public (see update 67).
+
+## Tabs with a search (update 73)
+
+On the Milling Order List and the Buying / Selling Order List, a search jumps to the tab where the order is only right
+after the search (or from a return link); tapping another tab afterwards stays on that tab, even with the search
+still in the box (it shows 0 there - tap Clear to see all orders of the tab).
+
+## Cancelled milling order: stock Pending maintenance (update 72)
+
+Cancelling a milling order no longer leaves goods kept for the customer: the milled rice and the take-home bran /
+broken rice (received by its buying order) become the mill's stock where they are, with the new status **Pending
+maintenance** (P) - shown on the Inventory list, not sold until someone checks them and changes the status to
+Available (or moves / adjusts them). Cancelling a take-home order after its goods were received does the same for
+those goods. start.sh moves stock still kept for orders cancelled before this update. DB 1.52.
+
 ## SCADA / AOI 3D switch (update 69)
 
 Both screens have a **SCADA | AOI 3D** switch at the top. Outside full screen it opens the other screen. In full

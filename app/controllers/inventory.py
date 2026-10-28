@@ -29,7 +29,7 @@ OPE_KEYS = {OPE_INBOUND: "opTypeInbound", OPE_OUTBOUND: "opTypeOutbound", OPE_AD
             OPE_ADJ_DEC: "opTypeAdjustDecrease", OPE_STATUS: "opTypeStatusChange", OPE_TRANSFER: "btnTransfer"}
 REASON_KEYS = {"milling": "reasonMilling", "buying": "reasonBuying", "producing": "reasonProducing", "order_prep": "reasonOrderPrep",
                "other": "reasonOther", "milling_return": "reasonMillingReturn", "selling": "reasonSelling"}
-STATUS_BADGE = {"A": "available", "B": "blocked", "U": "unable-ship"}
+STATUS_BADGE = {"A": "available", "B": "blocked", "U": "unable-ship", "P": "pending-maint"}
 LOW_STOCK_KG = 2000          # the design's low-stock line for the mill's own stock of a material
 
 

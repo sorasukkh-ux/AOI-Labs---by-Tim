@@ -141,7 +141,10 @@ def dashboard_context(view):
         def recent(kind):
             rows = list(col(BuySellOrder.COL).find({"BRANCH_ID": branch, "ORD_TYPE": kind, "REF_ORD_ID": None,
                                                     "ORD_STATUS": {"$ne": "CC"}}, NO_ID).sort([("REGIST_DATE", -1)]).limit(8))
-            return list(reversed(rows))
+            # update 74: an order can have a line per SKU - the trend shows the price of each line
+            lines = [dict(o, MAT_CODE=l["MAT_CODE"], PRICING_UINT=l.get("PRICING_UINT") or 0)
+                     for o in rows for l in BuySellOrder.items_of(o) if l.get("ORD_QTY")][:8]
+            return list(reversed(lines))
         top = max(total_sell, total_buy, 1)
         context.update(total_sell=total_sell, total_buy=total_buy, avg_sell=avg(sells), avg_buy=avg(buys),
                        h_sell=total_sell / top * 94, h_buy=total_buy / top * 94,

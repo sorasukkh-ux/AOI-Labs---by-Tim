@@ -169,20 +169,22 @@ def encode(text):
 
 
 def png(text, scale=12, quiet=4):
-    """PNG bytes (black on white, grey-scale 8-bit) of the QR of `text`."""
+    """PNG bytes (black on white) of the QR of `text`. Update 74: 8-bit RGB (colour type 2), the most common PNG kind,
+    so every image reader (LINE's included) takes it; it was grey-scale before."""
     matrix = encode(text)
     size = (len(matrix) + 2 * quiet) * scale
+    white, black = b"\xff\xff\xff", b"\x00\x00\x00"
     rows = []
-    blank = b"\x00" + b"\xff" * size
+    blank = b"\x00" + white * size
     for _ in range(quiet * scale):
         rows.append(blank)
     for line in matrix:
-        pixels = b"\xff" * (quiet * scale) + b"".join((b"\x00" if dark else b"\xff") * scale for dark in line) + b"\xff" * (quiet * scale)
+        pixels = white * (quiet * scale) + b"".join((black if dark else white) * scale for dark in line) + white * (quiet * scale)
         rows.extend([b"\x00" + pixels] * scale)
     for _ in range(quiet * scale):
         rows.append(blank)
 
     def chunk(kind, body):
         return struct.pack(">I", len(body)) + kind + body + struct.pack(">I", zlib.crc32(kind + body) & 0xFFFFFFFF)
-    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", size, size, 8, 0, 0, 0, 0))
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", size, size, 8, 2, 0, 0, 0))
             + chunk(b"IDAT", zlib.compress(b"".join(rows), 9)) + chunk(b"IEND", b""))

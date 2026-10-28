@@ -194,9 +194,11 @@ def customer_search():
         exact = Customer.find(code)
         if exact and exact.get("CUST_STATUS") == "D":
             exact = None
-        found = [exact] if exact else Customer.search_code(code, limit=8)
+        found = [exact] if exact else Customer.search_code(code, limit=50)
     else:
-        found = Customer.search(request.args.get("q", ""), limit=8)
+        # update 74 (Tim): an empty name lists every customer (the list scrolls); a typed name the first 50 matches
+        query = request.args.get("q", "")
+        found = Customer.search(query, limit=50 if query.strip() else 2000)
     return jsonify({"exact": bool(exact), "customers": [{"code": c["CUST_CODE"], "name": c["CUST_NAME"], "mobile": phone.of(c),
                      "line": c.get("LINE_ID") or "", "address": c.get("ADDRESS") or "", "distance": c.get("DISTANCE_KM")}
                     for c in found]})
@@ -241,6 +243,9 @@ def _decorate(orders, details=False):
         order["pay_total"] = MillingOrder.pay_total(order)
         order["next_statuses"] = flow.allowed_next(order)
         order["linked_open"] = linked_open.get(order["ORD_ID"], [])       # Close / Cancel wait for these (update 28)
+        if order["linked_open"]:                          # update 74: which order, and its status (e.g. Unpaid)
+            from .service_buysell import BS_STATUS_KEYS
+            order["linked_open_text"] = ", ".join("%s (%s)" % (o["ORD_ID"], t(BS_STATUS_KEYS[o["ORD_STATUS"]])) for o in order["linked_open"])
         order["is_open"] = flow.is_open(order)
         order["can_request_cancel"] = flow.can_request_cancel(order)
         registered = to_local(order["REGIST_DATE"])
@@ -300,7 +305,8 @@ def order_list():
     # update 53: only right after a search / scan (go=1), not when a view or filter is tapped later with the same search
     exact = bool(q) and request.args.get("go") == "1" and len(orders) == 1 and orders[0]["ORD_ID"].lower() == scan_text(q)
     # a scanned / typed order that is in the other view: open that view (the label of a closed order, say)
-    if q and not orders:
+    # update 73: only right after the search too - a tab tapped later (same search) stays on that tab
+    if q and not orders and "1" in (request.args.get("go"), request.args.get("find")):
         other = next((v for v in VIEWS if v != view and counts[v]), None)
         if other:
             return redirect(url_for("service_milling.order_list", view=None if other == "active" else other, type=order_type, q=q,
@@ -355,9 +361,10 @@ def order_detail(ord_id):
 
 def _back(ord_id):
     if request.form.get("back") == "list":
+        # update 74: with a search, the list follows the order to the tab it moved to (closed, say)
         return redirect(url_for("service_milling.order_list", status=request.form.get("status_filter") or None,
                                 type=request.form.get("type_filter") or None, q=request.form.get("q_filter") or None,
-                                view=request.form.get("view_filter") or None))
+                                view=request.form.get("view_filter") or None, find=1 if request.form.get("q_filter") else None))
     return redirect(url_for("service_milling.order_detail", ord_id=ord_id))
 
 
@@ -402,7 +409,7 @@ def change_status(ord_id):
             and BuySellOrder.open_for_milling([order["ORD_ID"]]).get(order["ORD_ID"])):
         # update 33: the take-home bran / broken rice orders come next; the list opens filtered on this order
         from flask import flash
-        flash(url_for("service_buysell.order_list", q=order["ORD_ID"]), "linked")
+        flash(url_for("service_buysell.order_list", q=order["ORD_ID"], find=1), "linked")
     return response
 
 

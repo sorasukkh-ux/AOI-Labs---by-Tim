@@ -81,6 +81,15 @@ class BuySellOrder:
         return milling if milling and milling.get("MILL_STATUS") not in ("C", "CC") else None
 
     @classmethod
+    def pending_with_milling(cls, milling, ope_user):
+        """Update 72: the milling order was Cancelled - goods kept for its linked orders become the mill's stock,
+        Pending maintenance."""
+        out = []
+        for o in cls.for_milling(milling["ORD_ID"]) + cls.linked_by_hand(milling["ORD_ID"]):
+            out += Inventory.release_to_mill(o["BRANCH_ID"], o["ORD_ID"], o["ORD_TYPE"], ope_user, "Milling order cancelled")
+        return out
+
+    @classmethod
     def release_with_milling(cls, milling, ope_user):
         """Update 68: the milling order was Closed (or Cancelled) - the goods kept for its closed linked orders leave."""
         released = []
@@ -256,6 +265,9 @@ class BuySellOrder:
             cls._on_close(updated, ope_user, describe)
         elif new_status == CANCELLED and order["ORD_TYPE"] == SELL and not cls.is_linked(order):
             Inventory.unreserve(order["BRANCH_ID"], order["ORD_ID"], SELL, ope_user)   # update 56: back to the mill's stock
+        elif new_status == CANCELLED and cls.is_linked(order):
+            # update 72: take-home bran / broken rice already received - the mill's stock, Pending maintenance
+            Inventory.release_to_mill(order["BRANCH_ID"], order["ORD_ID"], order["ORD_TYPE"], ope_user)
         return updated
 
     @classmethod
@@ -270,8 +282,10 @@ class BuySellOrder:
             # update 56: picked at Prepared (Inventory Outbound) - the kept goods leave now
             Inventory.release(order["BRANCH_ID"], order["ORD_ID"], SELL, MOVE_SELLING, ope_user)
         elif order["ORD_TYPE"] == SELL:
-            Inventory.release_free(order["BRANCH_ID"], order["MAT_CODE"], order["ORD_QTY"], order["ORD_ID"], SELL,
-                                   MOVE_SELLING, ope_user)
+            for line in cls.items_of(order):                   # update 74: every line
+                if line["ORD_QTY"] > 0:
+                    Inventory.release_free(order["BRANCH_ID"], line["MAT_CODE"], line["ORD_QTY"], order["ORD_ID"], SELL,
+                                           MOVE_SELLING, ope_user)
         Account.post_order(order, cls.amount(order), "EX" if order["ORD_TYPE"] == BUY else "IN",
                            describe(order), ope_user)
 
@@ -305,7 +319,7 @@ class BuySellOrder:
 
     @classmethod
     def register(cls, branch_id, ord_type, cust_code, form, close, ope_user, describe):
-        """Open: one Open order per material. Close (the design's "Close" button): the orders are completed at once -
+        """Open: one Open order with a line per material (update 74; before: one order per material). Close (the design's "Close" button): the orders are completed at once -
         a buying order receives the goods into the location given (LOC_ID) and posts the expense, a selling order
         releases the goods from stock and posts the income. Returns the orders."""
         from .customer import Customer
@@ -321,28 +335,29 @@ class BuySellOrder:
             inbound = Inventory.parse_inbound(form, 1)
             from .inventory import Location
             Location.check_usable(branch_id, inbound["loc"])
-        orders = []
-        for item in items:
-            ord_id, qr_id = cls._new_ids(ord_type)
-            order = {"ORD_ID": ord_id, "BRANCH_ID": branch_id, "ORD_TYPE": ord_type, "CUST_CODE": customer["CUST_CODE"],
-                     "ORD_STATUS": OPEN, "QR_ID": qr_id, "MAT_CODE": item["mat"], "ORD_QTY": item["qty"], "UOM_CODE": "KG",
-                     "REMARK": None, "PRICING_UINT": item["price"], "ORD_AMOUNT": item["amount"],
-                     "REF_ORD_ID": None, "REF_ORD_TYPE": None, "REF_QR_PRINT": None, "REF_INV_LOC": None,
-                     "LINK_ML_ID": link["ORD_ID"] if link else None}
-            order.update(audit_new(ope_user))
-            col(cls.COL).insert_one(dict(order))
-            cls._log(ord_id)
-            if close:
-                values = {"ORD_STATUS": CLOSED}
-                if ord_type == BUY:
-                    received = dict(inbound, qty=item["qty"])
-                    Inventory.inbound(branch_id, item["mat"], received, lot_of(ord_id), ord_id, BUY, MOVE_BUYING, ope_user,
-                                      reserve=False)
-                    values["REF_INV_LOC"] = inbound["loc"]
-                closed = cls._save(order, values, ope_user)
-                cls._on_close(closed, ope_user, describe)
-            orders.append(cls.find(ord_id))
-        return orders
+        # update 74 (Tim): everything registered together for one customer is ONE order with a line per SKU
+        lines = [{"LINE_NO": n + 1, "MAT_CODE": item["mat"], "ORD_QTY": item["qty"], "UOM_CODE": "KG",
+                  "PRICING_UINT": item["price"], "ORD_AMOUNT": item["amount"], "UNIT_PRICE": item["price"],
+                  "OWN_KG": 0, "DISC_PCT": 0, "REF_INV_LOC": None} for n, item in enumerate(items)]
+        ord_id, qr_id = cls._new_ids(ord_type)
+        order = {"ORD_ID": ord_id, "BRANCH_ID": branch_id, "ORD_TYPE": ord_type, "CUST_CODE": customer["CUST_CODE"],
+                 "ORD_STATUS": OPEN, "QR_ID": qr_id, "UOM_CODE": "KG", "REMARK": None,
+                 "REF_ORD_ID": None, "REF_ORD_TYPE": None, "REF_QR_PRINT": None, "REF_INV_LOC": None,
+                 "LINK_ML_ID": link["ORD_ID"] if link else None}
+        order.update(cls._header(lines))
+        order.update(audit_new(ope_user))
+        col(cls.COL).insert_one(dict(order))
+        cls._log(ord_id)
+        if close:
+            values = {"ORD_STATUS": CLOSED}
+            if ord_type == BUY:
+                for line in lines:
+                    Inventory.inbound(branch_id, line["MAT_CODE"], dict(inbound, qty=line["ORD_QTY"]), lot_of(ord_id), ord_id, BUY,
+                                      MOVE_BUYING, ope_user, reserve=False)
+                values["REF_INV_LOC"] = inbound["loc"]
+            closed = cls._save(order, values, ope_user)
+            cls._on_close(closed, ope_user, describe)
+        return [cls.find(ord_id)]
 
     @classmethod
     def stock_check(cls, branch_id, items):
@@ -358,20 +373,30 @@ class BuySellOrder:
     @classmethod
     def _prepare(cls, order, form, ope_user):
         """Prepared. Buying order: the goods are received into the mill's own stock. Take-home goods of a milling
-        order: stored in a location kept for the customer. Direct selling order: no stock moves (released at Closed)."""
-        if order["ORD_TYPE"] == BUY:
-            inbound = Inventory.parse_inbound(form, order["ORD_QTY"])
-            Inventory.inbound(order["BRANCH_ID"], order["MAT_CODE"], inbound, lot_of(order["ORD_ID"]), order["ORD_ID"], BUY,
-                              MOVE_BUYING, ope_user, reserve=False)
-            return inbound["loc"]
-        if not cls.is_linked(order):
+        order: stored in a location kept for the customer. Customer buying order: taken from stock and kept."""
+        if order["ORD_TYPE"] == SELL and not cls.is_linked(order):
             # update 56: a customer buying order - Inventory Outbound: the goods are taken from the mill's stock
-            # (the location chosen, or oldest first) and kept for the order until it is closed
-            return Inventory.reserve_free(order["BRANCH_ID"], order["MAT_CODE"], order["ORD_QTY"], order["ORD_ID"], SELL,
-                                          (form or {}).get("OUT_LOC") or None, ope_user)
+            # (the location chosen, or oldest first) and kept for the order until it is closed. Update 74: per line,
+            # all lines checked before anything is kept.
+            lines = [l for l in cls.items_of(order) if l["ORD_QTY"] > 0]
+            locs = {l["MAT_CODE"]: ((form or {}).get("OUT_LOC_" + l["MAT_CODE"]) or (form or {}).get("OUT_LOC") or None) for l in lines}
+            for l in lines:
+                have = round_half_up(sum(r["INV_QTY"] for r in Inventory.free_stock(order["BRANCH_ID"], l["MAT_CODE"])
+                                         if not locs[l["MAT_CODE"]] or r["LOC_ID"] == locs[l["MAT_CODE"]]), 3)
+                if have < l["ORD_QTY"]:
+                    from .variety import mat_name
+                    raise ValidationError("errOutboundShortMat", mat=mat_name(l["MAT_CODE"]), need="%.2f" % l["ORD_QTY"],
+                                          have="%.2f" % have, loc=locs[l["MAT_CODE"]] or "-")
+            first = None
+            for l in lines:
+                loc = Inventory.reserve_free(order["BRANCH_ID"], l["MAT_CODE"], l["ORD_QTY"], order["ORD_ID"], SELL, locs[l["MAT_CODE"]], ope_user)
+                first = first or loc
+            return first
         # update 42 (Tim): the buying/selling order is prepared and closed on its own - it does not wait for the
         # milling order's status. The lot still names the milling order it came from.
-        lot = lot_of(order["REF_ORD_ID"]) if order.get("REF_ORD_TYPE") == "ML" and order.get("REF_ORD_ID") else None
+        # Buying order (update 74: a line per SKU): the goods go into the mill's own stock (not kept for anyone)
+        buying = order["ORD_TYPE"] == BUY
+        lot = lot_of(order["REF_ORD_ID"]) if order.get("REF_ORD_TYPE") == "ML" and order.get("REF_ORD_ID") else (lot_of(order["ORD_ID"]) if buying else None)
         lines = [l for l in cls.items_of(order) if l["ORD_QTY"] > 0]
         received = []
         for line in lines:                                   # checked first: one location for the customer's goods
@@ -379,7 +404,7 @@ class BuySellOrder:
             received.append((line, Inventory.parse_inbound(dict(form.items(), INV_QTY=form.get(field)), line["ORD_QTY"])))
         for line, inbound in received:
             Inventory.inbound(order["BRANCH_ID"], line["MAT_CODE"], inbound, lot, order["ORD_ID"], order["ORD_TYPE"],
-                              MOVE_ORDER_PREP, ope_user)
+                              MOVE_BUYING if buying else MOVE_ORDER_PREP, ope_user, reserve=not buying)
         return received[0][1]["loc"] if received else None
 
     @classmethod

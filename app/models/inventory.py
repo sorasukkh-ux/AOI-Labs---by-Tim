@@ -13,7 +13,8 @@ from .counter import Counter
 from ..timeutil import now_local, now_utc
 
 LOC_PATTERN = re.compile(r"^\d{2}-\d{3}-\d{3}$")          # BAY-BANK-LEVEL, for example 02-003-001
-INV_STATUSES = ("A", "B", "U")                          # Available, Blocked, Unable to ship
+INV_STATUSES = ("A", "B", "U", "P")                     # Available, Blocked, Unable to ship, Pending maintenance (update 72)
+PENDING = "P"
 LOC_AVAILABLE, LOC_OCCUPIED, LOC_BLOCKED = "A", "O", "B"
 OPE_INBOUND, OPE_OUTBOUND = "I", "O"
 OPE_ADJ_INC, OPE_ADJ_DEC, OPE_TRANSFER, OPE_STATUS = "AI", "AD", "T", "ST"
@@ -213,6 +214,18 @@ class Inventory:
         for record in cls.for_order(branch_id, ord_id):
             col(cls.COL).update_one({"INV_ID": record["INV_ID"]}, {"$set": dict({"SUB_2": None}, **audit_update(ope_user))})
             cls._log(record, OPE_TRANSFER, "Order cancelled", record["LOC_ID"], record["LOC_ID"], record["INV_QTY"], ord_id, ord_type, ope_user)
+
+    @classmethod
+    def release_to_mill(cls, branch_id, ord_id, ord_type, ope_user, reason="Order cancelled"):
+        """Update 72 (Tim): a cancelled milling order (and its take-home goods) - the goods kept for the customer stay
+        where they are but become the mill's stock with status Pending maintenance (P), to be checked, moved or set
+        Available on the Inventory screens. Returns the records."""
+        records = cls.for_order(branch_id, ord_id)
+        for record in records:
+            col(cls.COL).update_one({"INV_ID": record["INV_ID"]}, {"$set": dict({"SUB_2": None, "INV_STATUS": PENDING}, **audit_update(ope_user))})
+            cls._log(record, OPE_TRANSFER, reason, record["LOC_ID"], record["LOC_ID"], record["INV_QTY"], ord_id, ord_type, ope_user,
+                     new_status=PENDING)
+        return records
 
     # ---------- Inventory screens: items and their operations ----------
     @staticmethod

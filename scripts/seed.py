@@ -121,6 +121,21 @@ SEED_USER = "system"
 PERM_FIELDS = (("v", "CAN_VIEW"), ("c", "CAN_CREATE"), ("e", "CAN_EDIT"), ("d", "CAN_DELETE"), ("a", "CAN_APPROVE"))
 
 
+def pending_for_cancelled(db):
+    """Update 72: stock still kept for a cancelled milling order (or its take-home orders) - from before this update -
+    becomes the mill's stock, Pending maintenance. Returns how many records."""
+    from app.models.base import now_utc
+    cancelled = {o["ORD_ID"] for o in db["AOITS_ORDMILLING"].find({"MILL_STATUS": "CC"}, {"ORD_ID": 1})}
+    for o in db["AOITS_ORDBUYSELL"].find({}, {"ORD_ID": 1, "ORD_STATUS": 1, "REF_ORD_ID": 1, "LINK_ML_ID": 1, "REF_ORD_TYPE": 1}):
+        ml = o.get("REF_ORD_ID") if o.get("REF_ORD_TYPE") == "ML" else o.get("LINK_ML_ID")
+        if (ml and ml in cancelled) or (o.get("ORD_STATUS") == "CC" and o.get("REF_ORD_TYPE") == "ML"):
+            cancelled.add(o["ORD_ID"])
+    if not cancelled:
+        return 0
+    return db["AOINV_ONHAND"].update_many({"SUB_2": {"$in": list(cancelled)}},
+                                          {"$set": {"SUB_2": None, "INV_STATUS": "P", "LAST_UPDATE": now_utc(), "OPE_USER": SEED_USER}}).modified_count
+
+
 def merge_broken(db):
     """Update 61 (Tim): broken rice is one SKU (BROKEN) for every variety. The per-variety broken rice SKUs of update 10
     (BROKEN_HM, BROKEN_GL) are merged: stock and open orders move to BROKEN; their prices, market mappings and
@@ -181,6 +196,7 @@ def seed(log=print, reset=False):
     for code, old in OLD_MAT_DESC.items():
         db["AOIMS_MATERIAL"].update_one({"MAT_CODE": code, "MAT_DESC": old}, {"$set": {"MAT_DESC": _var.DESC_TH[code]}})
     merge_broken(db)                              # update 61: one broken rice SKU
+    pending_for_cancelled(db)                     # update 72: goods of cancelled orders -> Pending maintenance
     for branch_id, name in BRANCHES:
         add("AOIMS_SYSPARAM", {"BRANCH_ID": branch_id}, dict(MILL_SETTINGS, BRANCH_NAME=name))
         for variety in _var.VARIETIES:

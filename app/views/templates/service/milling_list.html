@@ -109,8 +109,8 @@
     </div>
 
     {% if order.linked_open and ('C' in order.next_statuses or 'CC' in order.next_statuses) %}
-    <p class="linked-open-note" data-linked-open="{{ order.linked_open|map(attribute='ORD_ID')|join(',') }}">&#128274; {{ t('linkedOpenNote', ids=order.linked_open|map(attribute='ORD_ID')|join(', ')) }}
-      {% if can('SV_BSSTATUS') %}<a href="{{ url_for('service_buysell.order_list', q=order.ORD_ID) }}" data-linked-link>{{ t('tabUpdateBuySellStatus') }} &rarr;</a>{% endif %}</p>
+    <p class="linked-open-note" data-linked-open="{{ order.linked_open|map(attribute='ORD_ID')|join(',') }}">&#128274; {{ t('linkedOpenNote', ids=order.linked_open_text) }}
+      {% if can('SV_BSSTATUS') %}<a href="{{ url_for('service_buysell.order_list', q=order.linked_open[0].ORD_ID if order.linked_open|length == 1 else order.ORD_ID, find=1) }}" data-linked-link>{{ t('tabUpdateBuySellStatus') }} &rarr;</a>{% endif %}</p>
     {% endif %}
     {% if order.MILL_STATUS == 'H' and order.HOLD_REASON %}
     <p class="hold-reason-note"><b>{{ t('lblHoldReason') }}:</b> {{ order.HOLD_REASON }}</p>
