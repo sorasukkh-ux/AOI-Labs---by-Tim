@@ -37,7 +37,7 @@ from . import export_price, variety as var
 from ..timeutil import now_utc, to_local, today_local
 
 CFG = "AOIMS_PRICESIG"
-SOURCES = ("NABC", "TRMA", "TREA", "APPLIED", "BUY", "SELL")
+SOURCES = ("NABC", "TRMA", "TREA", "APPLIED", "AIWEB", "AIHIST", "BUY", "SELL")   # update 77: + AI web search
 DEFAULTS = {"FX_USD_THB": 0.0, "SMA_SHORT": 7, "SMA_LONG": 30, "TP_PCT": 8.0, "SL_PCT": 5.0, "BASE": {}, "TREA_KEYS": {}}
 BAND_DAYS, RSI_DAYS, RANGE_DAYS, CROSS_DAYS = 20, 14, 60, 7
 PERIODS = {"3M": 92, "6M": 183, "12M": 365, "36M": 1096}
@@ -134,21 +134,46 @@ def sources(branch_id, code, start, cfg=None, export_keys=None):
         put("TRMA", lambda: _trma_series(m, start, list(col(MarketReport.COL).find({"REPORT_STATUS": "OK"}, NO_ID).sort([("FETCH_DATE", 1)]))))
     put("TREA", lambda: export_price.series(trea_key(code, cfg, export_keys), start, cfg.get("FX_USD_THB")))
     put("APPLIED", lambda: _hand_series(code, branch_id, start))
+    from . import ai_price                                # update 77: prices found on the web by the AI
+    put("AIWEB", lambda: ai_price.series(code, ai_price.DAILY, start))
+    put("AIHIST", lambda: ai_price.series(code, ai_price.HISTORY, start))
     put("BUY", lambda: _own_series(branch_id, code, "BY", start))
     put("SELL", lambda: _own_series(branch_id, code, "SL", start))
     return out
 
 
 def base_of(code, found, cfg):
+    """The source the signals are worked out on: the one chosen in the settings; else (update 77) the SKU's market
+    mapping, NABC, millers' report, applied, export, AI web price - the first with at least BASE_MIN_POINTS prices;
+    else the source with the most prices (the AI monthly estimate and own prices last)."""
     from .market import MarketMap
     chosen = (cfg.get("BASE") or {}).get(code)
     if chosen in found:
         return chosen
     m = next((x for x in MarketMap.all() if x["MAT_CODE"] == code), {})
-    for name in ([m.get("SOURCE")] if m.get("SOURCE") in found else []) + ["NABC", "TRMA", "APPLIED", "TREA", "SELL", "BUY"]:
-        if name in found:
+    order = ([m.get("SOURCE")] if m.get("SOURCE") in found else []) + ["NABC", "TRMA", "APPLIED", "TREA", "AIWEB", "AIHIST", "SELL", "BUY"]
+    for name in order:
+        if name in found and len(found[name]) >= BASE_MIN_POINTS and name not in ("AIHIST", "SELL", "BUY"):
             return name
-    return None
+    ranked = sorted((name for name in order if name in found), key=lambda n: -len(found[n]))
+    return ranked[0] if ranked else None
+
+
+BASE_MIN_POINTS = 20
+# update 77 (Tim): jasmine and white / glutinous are different qualities - a white or glutinous price this close to
+# the jasmine price of the same stage is most likely the wrong row or product
+QUALITY_PAIRS = (("PADDY", "PADDY_HM"), ("PADDY_GL", "PADDY_HM"), ("RICE_W5", "RICE_HM"), ("RICE_GL", "RICE_HM"))
+QUALITY_MAX_RATIO = 0.90
+
+
+def quality_check(prices):
+    """`prices` {MAT_CODE: THB/kg} -> [(code, jasmine code, ratio %)] where a lower grade is >= 90% of jasmine."""
+    out = []
+    for low, high in QUALITY_PAIRS:
+        a, b = prices.get(low), prices.get(high)
+        if a and b and a >= b * QUALITY_MAX_RATIO:
+            out.append((low, high, round_half_up(a / b * 100, 0)))
+    return out
 
 
 # ---------- indicators ----------
@@ -471,6 +496,23 @@ def overview(branch_id, cfg=None):
                     "own_sell_avg": a["trade"]["sell"]["avg"], "own_sell_vs_market_pct": a["trade"]["sell"]["vs_market_pct"],
                     "own_margin_kg": a["trade"]["margin_kg"], "own_gross_profit": a["trade"]["gross_profit"],
                     "stock_cover_days": a["trade"]["cover_days"]})
+    return out
+
+
+def warnings(overview_rows):
+    """Update 77: [(text key, params)] for the Price analysis page - grades too close to jasmine, and a source far
+    (> 25%) from the AI web price of the same SKU."""
+    from . import ai_price
+    out = []
+    last = {o["code"]: o["last"] for o in overview_rows if o.get("last")}
+    for low, high, pct in quality_check(last):
+        out.append(("psWarnQuality", {"low": var.mat_name(low), "high": var.mat_name(high), "pct": "%.0f" % pct}))
+    web = ai_price.latest()
+    for o in overview_rows:
+        w = web.get(o["code"])
+        if w and o.get("last") and o.get("base") not in ("AIWEB", "AIHIST") and abs(o["last"] - w["MID"]) > w["MID"] * 0.25:
+            out.append(("psWarnFarFromWeb", {"name": o["name"], "src": o.get("base") or "-", "v": "%.2f" % o["last"],
+                                             "web": "%.2f-%.2f" % (w["LOW"], w["HIGH"])}))
     return out
 
 

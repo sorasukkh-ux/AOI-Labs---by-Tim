@@ -340,6 +340,24 @@ are kept in `AOITS_SYSLOG` (14 days), the checks in `AOITS_HEALTH` (7 days).
 customer's LINE when "Also send to the customer's LINE" is ticked (shown for customers linked to LINE); "Send to LINE
 only" sends without printing. The same public https address is needed as for the queue QR (update 47).
 
+## Market prices found on the web by AI; white paddy row fix (update 77)
+
+* **AI > Price analysis > Market prices found on the web by AI**: once a day (and with "Search prices now") an AI that
+  searches the web finds today's market price of every traded SKU in the mill's area (AOI_AI_PRICE_REGION, default
+  Khon Kaen / Isan): THB/kg low-high, the date and the source link. Gemini with Google Search when
+  `AOI_GEMINI_API_KEY` is set (Google AI Studio; model AOI_GEMINI_MODEL, default gemini-2.5-flash), else Claude with web
+  search through the Ask AI key `AOI_AI_API_KEY`. A value needs a source, a believable THB/kg (per ton / per 100 kg
+  are converted) and a recent date. It is drawn as its own line (AIWEB, purple) and goes into Ask AI.
+* **Monthly history, 3 years (estimate)**: one request for the monthly averages of every SKU (AIHIST, dashed) so
+  every SKU has a trend line at once - an estimate, for the trend only.
+* The signals now use the first source with at least 20 prices (unless one is chosen in the settings), so a SKU with
+  one applied price and a daily AI price uses the AI price instead of showing nothing.
+* Rice millers' report: white paddy (key "ข้าวเปลือกเจ้า") no longer takes the jasmine row "ข้าวเปลือกเจ้าหอมมะลิ..." -
+  a row with a grade word the key does not have (หอมมะลิ, หอม, ปทุม, เหนียว) is skipped. Price analysis warns when a
+  white / glutinous price is 90% or more of jasmine of the same stage, and when a base price is more than 25% from
+  the AI web price. After installing, check Financial > Pricing Maintenance: the white paddy market price changes.
+DB 1.54 (AOITS_AIPRICE).
+
 ## Logo opens the home page (update 76)
 
 Tapping the AOI logo (or the system name) at the top left of any screen opens the home menu.

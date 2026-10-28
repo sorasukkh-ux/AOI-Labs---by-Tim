@@ -409,6 +409,15 @@ def ai_prices():
                 r = export_price.import_data(data, "upload:" + (upload.filename or "file")[:80], _user_id())
                 flash_ok("psFetched", rows=r["rows"], new=r["new"], day=r["newest"])
                 return back("ps-sources")
+            if action in ("aiweb", "aihist"):              # update 77: prices found on the web by the AI
+                from ..models import ai_price
+                if action == "aiweb":
+                    r = ai_price.fetch(_user_id())
+                    flash_ok("apFetched", n=len(r["saved"]), skipped=", ".join(r["skipped"]) or "-", provider=r["provider"])
+                else:
+                    r = ai_price.fetch_history(_user_id())
+                    flash_ok("apHistFetched", n=r["saved"], provider=r["provider"])
+                return back("ps-aiweb")
             if action == "settings":
                 if not can(AI_MENU, "edit"):
                     abort(403)
@@ -439,8 +448,13 @@ def ai_prices():
     if answer and answer.get("sku") != code:
         answer = None
     last_fetch = export_price.latest_fetch()
+    from ..models import ai_price
+    overview_rows = price_signal.overview(branch, cfg)
+    ap_last = ai_price.last_fetch()
     return render_template("automation/ai_prices.html", a=a, code=code, live_time=to_local(now_utc()).strftime("%H:%M:%S"), period=period, periods=list(price_signal.PERIODS),
-                           cfg=cfg, overview=price_signal.overview(branch, cfg), src_names={x: t("psSrc_" + x) for x in price_signal.SOURCES}, items=items, sources=price_signal.SOURCES,
+                           cfg=cfg, overview=overview_rows, warnings=price_signal.warnings(overview_rows),
+                           ap_provider=ai_price.provider()[0], ap_latest=ai_price.latest(), ap_last=fmt_datetime(ap_last["FETCH_DATE"]) if ap_last else None,
+                           ap_region=ai_price.region(), sku_names={c: var.mat_name(c) for c in var.TRADED}, src_names={x: t("psSrc_" + x) for x in price_signal.SOURCES}, items=items, sources=price_signal.SOURCES,
                            trea_keys={c: price_signal.trea_key(c, cfg, keys) for c in var.TRADED}, traded=var.TRADED,
                            last_fetch=fmt_datetime(last_fetch["FETCH_DATE"]) if last_fetch else None, entry=entry,
                            export_url=current_app.config["EXPORT_URL"], answer=answer,

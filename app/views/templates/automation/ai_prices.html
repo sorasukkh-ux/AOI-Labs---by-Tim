@@ -12,10 +12,11 @@
 <p class="desc-text dash-desc">{{ t('psDesc') }}</p>
 <p class="live-bar" data-live-clock data-ok="{{ t('liveOk', n=60) }}" data-lost="{{ t('liveLost') }}" data-paused="{{ t('livePaused') }}" data-down="{{ t('liveDown') }}"><i></i><span>{{ t('liveOk', n=60) }} {{ live_time }}</span></p><p class="cap-note dash-desc">{{ t('psDisclaimer') }}</p>
 <nav class="chips dash-nav">
-  <a class="chip" href="#ps-chart">{{ t('psChart') }}</a><a class="chip" href="#ps-trade">{{ t('psTradeChip') }}</a><a class="chip" href="#ps-overview">{{ t('psOverview') }}</a>
+  <a class="chip" href="#ps-chart">{{ t('psChart') }}</a><a class="chip" href="#ps-trade">{{ t('psTradeChip') }}</a><a class="chip" href="#ps-aiweb">{{ t('apChip') }}</a><a class="chip" href="#ps-overview">{{ t('psOverview') }}</a>
   <a class="chip" href="#ps-sources">{{ t('psSources') }}</a><a class="chip" href="#ps-settings">{{ t('psSettings') }}</a><a class="chip" href="#ps-ask">{{ t('aiAsk') }}</a>
 </nav>
 
+{% if warnings %}<div class="notice error ps-warnings" id="ps-warnings">{% for key, params in warnings %}<p>&#9888; {{ t(key, **params) }}</p>{% endfor %}</div>{% endif %}
 <section class="card dash-card" id="ps-chart" data-live>
   <div class="ps-toolbar">
     <form method="get" class="ps-pick" action="{{ url_for('automation.ai_prices') }}">
@@ -139,6 +140,29 @@
   </svg>
   {% endif %}
   {% if tr.notes %}<ul class="ps-trade-notes">{% for key, params in tr.notes %}<li>{{ t(key, **params) }}</li>{% endfor %}</ul>{% endif %}
+</section>
+
+{# update 77: market prices found on the web by an AI with search (Gemini or Claude) #}
+<section class="card dash-card mt14" id="ps-aiweb" data-live>
+  <div class="dash-head"><p class="card-title sub">{{ t('apTitle') }}</p>
+    <span class="badge {{ 'approved' if ap_provider else 'neutral' }}">{{ t('apProv_' ~ (ap_provider or 'none')) }}</span></div>
+  <p class="hint">{{ t('apNote', region=ap_region) }}{% if ap_last %} &middot; {{ t('apLast', when=ap_last) }}{% endif %}</p>
+  {% if ap_latest %}<div class="inv-table-wrap"><table class="tv-table" id="ap-table">
+    <thead><tr><th>{{ t('colProduct') }}</th><th class="num">{{ t('apRange') }}</th><th>{{ t('colDate') }}</th><th>{{ t('apSource') }}</th></tr></thead>
+    <tbody>{% for c in traded %}{% set w = ap_latest.get(c) %}{% if w %}<tr data-ap="{{ c }}"><td>{{ sku_names[c] }}</td>
+      <td class="num">{{ '%.2f'|format(w.LOW) }}{% if w.HIGH != w.LOW %} - {{ '%.2f'|format(w.HIGH) }}{% endif %}</td>
+      <td>{{ w.SOURCE_DATE or w.PRICE_DATE }}</td>
+      <td>{% if w.URL %}<a href="{{ w.URL }}" target="_blank" rel="noopener noreferrer">{{ w.SOURCE_NAME or w.URL[:40] }}</a>{% else %}{{ w.SOURCE_NAME }}{% endif %}</td></tr>{% endif %}{% endfor %}</tbody>
+  </table></div>{% else %}<p class="hint">{{ t('apNone') }}</p>{% endif %}
+  {% if can_fetch %}{% if ap_provider %}
+  <div class="btn-pair mt6">
+    <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="aiweb"><input type="hidden" name="sku" value="{{ code }}"><input type="hidden" name="p" value="{{ period }}">
+      <button class="action primary" type="submit" id="ap-fetch">{{ t('apFetchNow') }}</button></form>
+    <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="aihist"><input type="hidden" name="sku" value="{{ code }}"><input type="hidden" name="p" value="{{ period }}">
+      <button class="action" type="submit" id="ap-hist" data-confirm="{{ t('apHistConfirm') }}">{{ t('apHistBtn') }}</button></form>
+  </div>
+  {% else %}<p class="cap-note">{{ t('apSetup') }}</p>{% endif %}{% endif %}
+  <p class="cap-note">{{ t('apCaution') }}</p>
 </section>
 
 <section class="card dash-card mt14" id="ps-overview" data-live>

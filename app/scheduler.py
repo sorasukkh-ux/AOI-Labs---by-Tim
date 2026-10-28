@@ -76,6 +76,13 @@ def start(app):
                             app.logger.info("Export prices: %s", export_price.fetch("system:market"))
                         except ValidationError as error:
                             app.logger.warning("Daily export price fetch: %s", error.key)
+                    from .models import ai_price                  # update 77: market prices found by the AI's web search
+                    if ai_price.daily_due():
+                        try:
+                            r = ai_price.fetch("system:aiprice")
+                            app.logger.info("AI web prices: %s saved, %s skipped", len(r["saved"]), len(r["skipped"]))
+                        except ValidationError as error:
+                            app.logger.warning("AI web price search: %s", error.key)
                     from .models import supply
                     if supply.daily_due():
                         try:

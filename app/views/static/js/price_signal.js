@@ -18,7 +18,7 @@
   var text = JSON.parse(host.getAttribute("data-text"));
   var tip = document.getElementById("ps-tip"), empty = document.getElementById("ps-empty");
   var NS = "http://www.w3.org/2000/svg", DAY = 86400000;
-  var ORDER = ["NABC", "TRMA", "TREA", "APPLIED", "BUY", "SELL"];
+  var ORDER = ["NABC", "TRMA", "TREA", "APPLIED", "AIWEB", "AIHIST", "BUY", "SELL"];   // update 77: + AI web prices
   var boxes = document.querySelectorAll("[data-ps-line]");
   var W = 760, H = 340, M = { l: 46, r: 64, t: 14, b: 30 };
 

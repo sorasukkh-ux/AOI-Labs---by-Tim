@@ -4199,5 +4199,96 @@ class Update76(Base):
             self.assertRegex(self.text(path), r'<a class="brand-row brand-home" href="/"')
 
 
+class Update77(Base):
+    """AI web prices (Gemini / Claude with search), base source with enough prices, the grade check, row matching."""
+
+    def setUp(self):
+        super().setUp()
+        self.login("admin")
+        self.client.get("/lang/en")
+
+    GEMINI = {"candidates": [{"content": {"parts": [{"text": "```json\n" + json.dumps({"items": [
+        {"sku": "PADDY_HM", "low": 14400, "high": 18333, "unit": "THB/ton", "date": "2026-10-28", "source": "ราคาเกษตรไทย", "url": "https://example.org/a"},
+        {"sku": "PADDY", "low": 12.0, "high": 12.8, "date": "2026-10-28", "source": "กระทรวงมหาดไทย"},
+        {"sku": "RICE_HM", "low": 3500, "high": 3583, "date": "2026-10-28", "source": "x", "url": "https://example.org/b"},
+        {"sku": "BRAN", "low": 10.4, "high": 10.6, "date": "2026-10-28"},
+        {"sku": "XYZ", "low": 5, "high": 6, "source": "y"}]}) + "\n```"}]},
+        "groundingMetadata": {"groundingChunks": [{"web": {"uri": "https://example.org/g"}}]}}]}
+
+    def test_fetch_checks_and_saves(self):
+        import os
+        from unittest import mock
+        from app.models import ai_price
+        with self.app.app_context():
+            from app.timeutil import today_local
+            today = today_local().isoformat()
+        reply = json.loads(json.dumps(self.GEMINI).replace("2026-10-28", today))
+        with mock.patch.dict(os.environ, {"AOI_GEMINI_API_KEY": "k"}), mock.patch("app.models.ai_price._post", return_value=reply) as post:
+            r = self.post("/automation/ai/prices", {"action": "aiweb", "sku": "PADDY_HM"}, "/automation/ai/prices")
+            self.assertEqual(r.status_code, 302)
+            url, body, headers = post.call_args[0]
+            self.assertIn("gemini-2.5-flash:generateContent", url)
+            self.assertEqual(body["tools"], [{"google_search": {}}])
+            self.assertEqual(headers, {"x-goog-api-key": "k"})
+        rows = {d["MAT_CODE"]: d for d in self.db("AOITS_AIPRICE")}
+        self.assertEqual(sorted(rows), ["PADDY", "PADDY_HM", "RICE_HM"])                 # BRAN: no source; XYZ unknown
+        self.assertEqual((rows["PADDY_HM"]["LOW"], rows["PADDY_HM"]["HIGH"]), (14.4, 18.33))   # per ton -> THB/kg
+        self.assertEqual(rows["RICE_HM"]["MID"], 35.42)                                     # per 100 kg -> THB/kg
+        self.assertEqual(rows["PADDY"]["URL"], "https://example.org/g")                     # the search's own link
+        page = self.text("/automation/ai/prices?sku=PADDY")
+        self.assertIn('id="ps-aiweb"', page)
+        self.assertIn('data-ap="PADDY"', page)
+        self.assertIn("Web price (AI search)", page)
+
+    def test_claude_is_used_without_gemini(self):
+        import os
+        from unittest import mock
+        self.app.config["AI_API_KEY"] = "c"
+        reply = {"content": [{"type": "text", "text": json.dumps({"items": [], "sources": ["https://example.org/h"]})}]}
+        with mock.patch.dict(os.environ, {"AOI_GEMINI_API_KEY": ""}), mock.patch("app.models.ai_price._post", return_value=reply) as post:
+            self.post("/automation/ai/prices", {"action": "aiweb"}, "/automation/ai/prices")
+            body = post.call_args[0][1]
+            self.assertEqual(body["tools"][0]["type"], "web_search_20250305")
+
+    def test_history_estimate(self):
+        import os
+        from unittest import mock
+        from app.models import ai_price, price_signal
+        with self.app.app_context():
+            from app.timeutil import today_local
+            from datetime import timedelta
+            months = [(today_local().replace(day=1) - timedelta(days=31 * i)).strftime("%Y-%m") for i in range(1, 25)]
+        items = [{"sku": "PADDY_GL", "month": m, "avg": 11 + i * 0.1} for i, m in enumerate(months)]
+        reply = {"candidates": [{"content": {"parts": [{"text": json.dumps({"items": items, "sources": ["https://example.org/s"]})}]}}]}
+        with mock.patch.dict(os.environ, {"AOI_GEMINI_API_KEY": "k"}), mock.patch("app.models.ai_price._post", return_value=reply):
+            self.post("/automation/ai/prices", {"action": "aihist"}, "/automation/ai/prices")
+        self.assertEqual(len([d for d in self.db("AOITS_AIPRICE") if d["SOURCE"] == "AIHIST"]), 24)
+        with self.app.test_request_context():
+            a = price_signal.analyse("factory2", "PADDY_GL", "36M")
+        self.assertEqual(a["base"], "AIHIST")                                              # the only source with a line
+        self.assertTrue(len(a["chart"]["sources"]["AIHIST"]) >= 20)
+
+    def test_base_needs_enough_prices(self):
+        from app.models import price_signal
+        found = {"APPLIED": [("2026-10-01", 17.0)], "AIWEB": [("2026-10-%02d" % d, 12.0) for d in range(1, 25)]}
+        with self.app.app_context():
+            self.assertEqual(price_signal.base_of("PADDY", found, {"BASE": {}}), "AIWEB")
+            self.assertEqual(price_signal.base_of("PADDY", {"APPLIED": [("2026-10-01", 17.0)]}, {"BASE": {}}), "APPLIED")
+
+    def test_grade_check_and_row_match(self):
+        from app.models import price_signal
+        from app.models.market import MarketMap, normalize
+        self.assertEqual(price_signal.quality_check({"PADDY": 17.0, "PADDY_HM": 17.9, "RICE_W5": 14.9, "RICE_HM": 35.42}),
+                         [("PADDY", "PADDY_HM", 95.0)])
+        rows = [{"key": normalize("ข้าวเปลือกเจ้าหอมมะลิ (ความชื้น 15%)"), "label": "hm"}, {"key": normalize("ข้าวเปลือกเจ้า 5%"), "label": "white"}]
+        self.assertEqual(MarketMap.match({"ROW_KEY": normalize("ข้าวเปลือกเจ้า")}, rows)["label"], "white")
+        self.assertEqual(MarketMap.match({"ROW_KEY": normalize("ข้าวเปลือกหอมมะลิ")}, rows), None)
+        self.assertEqual(MarketMap.match({"ROW_KEY": normalize("ข้าวเปลือกเจ้าหอมมะลิ")}, rows)["label"], "hm")
+
+    def test_to_kg(self):
+        from app.models import ai_price
+        self.assertEqual([ai_price.to_kg(x) for x in (17000, "3,500", 12.5, 0.5, "x", 900000)], [17.0, 35.0, 12.5, None, None, None])
+
+
 if __name__ == "__main__":
     unittest.main()

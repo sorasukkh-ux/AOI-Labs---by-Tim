@@ -1401,3 +1401,11 @@ body.embed .plant3d { min-height: 0; padding: 14px 22px; }
 
 a.brand-home { color: inherit; text-decoration: none; }   /* update 76 */
 a.brand-home:hover .brand-logo, a.brand-home:focus-visible .brand-logo { box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.25); }
+
+/* update 77: AI web prices on Price analysis */
+#tab-ps { --ps-AIWEB: #7c3aed; --ps-AIHIST: #a78bfa; }
+.ps-s-AIWEB { stroke: var(--ps-AIWEB); } .ps-dot.ps-s-AIWEB { fill: var(--ps-AIWEB); }
+.ps-s-AIHIST { stroke: var(--ps-AIHIST); stroke-dasharray: 6 4; } .ps-dot.ps-s-AIHIST { fill: var(--ps-AIHIST); }
+.ps-c-AIWEB { border-color: var(--ps-AIWEB); } .ps-c-AIHIST { border-color: var(--ps-AIHIST); }
+.mkh-sw.ps-c-AIHIST { border-top-style: dashed; }
+.ps-warnings p { margin: 2px 0; }

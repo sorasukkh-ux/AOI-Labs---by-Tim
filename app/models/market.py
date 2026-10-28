@@ -44,6 +44,8 @@ DEFAULT_KEYS = {
 }
 
 
+GRADE_WORDS = ("หอมมะลิ", "หอม", "ปทุม", "เหนียว")      # update 77: words that make another quality of rice
+
 THAI_MARKS = re.compile("[\u0e31\u0e34-\u0e3a\u0e47-\u0e4e\uf700-\uf71f]")
 SPACES = re.compile("[\\s\u200b\u200c\u200d\ufeff*]+")
 
@@ -235,11 +237,19 @@ class MarketMap:
 
     @staticmethod
     def match(mapping, rows):
-        """The report row of a mapping: the first row whose label contains ROW_KEY."""
+        """The report row of a mapping: the row whose label is ROW_KEY, else the rows that contain it. Update 77 (Tim:
+        white paddy showed the jasmine price): "ข้าวเปลือกเจ้า" is also inside "ข้าวเปลือกเจ้าหอมมะลิ" - a row with a
+        grade word (หอมมะลิ, หอม, ปทุม, เหนียว) that the key does not have is not taken; then the shortest label wins."""
         key = mapping.get("ROW_KEY")
         if not key:
             return None
-        return next((r for r in rows if key in r["key"]), None)
+        exact = next((r for r in rows if r["key"] == key), None)
+        if exact:
+            return exact
+        found = [r for r in rows if key in r["key"]]
+        clean = [r for r in found if not any(normalize(w) in r["key"] and normalize(w) not in key for w in GRADE_WORDS)]
+        pick = clean or found
+        return min(pick, key=lambda r: len(r["key"])) if pick else None
 
     @classmethod
     def resolve(cls, rows):
