@@ -340,6 +340,15 @@ are kept in `AOITS_SYSLOG` (14 days), the checks in `AOITS_HEALTH` (7 days).
 customer's LINE when "Also send to the customer's LINE" is ticked (shown for customers linked to LINE); "Send to LINE
 only" sends without printing. The same public https address is needed as for the queue QR (update 47).
 
+## The mill's own trading on Price analysis (update 75)
+
+AI > Price analysis has a new card **The mill's trading in AOI** for the SKU and period chosen: what the mill bought
+(customer selling orders) and sold (customer buying orders) - kg, average THB/kg, value, orders and customers, and
+the gap to the main market price on the same days; the margin sell - buy per kg, the estimated gross profit, net kg
+bought, kg sold per day (30 days) and how many days the stock lasts; a bar per week (month for 3 years) - bought up,
+sold down; and plain findings (buying above the market, selling below it, no margin, slow stock). Cancelled orders
+are left out. The same figures (6 months) go to Ask AI with the market signals.
+
 ## One order per registration, all customers listed, QR picture (update 74)
 
 * Buy / Sell on Customer Service: everything registered together for one customer is **one order** with a line per

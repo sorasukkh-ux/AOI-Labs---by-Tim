@@ -4141,5 +4141,54 @@ class Update74(Base):
         self.assertEqual(data[25], 2)                                                            # IHDR colour type: RGB
 
 
+class Update75(Base):
+    """Price analysis: the mill's own buying and selling in AOI next to the market price."""
+
+    def setUp(self):
+        super().setUp()
+        self.login("admin")
+        self.client.get("/lang/en")
+
+    def trade(self, ord_type, **fields):
+        data = {"ORD_TYPE": ord_type, "mode": "open", "CUST_CODE": "C261001001", "csrf_token": self.token("/service/milling/new")}
+        data.update(fields)
+        return self.client.post("/service/buysell/new", data=data, headers={"Accept": "application/json"})
+
+    def test_trading_figures(self):
+        from app.models import price_signal
+        from app.timeutil import today_local
+        from datetime import timedelta
+        self.trade("BY", QTY_PADDY="100")
+        self.trade("BY", QTY_PADDY="50")
+        self.trade("SL", QTY_PADDY="30")
+        cancelled = self.trade("BY", QTY_PADDY="999").get_json()["billing_url"].split("ids=")[1]
+        self.post("/service/buysell/%s/status" % cancelled, {"new_status": "CC"}, "/service/buysell/")
+        orders = {o["ORD_TYPE"]: o for o in self.db("AOITS_ORDBUYSELL") if o["ORD_STATUS"] != "CC"}
+        buy_px, sell_px = orders["BY"]["ORD_ITEMS"][0]["PRICING_UINT"], orders["SL"]["ORD_ITEMS"][0]["PRICING_UINT"]
+        with self.app.app_context():
+            end = today_local()
+            tr = price_signal.trading("factory2", "PADDY", end - timedelta(days=30), end, [(end, buy_px)], stock_qty=600)
+        self.assertEqual((tr["buy"]["kg"], tr["buy"]["orders"], tr["sell"]["kg"]), (150.0, 2, 30.0))
+        self.assertEqual(tr["buy"]["avg"], round(buy_px, 2))
+        self.assertEqual(tr["buy"]["vs_market_pct"], 0.0)
+        self.assertEqual(tr["margin_kg"], round(sell_px - buy_px, 2))
+        self.assertEqual(tr["net_kg"], 120.0)
+        self.assertEqual(tr["cover_days"], 600.0)                                  # 600 kg / (30 kg / 30 days)
+        self.assertEqual(len([r for r in tr["rows"] if r["buy_kg"] or r["sell_kg"]]), 1)                # every week shown, one with orders
+        self.assertIn("psTnSlowStock", [k for k, _p in price_signal.trade_notes(tr)])
+
+    def test_page_and_ai(self):
+        self.trade("BY", QTY_PADDY="100")
+        page = self.text("/automation/ai/prices?sku=PADDY")
+        self.assertIn('id="ps-trade"', page)
+        self.assertIn("The mill&#39;s trading in AOI", page)
+        self.assertIn("ps-trade-chart", page)
+        from app.models import price_signal
+        with self.app.test_request_context():
+            ai = price_signal.for_ai("factory2")
+        paddy = next(x for x in ai["skus"] if x["code"] == "PADDY")
+        self.assertEqual(paddy["own_buy_kg"], 100.0)
+
+
 if __name__ == "__main__":
     unittest.main()

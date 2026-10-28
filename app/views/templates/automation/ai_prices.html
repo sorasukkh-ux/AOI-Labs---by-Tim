@@ -12,7 +12,7 @@
 <p class="desc-text dash-desc">{{ t('psDesc') }}</p>
 <p class="live-bar" data-live-clock data-ok="{{ t('liveOk', n=60) }}" data-lost="{{ t('liveLost') }}" data-paused="{{ t('livePaused') }}" data-down="{{ t('liveDown') }}"><i></i><span>{{ t('liveOk', n=60) }} {{ live_time }}</span></p><p class="cap-note dash-desc">{{ t('psDisclaimer') }}</p>
 <nav class="chips dash-nav">
-  <a class="chip" href="#ps-chart">{{ t('psChart') }}</a><a class="chip" href="#ps-overview">{{ t('psOverview') }}</a>
+  <a class="chip" href="#ps-chart">{{ t('psChart') }}</a><a class="chip" href="#ps-trade">{{ t('psTradeChip') }}</a><a class="chip" href="#ps-overview">{{ t('psOverview') }}</a>
   <a class="chip" href="#ps-sources">{{ t('psSources') }}</a><a class="chip" href="#ps-settings">{{ t('psSettings') }}</a><a class="chip" href="#ps-ask">{{ t('aiAsk') }}</a>
 </nav>
 
@@ -93,6 +93,52 @@
       <small>{{ t('psSrcNote_' ~ src) }}</small>
     </div>{% endfor %}
   </div>
+</section>
+
+{# update 75: what the mill itself bought and sold of this SKU in AOI, against the market #}
+{% set tr = a.trade %}
+<section class="card dash-card mt14" id="ps-trade" data-live>
+  <div class="dash-head"><p class="card-title sub">{{ t('psTradeTitle', name=a.name) }}</p><span class="badge neutral">{{ t('psP_' ~ period) }}</span></div>
+  <p class="hint">{{ t('psTradeNote') }}</p>
+  <div class="ps-trade-grid">
+    {% for key, sd, cls in [('psTradeBuy', tr.buy, 'buyz'), ('psTradeSell', tr.sell, 'sellz')] %}
+    <div class="ps-trade-side {{ cls }}">
+      <p class="card-title">{{ t(key) }}</p>
+      <div class="ps-kpis">
+        <div class="ps-kpi"><span>{{ t('psTradeKg') }}</span><b>{{ "{:,.0f}".format(sd.kg or 0) }} kg</b></div>
+        <div class="ps-kpi"><span>{{ t('psTradeAvg') }}</span><b>{{ '%.2f'|format(sd.avg) if sd.avg else '-' }}</b></div>
+        <div class="ps-kpi"><span>{{ t('psTradeThb') }}</span><b>{{ "{:,.0f}".format(sd.thb or 0) }}</b></div>
+        <div class="ps-kpi"><span>{{ t('psTradeOrders') }}</span><b>{{ sd.orders }} &middot; {{ sd.customers }} {{ t('psTradeCust') }}</b></div>
+        <div class="ps-kpi"><span>{{ t('psTradeVsMarket') }}</span>
+          <b class="{{ ('loss' if sd.vs_market_pct > 0 else 'gain') if key == 'psTradeBuy' and sd.vs_market_pct is not none else (('gain' if sd.vs_market_pct > 0 else 'loss') if sd.vs_market_pct is not none else '') }}">{{ ('%+.1f%%'|format(sd.vs_market_pct)) if sd.vs_market_pct is not none else '-' }}</b>
+          <small>{{ t('psTradeMarketAvg', p=('%.2f'|format(sd.market_avg)) if sd.market_avg else '-') }}</small></div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  <div class="ps-kpis mt6">
+    <div class="ps-kpi"><span>{{ t('psTradeMargin') }}</span><b class="{{ 'gain' if (tr.margin_kg or 0) > 0 else ('loss' if tr.margin_kg is not none else '') }}">{{ ('%+.2f'|format(tr.margin_kg)) if tr.margin_kg is not none else '-' }}{% if tr.margin_pct is not none %} ({{ '%+.1f%%'|format(tr.margin_pct) }}){% endif %}</b></div>
+    <div class="ps-kpi"><span>{{ t('psTradeGross') }}</span><b class="{{ 'gain' if (tr.gross_profit or 0) > 0 else ('loss' if tr.gross_profit is not none else '') }}">{{ ("{:+,.0f}".format(tr.gross_profit) ~ ' THB') if tr.gross_profit is not none else '-' }}</b></div>
+    <div class="ps-kpi"><span>{{ t('psTradeNet') }}</span><b>{{ "{:+,.0f}".format(tr.net_kg or 0) }} kg</b></div>
+    <div class="ps-kpi"><span>{{ t('psTradePerDay') }}</span><b>{{ "{:,.1f}".format(tr.sold_per_day or 0) }} kg</b></div>
+    <div class="ps-kpi"><span>{{ t('psTradeCover') }}</span><b>{{ ("{:,.0f}".format(tr.cover_days) ~ ' ' ~ t('psDays')) if tr.cover_days is not none else '-' }}</b></div>
+  </div>
+  {% if tr.rows %}
+  {% set n = tr.rows|length %}{% set W, H, M = 1000, 180, 30 %}{% set bw = ((W - 2 * M) / n) %}{% set mid = H / 2 %}{% set top = tr.max_kg or 1 %}
+  <p class="card-title mt14">{{ t('psTradeChart_' ~ tr.unit) }}</p>
+  <svg class="ps-trade-chart" viewBox="0 0 {{ W }} {{ H + 22 }}" role="img" aria-label="{{ t('psTradeChart_' ~ tr.unit) }}">
+    <line x1="{{ M }}" x2="{{ W - M }}" y1="{{ mid }}" y2="{{ mid }}" class="axis"/>
+    {% for r in tr.rows %}{% set x = M + loop.index0 * bw %}
+    <g class="mark"><title>{{ r.label }} · {{ t('psTradeBuy') }} {{ "{:,.0f}".format(r.buy_kg) }} kg{% if r.buy_avg %} @ {{ '%.2f'|format(r.buy_avg) }}{% endif %} · {{ t('psTradeSell') }} {{ "{:,.0f}".format(r.sell_kg) }} kg{% if r.sell_avg %} @ {{ '%.2f'|format(r.sell_avg) }}{% endif %}</title>
+      {% if r.buy_kg %}<rect x="{{ x + bw * 0.12 }}" y="{{ mid - r.buy_kg / top * (mid - 8) }}" width="{{ bw * 0.76 }}" height="{{ r.buy_kg / top * (mid - 8) }}" rx="2" class="buy"/>{% endif %}
+      {% if r.sell_kg %}<rect x="{{ x + bw * 0.12 }}" y="{{ mid }}" width="{{ bw * 0.76 }}" height="{{ r.sell_kg / top * (mid - 8) }}" rx="2" class="sell"/>{% endif %}
+    </g>
+    {% if n <= 14 or loop.index0 % ((n // 12) + 1) == 0 %}<text x="{{ x + bw / 2 }}" y="{{ H + 16 }}" text-anchor="middle" class="l">{{ r.label }}</text>{% endif %}
+    {% endfor %}
+    <text x="{{ M }}" y="14" class="lg buy">&#9650; {{ t('psTradeBuy') }}</text><text x="{{ M }}" y="{{ H - 2 }}" class="lg sell">&#9660; {{ t('psTradeSell') }}</text>
+  </svg>
+  {% endif %}
+  {% if tr.notes %}<ul class="ps-trade-notes">{% for key, params in tr.notes %}<li>{{ t(key, **params) }}</li>{% endfor %}</ul>{% endif %}
 </section>
 
 <section class="card dash-card mt14" id="ps-overview" data-live>

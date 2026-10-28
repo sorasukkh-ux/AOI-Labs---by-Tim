@@ -274,7 +274,9 @@ def ask(branch_id, user_id, question, lang):
               "price converted at fx_usd_thb, APPLIED market price, own BUY / SELL prices), the latest price, the signal "
               "(strong_buy .. strong_sell from RSI, Bollinger bands and moving-average crosses), the buy / sell points, the "
               "stock (qty kg), its cost and profit / loss, take profit (tp) and stop loss (sl) prices. Export prices are FOB at "
-              "the port, above mill-gate prices: use them for direction. Say clearly that signals are not a guarantee. "
+              "the port, above mill-gate prices: use them for direction. own_* fields are the mill's own trading in AOI over 6 "
+              "months (kg and average THB/kg bought and sold, %% against the market on the same days, margin per kg, gross "
+              "profit, days the stock lasts): use them to judge the mill's own prices and stock. Say clearly that signals are not a guarantee. "
               "Never invent numbers." % ("Thai" if lang == "th" else "English"))
     body = {"model": config["AI_MODEL"], "max_tokens": 600, "system": system,
             "messages": [{"role": "user", "content": "Figures of the branch (JSON):\n%s\n\nQuestion: %s"

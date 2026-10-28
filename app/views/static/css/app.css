@@ -1386,3 +1386,15 @@ body.embed .plant3d { min-height: 0; padding: 14px 22px; }
 .plant3d.p3-pseudo-full.vs-other, .plant3d.vs-other:fullscreen { padding: 22px; }
 
 .badge.pending-maint { background: #fff1d6; color: #8a5a00; }   /* update 72 */
+
+/* update 75: the mill's own trading on Price analysis */
+.ps-trade-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+.ps-trade-side { border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
+.ps-trade-side.buyz { border-top: 3px solid #16a34a; } .ps-trade-side.sellz { border-top: 3px solid #dc2626; }
+.ps-trade-chart { width: 100%; height: auto; display: block; }
+.ps-trade-chart .axis { stroke: var(--border); stroke-width: 1.5; }
+.ps-trade-chart rect.buy { fill: #16a34a; } .ps-trade-chart rect.sell { fill: #dc2626; }
+.ps-trade-chart .mark:hover rect { opacity: .8; }
+.ps-trade-chart text.l { font-size: 12px; fill: var(--text-secondary); }
+.ps-trade-chart text.lg { font-size: 13px; font-weight: 600; } .ps-trade-chart text.lg.buy { fill: #16a34a; } .ps-trade-chart text.lg.sell { fill: #dc2626; }
+.ps-trade-notes { margin: 10px 0 0; padding-left: 20px; color: var(--text-secondary); display: grid; gap: 4px; }

@@ -326,6 +326,91 @@ def position(branch_id, code, last, cfg, entry=None):
             "pl_pct": round_half_up(pl_kg / cost * 100, 1) if cost else None, "pl_total": rnd(pl_kg * qty), "state": state}
 
 
+# ---------- update 75: the mill's own buying and selling in AOI ----------
+def trading(branch_id, code, start, end, market_days=None, stock_qty=None):
+    """What the mill bought and sold of a SKU in AOI between `start` and `end` (dates, local): kg, average THB/kg,
+    orders, customers, margin, the gap to the market on the same days, and a bar per week (month for 3 years).
+    Customer selling orders (BY) are the mill buying, customer buying orders (SL) the mill selling; cancelled
+    orders are left out, open ones count (registered = agreed price)."""
+    from .buysell_order import BuySellOrder, CANCELLED
+    market = {d: v for d, v in (market_days or [])}
+    monthly = (end - start).days > 400
+    side = {"BY": {"kg": 0.0, "thb": 0.0, "orders": 0, "cust": set(), "mkt_kg": 0.0, "mkt_thb": 0.0},
+            "SL": {"kg": 0.0, "thb": 0.0, "orders": 0, "cust": set(), "mkt_kg": 0.0, "mkt_thb": 0.0}}
+    buckets, sold_30 = {}, 0.0
+    since30 = end - timedelta(days=30)
+    for o in col(BuySellOrder.COL).find({"BRANCH_ID": branch_id, "ORD_TYPE": {"$in": ["BY", "SL"]}, "ORD_STATUS": {"$ne": CANCELLED},
+                                         "REGIST_DATE": {"$gte": to_utc_day(start)}}, NO_ID):
+        day = to_local(o["REGIST_DATE"]).date()
+        if day > end:
+            continue
+        lines = [l for l in BuySellOrder.items_of(o) if l.get("MAT_CODE") == code and float(l.get("ORD_QTY") or 0) > 0]
+        if not lines:
+            continue
+        sd = side[o["ORD_TYPE"]]
+        sd["orders"] += 1
+        sd["cust"].add(o.get("CUST_CODE"))
+        key = day.replace(day=1) if monthly else day - timedelta(days=day.weekday())
+        b = buckets.setdefault(key, {"BY": [0.0, 0.0], "SL": [0.0, 0.0]})
+        for l in lines:
+            qty = float(l["ORD_QTY"])
+            thb = float(l.get("ORD_AMOUNT") or 0) or qty * float(l.get("UNIT_PRICE") or l.get("PRICING_UINT") or 0)
+            sd["kg"] += qty
+            sd["thb"] += thb
+            b[o["ORD_TYPE"]][0] += qty
+            b[o["ORD_TYPE"]][1] += thb
+            if day in market:
+                sd["mkt_kg"] += qty
+                sd["mkt_thb"] += qty * market[day]
+            if o["ORD_TYPE"] == "SL" and day > since30:
+                sold_30 += qty
+    rnd = lambda x, n=2: round_half_up(x, n) if x is not None else None
+    out = {}
+    for k, sd in side.items():
+        avg = sd["thb"] / sd["kg"] if sd["kg"] else None
+        mkt = sd["mkt_thb"] / sd["mkt_kg"] if sd["mkt_kg"] else None
+        out[k] = {"kg": rnd(sd["kg"], 1), "thb": rnd(sd["thb"]), "avg": rnd(avg), "orders": sd["orders"], "customers": len(sd["cust"]),
+                  "market_avg": rnd(mkt), "vs_market_pct": rnd((avg - mkt) / mkt * 100, 1) if avg and mkt else None}
+    buy, sell = out["BY"], out["SL"]
+    margin = (sell["avg"] - buy["avg"]) if sell["avg"] and buy["avg"] else None
+    daily_sold = sold_30 / 30.0
+    rows = []
+    keys, k = [], (start.replace(day=1) if monthly else start - timedelta(days=start.weekday()))
+    while k <= end:                                       # every week / month of the period, also the empty ones
+        keys.append(k)
+        k = (k.replace(day=28) + timedelta(days=4)).replace(day=1) if monthly else k + timedelta(days=7)
+    for key in keys:
+        b = buckets.get(key, {"BY": [0.0, 0.0], "SL": [0.0, 0.0]})
+        rows.append({"label": key.strftime("%m/%y" if monthly else "%d/%m"), "start": key.isoformat(),
+                     "buy_kg": rnd(b["BY"][0], 1), "sell_kg": rnd(b["SL"][0], 1),
+                     "buy_avg": rnd(b["BY"][1] / b["BY"][0]) if b["BY"][0] else None,
+                     "sell_avg": rnd(b["SL"][1] / b["SL"][0]) if b["SL"][0] else None})
+    return {"buy": buy, "sell": sell, "margin_kg": rnd(margin), "margin_pct": rnd(margin / buy["avg"] * 100, 1) if margin is not None else None,
+            "gross_profit": rnd(margin * sell["kg"]) if margin is not None else None, "net_kg": rnd((buy["kg"] or 0) - (sell["kg"] or 0), 1),
+            "sold_per_day": rnd(daily_sold, 1), "cover_days": rnd(stock_qty / daily_sold, 0) if stock_qty and daily_sold else None,
+            "unit": "month" if monthly else "week", "rows": rows,
+            "max_kg": max([r["buy_kg"] for r in rows] + [r["sell_kg"] for r in rows] + [0])}
+
+
+def trade_notes(tr):
+    """Plain findings from the mill's own trading (text keys + values), shown under the trading card and given to the AI."""
+    notes = []
+    b, s = tr["buy"], tr["sell"]
+    if b["vs_market_pct"] is not None and b["vs_market_pct"] >= 3:
+        notes.append(("psTnBuyHigh", {"pct": "%+.1f" % b["vs_market_pct"]}))
+    elif b["vs_market_pct"] is not None and b["vs_market_pct"] <= -3:
+        notes.append(("psTnBuyLow", {"pct": "%+.1f" % b["vs_market_pct"]}))
+    if s["vs_market_pct"] is not None and s["vs_market_pct"] <= -3:
+        notes.append(("psTnSellLow", {"pct": "%+.1f" % s["vs_market_pct"]}))
+    if tr["margin_kg"] is not None and tr["margin_kg"] <= 0:
+        notes.append(("psTnNoMargin", {"m": "%.2f" % tr["margin_kg"]}))
+    if tr["cover_days"] is not None and tr["cover_days"] > 60:
+        notes.append(("psTnSlowStock", {"d": "%.0f" % tr["cover_days"]}))
+    if not b["kg"] and not s["kg"]:
+        notes.append(("psTnNone", {}))
+    return notes
+
+
 # ---------- the screen ----------
 def analyse(branch_id, code, period="12M", cfg=None, entry=None, export_keys=None):
     cfg = cfg or settings()
@@ -349,9 +434,13 @@ def analyse(branch_id, code, period="12M", cfg=None, entry=None, export_keys=Non
     if sig and pos.get("cost"):
         chart["levels"] = {"cost": pos["cost"], "tp": pos["tp"], "sl": pos["sl"]}
     latest = {k: {"last": pts[-1][1], "day": pts[-1][0], "change_30d": _change(pts)} for k, pts in found.items()}
+    # update 75: the mill's own buying and selling in AOI over the period shown, against the base market price
+    market_days = [(d, v) for d, v in days] if base not in ("BUY", "SELL") else []
+    trade = trading(branch_id, code, shown_from, end, market_days, pos.get("qty"))
+    trade["notes"] = trade_notes(trade)
     spark = [v for d, v in days[-90:]][::3] + ([days[-1][1]] if days else [])  # last 90 days, every 3rd day
     return {"code": code, "name": var.mat_name(code), "base": base, "signal": sig, "position": pos, "chart": chart,
-            "latest": latest, "period": period, "spark": spark}
+            "latest": latest, "period": period, "spark": spark, "trade": trade}
 
 
 def _change(pts):
@@ -375,7 +464,13 @@ def overview(branch_id, cfg=None):
                     "sell_zone": s.get("sell_zone"), "qty": p.get("qty"), "cost": p.get("cost"), "pl_pct": p.get("pl_pct") if p.get("qty") else None,
                     "pl_total": p.get("pl_total") if p.get("qty") else None, "state": p.get("state"), "tp": p.get("tp"), "sl": p.get("sl"),
                     "sources": sorted(a["latest"]), "spark": a["spark"], "support": s.get("support"),
-                    "resistance": s.get("resistance"), "change_30d": s.get("change_30d")})
+                    "resistance": s.get("resistance"), "change_30d": s.get("change_30d"),
+                    # update 75: the mill's own trading over 6 months
+                    "own_buy_kg": a["trade"]["buy"]["kg"], "own_buy_avg": a["trade"]["buy"]["avg"],
+                    "own_buy_vs_market_pct": a["trade"]["buy"]["vs_market_pct"], "own_sell_kg": a["trade"]["sell"]["kg"],
+                    "own_sell_avg": a["trade"]["sell"]["avg"], "own_sell_vs_market_pct": a["trade"]["sell"]["vs_market_pct"],
+                    "own_margin_kg": a["trade"]["margin_kg"], "own_gross_profit": a["trade"]["gross_profit"],
+                    "stock_cover_days": a["trade"]["cover_days"]})
     return out
 
 
@@ -385,6 +480,6 @@ def for_ai(branch_id):
         cfg = settings()
         return {"fx_usd_thb": cfg.get("FX_USD_THB"), "take_profit_pct": cfg["TP_PCT"], "stop_loss_pct": cfg["SL_PCT"],
                 "skus": [{k: v for k, v in o.items() if k != "spark" and (v not in (None, [], 0) or k == "score")}
-                         for o in overview(branch_id, cfg) if o["base"]]}
+                         for o in overview(branch_id, cfg) if o["base"] or o["own_buy_kg"] or o["own_sell_kg"]]}
     except Exception:                                     # noqa: BLE001
         return None
