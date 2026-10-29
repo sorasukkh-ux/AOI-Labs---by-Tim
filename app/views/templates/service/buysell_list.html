@@ -78,6 +78,34 @@
     {% if order.REF_INV_LOC %}<p class="bs-note">{{ t('lblLocation') }}: {{ order.REF_INV_LOC }}</p>{% endif %}
 
     <a class="action bs-billing-btn" href="{{ url_for('service_buysell.billing', ids=order.ORD_ID) }}" data-popup>{{ t('btnPrintBilling') }}</a>
+    {% if order.PRICE_OVR_FLG %}<p class="bs-note bs-price-ovr" data-price-ovr>&#9998; {{ t('priceOvrNote', user=order.PRICE_OVR_USER or '-', reason=order.PRICE_OVR_REASON or '-') }}</p>{% endif %}
+    {% if can_price and order.ORD_STATUS in ('O', 'P', 'U') and not order.milling %}
+    {# update 78: a super user (Approve right) changes the price of this order, with a reason #}
+    <button type="button" class="action bs-billing-btn bs-price-btn" data-open-form="price-{{ order.ORD_ID }}">&#9998; {{ t('btnChangePrice') }}</button>
+    <template id="price-{{ order.ORD_ID }}">
+      <form method="post" action="{{ url_for('service_buysell.change_price', ord_id=order.ORD_ID) }}" class="inbound-form order-details bs-price-form">
+        {{ hidden() }}
+        <p class="od-title">{{ t('priceTitle', id=order.QR_ID) }}</p>
+        <p class="cap-note">{{ t('priceOverrideNote') }}</p>
+        <table class="bs-check-table">
+          <thead><tr><th>{{ t('colProduct') }}</th><th class="num">kg</th><th class="num">THB/kg</th></tr></thead>
+          <tbody>{% for l in order.lines if l.ORD_QTY > 0 %}
+          <tr><td><label for="price-{{ order.ORD_ID }}-{{ l.MAT_CODE }}">{{ l.name }}</label>{% if l.LIST_PRICE and l.LIST_PRICE != l.PRICING_UINT %}<small class="inv-sub">{{ t('priceList', p='%.2f'|format(l.LIST_PRICE)) }}</small>{% endif %}</td>
+            <td class="num">{{ l.ORD_QTY|num }}</td>
+            <td class="num"><input type="number" id="price-{{ order.ORD_ID }}-{{ l.MAT_CODE }}" name="PRICE_{{ l.MAT_CODE }}" value="{{ '%.2f'|format(l.PRICING_UINT) }}" min="0.01" max="1000" step="0.01" inputmode="decimal" required></td></tr>
+          {% endfor %}</tbody>
+        </table>
+        <div class="field-row">
+          <label class="field-label" for="price-reason-{{ order.ORD_ID }}">{{ t('lblPriceReason') }}</label>
+          <input type="text" id="price-reason-{{ order.ORD_ID }}" name="PRICE_REASON" maxlength="200" placeholder="{{ t('priceReasonPh') }}" required>
+        </div>
+        <div class="btn-pair">
+          <button type="button" class="action" data-modal-close>{{ t('btnCancel') }}</button>
+          <button type="submit" class="action primary">{{ t('btnSaveChanges') }}</button>
+        </div>
+      </form>
+    </template>
+    {% endif %}
     {% if can_edit and order.can_maintain %}
     <button type="button" class="action bs-billing-btn bs-edit-btn" data-open-form="edit-{{ order.ORD_ID }}">{{ t('bsEditItems') }}</button>
     <template id="edit-{{ order.ORD_ID }}">

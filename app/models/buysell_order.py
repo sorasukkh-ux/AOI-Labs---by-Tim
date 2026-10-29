@@ -17,7 +17,7 @@ Every change is also written to AOILOG_ORDBUYSELL.
 """
 import re
 from .account import Account
-from .base import col, NO_ID, ValidationError, audit_new, audit_update, round_half_up, to_number
+from .base import col, NO_ID, ValidationError, audit_new, audit_update, clean_text, round_half_up, to_number
 from .counter import Counter
 from .inventory import Inventory, MOVE_BUYING, MOVE_ORDER_CLOSE, MOVE_ORDER_PREP, MOVE_SELLING, lot_of
 MOVE_ORDER_EDIT = "Order changed"
@@ -27,6 +27,7 @@ from ..timeutil import now_local, now_utc
 
 BUY, SELL = "BY", "SL"
 OPEN, PREPARED, UNPAID, CLOSED, CANCELLED = "O", "P", "U", "C", "CC"
+PRICE_MIN, PRICE_MAX = 0.01, 1000.0                      # update 78: a price typed by hand, THB/kg
 END_STATUSES = (CLOSED, CANCELLED)
 FLOW = {OPEN: [PREPARED, CANCELLED], PREPARED: [UNPAID, CLOSED, CANCELLED], UNPAID: [CLOSED], CLOSED: [], CANCELLED: []}
 LIST_RANK = {s: i for i, s in enumerate((OPEN, PREPARED, UNPAID, CLOSED, CANCELLED))}
@@ -296,8 +297,11 @@ class BuySellOrder:
 
     # ---------- registration on Customer Service > Buy / Sell ----------
     @classmethod
-    def parse_items(cls, branch_id, ord_type, form):
-        """Quantities typed in the Buy or Sell table (QTY_<MAT_CODE>), each with the branch's current price."""
+    def parse_items(cls, branch_id, ord_type, form, can_override=False):
+        """Quantities typed in the Buy or Sell table (QTY_<MAT_CODE>), each with the branch's current price.
+        Update 78 (Tim): a user with the Approve right may type another price for the order (PRICE_<MAT_CODE>, THB/kg)
+        with a reason (PRICE_REASON); a changed price without that right is refused. Each item keeps the branch
+        price (list_price) and whether it was changed (override)."""
         items = []
         for mat_code in TRADE_MATERIALS:
             try:
@@ -308,17 +312,77 @@ class BuySellOrder:
                 raise ValidationError("errNegative")
             if qty == 0:
                 continue
-            price = Price.buy_price(branch_id, mat_code) if ord_type == BUY else Price.sell_price(branch_id, mat_code)
+            list_price = round_half_up(Price.buy_price(branch_id, mat_code) if ord_type == BUY else Price.sell_price(branch_id, mat_code), 3)
+            price, override = list_price, False
+            typed = (form.get("PRICE_" + mat_code) or "").strip()
+            if typed:
+                try:
+                    value = round_half_up(float(typed.replace(",", "")), 3)
+                except ValueError:
+                    raise ValidationError("errNumber")
+                if abs(value - list_price) >= 0.0005:
+                    if not can_override:
+                        raise ValidationError("errPriceRight")
+                    if not (PRICE_MIN <= value <= PRICE_MAX):
+                        raise ValidationError("errOrderPriceRange", lo="%.2f" % PRICE_MIN, hi="%.0f" % PRICE_MAX)
+                    price, override = value, True
             if price <= 0:
                 raise ValidationError("errNoPrice", mat=mat_code)
             qty = round_half_up(qty, 3)
-            items.append({"mat": mat_code, "qty": qty, "price": round_half_up(price, 3), "amount": round_half_up(qty * price, 2)})
+            items.append({"mat": mat_code, "qty": qty, "price": price, "amount": round_half_up(qty * price, 2),
+                          "list_price": list_price, "override": override})
         if not items:
             raise ValidationError("errNoItems")
+        if any(i["override"] for i in items) and not clean_text(form.get("PRICE_REASON"), 200):
+            raise ValidationError("errPriceReason")
         return items
 
+    @staticmethod
+    def override_fields(items, form, ope_user):
+        """Header fields of an order whose price was typed by hand (update 78)."""
+        if not any(i.get("override") for i in items):
+            return {"PRICE_OVR_FLG": False}
+        return {"PRICE_OVR_FLG": True, "PRICE_OVR_USER": ope_user, "PRICE_OVR_DATE": now_utc(),
+                "PRICE_OVR_REASON": clean_text(form.get("PRICE_REASON"), 200)}
+
     @classmethod
-    def register(cls, branch_id, ord_type, cust_code, form, close, ope_user, describe):
+    def change_prices(cls, ord_id, branch_id, form, ope_user):
+        """Update 78: new prices for the lines of an order that is not closed yet (Open, Prepared, Unpaid; not a
+        milling order's take-home order, whose price follows the milling charges). PRICE_<MAT_CODE> per line and
+        PRICE_REASON. The amounts and the total follow; the ledger takes the new total at Closed."""
+        order = cls.find(ord_id, branch_id)
+        if not order:
+            raise ValidationError("errOrderNotFound")
+        if order["ORD_STATUS"] not in (OPEN, PREPARED, UNPAID) or cls.is_linked(order):
+            raise ValidationError("errPriceNotNow")
+        reason = clean_text(form.get("PRICE_REASON"), 200)
+        if not reason:
+            raise ValidationError("errPriceReason")
+        lines, changed = [], False
+        for line in cls.items_of(order):
+            new = dict(line)
+            typed = (form.get("PRICE_" + line["MAT_CODE"]) or "").strip()
+            if typed:
+                try:
+                    value = round_half_up(float(typed.replace(",", "")), 3)
+                except ValueError:
+                    raise ValidationError("errNumber")
+                if not (PRICE_MIN <= value <= PRICE_MAX):
+                    raise ValidationError("errOrderPriceRange", lo="%.2f" % PRICE_MIN, hi="%.0f" % PRICE_MAX)
+                if abs(value - float(line.get("PRICING_UINT") or 0)) >= 0.0005:
+                    new.setdefault("LIST_PRICE", line.get("PRICING_UINT"))
+                    new.update({"PRICING_UINT": value, "UNIT_PRICE": value, "ORD_AMOUNT": round_half_up(line["ORD_QTY"] * value, 2),
+                                "PRICE_OVR_FLG": True})
+                    changed = True
+            lines.append(new)
+        if not changed:
+            raise ValidationError("errPriceSame")
+        values = cls._header(lines)
+        values.update({"PRICE_OVR_FLG": True, "PRICE_OVR_USER": ope_user, "PRICE_OVR_DATE": now_utc(), "PRICE_OVR_REASON": reason})
+        return cls._save(order, values, ope_user)
+
+    @classmethod
+    def register(cls, branch_id, ord_type, cust_code, form, close, ope_user, describe, can_override=False):
         """Open: one Open order with a line per material (update 74; before: one order per material). Close (the design's "Close" button): the orders are completed at once -
         a buying order receives the goods into the location given (LOC_ID) and posts the expense, a selling order
         releases the goods from stock and posts the income. Returns the orders."""
@@ -328,7 +392,7 @@ class BuySellOrder:
         customer = Customer.find(cust_code)
         if not customer:
             raise ValidationError("alertCustInfoRequired")
-        items = cls.parse_items(branch_id, ord_type, form)
+        items = cls.parse_items(branch_id, ord_type, form, can_override)
         link = cls.resolve_milling(branch_id, form.get("LINK_ML"), customer["CUST_CODE"]) if ord_type == SELL else None
         inbound = None
         if close and ord_type == BUY:                        # checked before anything is saved
@@ -338,13 +402,15 @@ class BuySellOrder:
         # update 74 (Tim): everything registered together for one customer is ONE order with a line per SKU
         lines = [{"LINE_NO": n + 1, "MAT_CODE": item["mat"], "ORD_QTY": item["qty"], "UOM_CODE": "KG",
                   "PRICING_UINT": item["price"], "ORD_AMOUNT": item["amount"], "UNIT_PRICE": item["price"],
-                  "OWN_KG": 0, "DISC_PCT": 0, "REF_INV_LOC": None} for n, item in enumerate(items)]
+                  "OWN_KG": 0, "DISC_PCT": 0, "REF_INV_LOC": None, "LIST_PRICE": item["list_price"],
+                  "PRICE_OVR_FLG": item["override"]} for n, item in enumerate(items)]
         ord_id, qr_id = cls._new_ids(ord_type)
         order = {"ORD_ID": ord_id, "BRANCH_ID": branch_id, "ORD_TYPE": ord_type, "CUST_CODE": customer["CUST_CODE"],
                  "ORD_STATUS": OPEN, "QR_ID": qr_id, "UOM_CODE": "KG", "REMARK": None,
                  "REF_ORD_ID": None, "REF_ORD_TYPE": None, "REF_QR_PRINT": None, "REF_INV_LOC": None,
                  "LINK_ML_ID": link["ORD_ID"] if link else None}
         order.update(cls._header(lines))
+        order.update(cls.override_fields(items, form, ope_user))       # update 78: a price typed by hand
         order.update(audit_new(ope_user))
         col(cls.COL).insert_one(dict(order))
         cls._log(ord_id)

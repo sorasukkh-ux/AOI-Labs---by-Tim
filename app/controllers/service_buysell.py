@@ -135,7 +135,8 @@ def order_list():
                            views=list(VIEWS), counts=counts, status_counts=status_counts, closed_limit=CLOSED_LIMIT,
                            status=status, ord_type=ord_type, filters=VIEWS[view], status_keys=BS_STATUS_KEYS,
                            status_class=BS_STATUS_CLASS, type_keys=TYPE_KEYS, mat_keys=MAT_KEYS,
-                           inv_status_keys=INV_STATUS_KEYS, can_edit=can(MENU, "edit"), can_cancel=can(MENU, "delete"))
+                           inv_status_keys=INV_STATUS_KEYS, can_edit=can(MENU, "edit"), can_cancel=can(MENU, "delete"),
+                           can_price=can(MENU, "edit") and can(REGISTER, "approve"))
 
 
 def _back_to_list():
@@ -171,6 +172,25 @@ def maintain(ord_id):
         flash_error(error)
     else:
         flash_ok("msgOrderUpdated", id=order["QR_ID"])
+    return _back_to_list()
+
+
+@bp.route("/<ord_id>/price", methods=["POST"])
+@require(MENU, "edit")
+def change_price(ord_id):
+    """Update 78 (Tim): a super user changes the price of an order that is not closed, with a reason. The right is the
+    same as for typing a price at registration: Approve on Customer Service (SV_SERVICE) - the Administrator always."""
+    if not can(REGISTER, "approve"):
+        abort(403)
+    order = BuySellOrder.find(ord_id, operating_branch())
+    if not order:
+        abort(404)
+    try:
+        BuySellOrder.change_prices(order["ORD_ID"], operating_branch(), request.form, current_user()["USER_ID"])
+    except ValidationError as error:
+        flash_error(error)
+    else:
+        flash_ok("msgPriceChanged", id=order["QR_ID"])
     return _back_to_list()
 
 
@@ -237,7 +257,8 @@ def register():
     close = request.form.get("mode") == "close"
     try:
         orders = BuySellOrder.register(operating_branch(), request.form.get("ORD_TYPE"), request.form.get("CUST_CODE"),
-                                       request.form, close, current_user()["USER_ID"], describe)
+                                       request.form, close, current_user()["USER_ID"], describe,
+                                       can_override=can(REGISTER, "approve"))      # update 78: own price, Approve right
     except ValidationError as error:
         return _json_error(error)
     ids = [o["ORD_ID"] for o in orders]
@@ -254,7 +275,7 @@ def check():
     """Before Close on the Sell table: the stock that will be released, with a warning when it is short."""
     ord_type = request.form.get("ORD_TYPE")
     try:
-        items = BuySellOrder.parse_items(operating_branch(), ord_type, request.form)
+        items = BuySellOrder.parse_items(operating_branch(), ord_type, request.form, can(REGISTER, "approve"))
     except ValidationError as error:
         return _json_error(error)
     lines = BuySellOrder.stock_check(operating_branch(), items) if ord_type == bs.SELL else items

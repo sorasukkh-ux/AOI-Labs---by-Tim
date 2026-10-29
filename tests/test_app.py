@@ -4290,5 +4290,59 @@ class Update77(Base):
         self.assertEqual([ai_price.to_kg(x) for x in (17000, "3,500", 12.5, 0.5, "x", 900000)], [17.0, 35.0, 12.5, None, None, None])
 
 
+class Update78(Base):
+    """A price typed by hand on a buying / selling order: super user only, with a reason, kept with the branch price."""
+
+    def trade(self, ord_type, **fields):
+        data = {"ORD_TYPE": ord_type, "mode": "open", "CUST_CODE": "C261001001", "csrf_token": self.token("/service/milling/new")}
+        data.update(fields)
+        return self.client.post("/service/buysell/new", data=data, headers={"Accept": "application/json"})
+
+    def test_admin_types_a_price(self):
+        self.login("admin")
+        self.client.get("/lang/en")
+        self.assertIn('name="PRICE_PADDY"', self.text("/service/milling/new?svc=buy"))
+        body = self.trade("BY", QTY_PADDY="100", PRICE_PADDY="15.50").get_json()
+        self.assertFalse(body["ok"])
+        self.assertIn("reason", body["error"])
+        body = self.trade("BY", QTY_PADDY="100", PRICE_PADDY="15.50", PRICE_REASON="Regular customer").get_json()
+        self.assertTrue(body["ok"], body)
+        o = self.db("AOITS_ORDBUYSELL")[0]
+        line = o["ORD_ITEMS"][0]
+        self.assertEqual((line["PRICING_UINT"], line["ORD_AMOUNT"], line["PRICE_OVR_FLG"]), (15.5, 1550.0, True))
+        self.assertNotEqual(line["LIST_PRICE"], 15.5)
+        self.assertEqual((o["PRICE_OVR_FLG"], o["PRICE_OVR_USER"], o["PRICE_OVR_REASON"]), (True, "admin", "Regular customer"))
+        self.assertIn("Price set by admin: Regular customer", self.text("/service/buysell/"))
+        self.assertIn("15.50", self.text("/service/buysell/billing?ids=" + o["ORD_ID"]))
+
+    def test_change_price_on_the_list(self):
+        self.login("admin")
+        self.client.get("/lang/en")
+        self.trade("SL", QTY_PADDY="10")
+        o = self.db("AOITS_ORDBUYSELL")[0]
+        page = self.text("/service/buysell/")
+        self.assertIn('data-open-form="price-%s"' % o["ORD_ID"], page)
+        self.post("/service/buysell/%s/price" % o["ORD_ID"], {"PRICE_PADDY": "30"}, "/service/buysell/")
+        self.assertEqual(self.db("AOITS_ORDBUYSELL")[0]["ORD_AMOUNT"], o["ORD_AMOUNT"])          # no reason: refused
+        self.post("/service/buysell/%s/price" % o["ORD_ID"], {"PRICE_PADDY": "30", "PRICE_REASON": "agreed"}, "/service/buysell/")
+        new = self.db("AOITS_ORDBUYSELL")[0]
+        self.assertEqual((new["ORD_AMOUNT"], new["ORD_ITEMS"][0]["LIST_PRICE"], new["PRICE_OVR_REASON"]),
+                         (300.0, o["ORD_ITEMS"][0]["PRICING_UINT"], "agreed"))
+        self.post("/service/buysell/%s/status" % o["ORD_ID"], {"new_status": "P"}, "/service/buysell/")
+
+    def test_other_roles_cannot(self):
+        self.login("prasert.m")                                                    # Manager: no Approve on Customer Service
+        self.client.get("/lang/en")
+        self.assertNotIn('name="PRICE_PADDY"', self.text("/service/milling/new?svc=buy"))
+        body = self.trade("BY", QTY_PADDY="100", PRICE_PADDY="5", PRICE_REASON="x").get_json()
+        self.assertFalse(body["ok"])
+        self.assertIn("Approve", body["error"])
+        self.trade("BY", QTY_PADDY="100")
+        o = self.db("AOITS_ORDBUYSELL")[0]
+        self.assertNotIn('data-open-form="price-', self.text("/service/buysell/"))
+        r = self.post("/service/buysell/%s/price" % o["ORD_ID"], {"PRICE_PADDY": "5", "PRICE_REASON": "x"}, "/service/buysell/")
+        self.assertEqual(r.status_code, 403)
+
+
 if __name__ == "__main__":
     unittest.main()

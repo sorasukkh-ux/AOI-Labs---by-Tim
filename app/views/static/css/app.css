@@ -1409,3 +1409,8 @@ a.brand-home:hover .brand-logo, a.brand-home:focus-visible .brand-logo { box-sha
 .ps-c-AIWEB { border-color: var(--ps-AIWEB); } .ps-c-AIHIST { border-color: var(--ps-AIHIST); }
 .mkh-sw.ps-c-AIHIST { border-top-style: dashed; }
 .ps-warnings p { margin: 2px 0; }
+
+/* update 78: a price typed by a super user */
+.rate-cell .rate-input { width: 6.5em; text-align: right; padding: 6px 8px; }
+tr.price-changed .rate-input { border-color: #d97706; background: #fff7e6; font-weight: 600; }
+.bs-price-ovr { color: #b45309; }

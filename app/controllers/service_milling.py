@@ -138,10 +138,10 @@ def new_order():
         "service/milling_new.html", customer=customer, values=request.form, priorities=PRIORITIES,
         priority_keys=PRIORITY_KEYS, ratios=MillYield.all_ratios(branch), editable=can(REGISTER, "create"),
         can_add_customer=can("AD_CUSTOMER", "create"), service=request.args.get("svc") if request.args.get("svc") in ("buy", "sell") else "milling",
-        trade_rows=_trade_rows(branch), bs_editable=can(REGISTER, "create"), inv_status_keys=INV_STATUS_KEYS,
+        trade_rows=_trade_rows(branch), bs_editable=can(REGISTER, "create"), bs_price=can(REGISTER, "approve"), inv_status_keys=INV_STATUS_KEYS,
         bs_text=texts("alertCustInfoRequired", "errNoItems", "errServer", "noStockAvailable", "insufficientStockWarning",
                       "confirmCloseQuestion", "sellReleaseDetailsTitle", "colSku", "colLocation", "colOnHand", "colQty",
-                      "confirmOrderCreated", "errLocFormat"),
+                      "confirmOrderCreated", "errLocFormat", "errPriceReason"),
         js_text=texts("custListEmpty", "errCustomerRequired", "alertEnterPaddy", "errServer", "btnPrintQR", "btnConfirmOrder"))
 
 

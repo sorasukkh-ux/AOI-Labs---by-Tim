@@ -126,10 +126,16 @@
         {% endif %}
         <tr data-mat="{{ row.mat }}" data-name="{{ row.name }}">
           <td>{{ row.name }}</td>
+          {% if bs_editable and bs_price %}
+          {# update 78: a super user (Approve right) may type the price of this order #}
+          <td class="rate-cell num" data-rate="{{ rate }}"><input type="number" class="rate-input" name="PRICE_{{ row.mat }}" value="{{ '%.2f'|format(rate) }}"
+              data-list="{{ '%.2f'|format(rate) }}" min="0.01" max="1000" step="0.01" inputmode="decimal" aria-label="{{ t(rate_key) }} {{ row.name }}"></td>
+          {% else %}
           <td class="rate-cell num" data-rate="{{ rate }}">{{ '%.2f'|format(rate) }}</td>
+          {% endif %}
           <td class="summary-cell num">0.00</td>
           <td class="qty-cell"><input type="number" name="QTY_{{ row.mat }}" value="0" min="0" step="0.01" aria-label="{{ row.name }}"
-              {% if not bs_editable or rate <= 0 %}disabled{% endif %}></td>
+              {% if not bs_editable or (rate <= 0 and not bs_price) %}disabled{% endif %}></td>
         </tr>
         {% endfor %}
       </tbody>
@@ -139,6 +145,13 @@
     <div class="field-row mt14">
       <label class="field-label" for="sell-link-ml">{{ t('lblLinkMl') }}</label>
       <input type="text" id="sell-link-ml" name="LINK_ML" placeholder="{{ t('linkMlPh') }}" autocapitalize="characters" spellcheck="false" autocomplete="off" maxlength="30" data-scan>
+    </div>
+    {% endif %}
+    {% if bs_editable and bs_price %}
+    <div class="field-row mt14 bs-price-reason" hidden>
+      <label class="field-label" for="{{ panel }}-price-reason">{{ t('lblPriceReason') }}</label>
+      <input type="text" id="{{ panel }}-price-reason" name="PRICE_REASON" maxlength="200" placeholder="{{ t('priceReasonPh') }}">
+      <p class="cap-note">{{ t('priceOverrideNote') }}</p>
     </div>
     {% endif %}
     <div class="total-row mt14"><span>{{ t('totalLabel') }}</span><span class="bs-total">0.00 THB &middot; 0.00 kg</span></div>

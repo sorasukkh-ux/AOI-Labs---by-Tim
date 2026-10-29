@@ -340,6 +340,13 @@ are kept in `AOITS_SYSLOG` (14 days), the checks in `AOITS_HEALTH` (7 days).
 customer's LINE when "Also send to the customer's LINE" is ticked (shown for customers linked to LINE); "Send to LINE
 only" sends without printing. The same public https address is needed as for the queue QR (update 47).
 
+## Price typed by hand on a buy / sell order - super user (update 78, DB 1.55)
+
+- Who: the Administrator, or a role given **Approve** on Customer Service (SV_SERVICE) in User Authorization. Everyone else sees the branch price only (the server refuses a changed price: 403 / "No right to change the price").
+- Where: Customer Service > Buy / Sell - the price cell of each SKU is a box (branch price filled in). A changed price is highlighted and needs a **reason**.
+- Later: Buy / Sell order list > **Change price** on Open / Prepared / Unpaid orders (not take-home orders of a milling order). Amounts are recalculated; the reason is required.
+- Range 0.01 - 1,000 THB/kg. The order keeps the branch price (LIST_PRICE) per line and PRICE_OVR_FLG / USER / DATE / REASON on the header; the list shows "Price set by <user>: <reason>".
+
 ## Market prices found on the web by AI; white paddy row fix (update 77)
 
 * **AI > Price analysis > Market prices found on the web by AI**: once a day (and with "Search prices now") an AI that

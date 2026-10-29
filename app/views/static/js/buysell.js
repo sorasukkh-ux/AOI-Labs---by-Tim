@@ -27,9 +27,12 @@
 
     function rows() {
       return Array.prototype.map.call(form.querySelectorAll("tbody tr[data-mat]"), function (tr) {
-        var input = tr.querySelector("input");
-        return { tr: tr, mat: tr.getAttribute("data-mat"), name: tr.getAttribute("data-name"),
-                 rate: Number(tr.querySelector(".rate-cell").getAttribute("data-rate")) || 0, qty: Math.max(0, Number(input.value) || 0) };
+        var input = tr.querySelector(".qty-cell input"), own = tr.querySelector(".rate-input");    // update 78: typed price
+        var rate = own ? (Number(own.value) || 0) : (Number(tr.querySelector(".rate-cell").getAttribute("data-rate")) || 0);
+        var changed = !!own && Math.abs(rate - Number(own.getAttribute("data-list"))) >= 0.005;
+        tr.classList.toggle("price-changed", changed);
+        return { tr: tr, mat: tr.getAttribute("data-mat"), name: tr.getAttribute("data-name"), changed: changed,
+                 rate: rate, qty: Math.max(0, Number(input.value) || 0) };
       });
     }
     function render() {
@@ -40,6 +43,8 @@
         amount += sum; qty += r.qty;
       });
       form.querySelector(".bs-total").textContent = fmt(amount) + " THB · " + fmt(qty) + " kg";
+      var reason = form.querySelector(".bs-price-reason");
+      if (reason) reason.hidden = !rows().some(function (r) { return r.changed && r.qty > 0; });
     }
     form.addEventListener("input", function () { showError(""); render(); });
     form.addEventListener("submit", function (e) { e.preventDefault(); });
@@ -47,6 +52,10 @@
     function ready() {
       if (!custCode || !custCode.value) { showError(text.alertCustInfoRequired); return false; }
       if (!rows().some(function (r) { return r.qty > 0; })) { showError(text.errNoItems); return false; }
+      var why = form.querySelector('input[name="PRICE_REASON"]');
+      if (why && rows().some(function (r) { return r.changed && r.qty > 0; }) && !why.value.trim()) {
+        showError(text.errPriceReason); why.focus(); return false;
+      }
       form.querySelector('input[name="CUST_CODE"]').value = custCode.value;
       return true;
     }
