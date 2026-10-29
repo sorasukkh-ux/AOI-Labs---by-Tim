@@ -24,18 +24,138 @@
 </form>
 
 {% set s = result.total %}
-<div class="auto-kpis mt14" id="ma-kpis">
-  <div class="card"><p class="card-title">{{ t('maOrders') }}</p><p class="kpi-value">{{ s.orders }}</p><p class="cap-note tight">{{ t('maDoneCancelled', done=s.done, cancelled=s.cancelled) }}</p></div>
-  <div class="card"><p class="card-title">{{ t('maPaddyRice') }}</p><p class="kpi-value">{{ s.paddy|num(0) }} / {{ s.rice|num(0) }} kg</p></div>
-  <div class="card"><p class="card-title">{{ t('maYield') }}</p><p class="kpi-value">{{ pc(s['yield']) }}</p><p class="cap-note tight">{{ t('maExpected') }} {{ pc(s.expected) }} ({{ gap(s['yield'], s.expected) }})</p></div>
-  <div class="card"><p class="card-title">{{ t('maWait') }}</p><p class="kpi-value">{{ s.wait|duration }}</p></div>
-  <div class="card"><p class="card-title">{{ t('maMilling') }}</p><p class="kpi-value">{{ s.milling|duration }}</p></div>
-  <div class="card"><p class="card-title">{{ t('maReady') }}</p><p class="kpi-value">{{ s.ready|duration }}</p><p class="cap-note tight">{{ t('maPickup') }} {{ s.pickup|duration }}</p></div>
-  <div class="card"><p class="card-title">{{ t('maHeld') }}</p><p class="kpi-value">{{ s.held }}</p><p class="cap-note tight">{{ t('maHoldAvg') }} {{ s.hold_min|duration }}</p></div>
-  <div class="card"><p class="card-title">{{ t('maScanned') }}</p><p class="kpi-value">{{ s.scanned }} / {{ s.orders }}</p></div>
+{% set d = dash %}
+{% macro mins(v) %}{{ v|duration }}{% endmacro %}
+<div class="dash ma-dash">
+{# ---------- KPI tiles ---------- #}
+<div class="dash-kpis ma-kpis" id="ma-kpis">
+  <div class="dash-kpi"><span class="k">{{ t('maOrders') }}</span><b>{{ s.orders }}</b>
+    <svg class="ma-status-bar" viewBox="0 0 100 8" preserveAspectRatio="none" role="img" aria-label="{{ t('maDoneCancelled', done=s.done, cancelled=s.cancelled) }}">
+      <rect class="bg" x="0" y="0" width="100" height="8"/>
+      {% set ns = namespace(x=0) %}{% for p in d.status_bar %}{% if p.w > 0 %}<rect class="st-{{ p.key }}" x="{{ ns.x }}" y="0" width="{{ p.w }}" height="8"><title>{{ t('maSt_' ~ p.key) }}: {{ p.n }}</title></rect>{% endif %}{% set ns.x = ns.x + p.w %}{% endfor %}
+    </svg>
+    <span class="s ma-st-legend">{% for p in d.status_bar %}<i class="st-{{ p.key }}"></i>{{ t('maSt_' ~ p.key) }} {{ p.n }}{% if not loop.last %} &nbsp;{% endif %}{% endfor %}</span></div>
+  <div class="dash-kpi"><span class="k">{{ t('maPaddyRice') }}</span><b>{{ s.paddy|num(0) }}<small> kg</small></b>
+    <span class="s">&rarr; {{ t('skuRice') }} {{ s.rice|num(0) }} kg{% if d.recovery %} &middot; {{ pc(d.recovery) }}{% endif %}</span></div>
+  <div class="dash-kpi {{ d.yield_level }}"><span class="k">{{ t('maYield') }}</span><b>{{ pc(s['yield']) }}</b>
+    <span class="s">{{ t('maExpected') }} {{ pc(s.expected) }} ({{ gap(s['yield'], s.expected) }} pt)</span></div>
+  <div class="dash-kpi ma-scan"><span class="k">{{ t('maScanned') }}</span>
+    <div class="ma-ring-row"><svg class="ma-ring" viewBox="0 0 72 72" role="img" aria-label="{{ s.scanned }} / {{ s.orders }}">
+      <circle class="track" cx="36" cy="36" r="30"/>
+      <circle class="fill" cx="36" cy="36" r="30" stroke-dasharray="{{ d.scan_ring.dash }} {{ d.scan_ring.c }}" transform="rotate(-90 36 36)"/>
+      <text x="36" y="41" text-anchor="middle" class="v">{% if d.scan_pct is none %}-{% else %}{{ '%.0f'|format(d.scan_pct * 100) }}%{% endif %}</text></svg>
+      <b>{{ s.scanned }}<small> / {{ s.orders }}</small></b></div></div>
+  <div class="dash-kpi"><span class="k">{{ t('maWait') }}</span><b>{{ mins(s.wait) }}</b><span class="s">{{ t('maStageNote_wait') }}</span></div>
+  <div class="dash-kpi"><span class="k">{{ t('maMilling') }}</span><b>{{ mins(s.milling) }}</b><span class="s">{{ t('maStageNote_milling') }}</span></div>
+  <div class="dash-kpi"><span class="k">{{ t('maReady') }}</span><b>{{ mins(s.ready) }}</b><span class="s">{{ t('maPickup') }} {{ mins(s.pickup) }}</span></div>
+  <div class="dash-kpi{% if s.held %} lvl-warn{% endif %}"><span class="k">{{ t('maHeld') }}</span><b>{{ s.held }}</b><span class="s">{{ t('maHoldAvg') }} {{ mins(s.hold_min) }}</span></div>
 </div>
 
-<div class="card mt14">
+<div class="dash-grid mt14">
+{# ---------- trend: paddy per day (bars) and real yield (line) ---------- #}
+<div class="card dash-card span2" id="ma-trend">
+  <div class="dash-head"><p class="card-title">{{ t('maTrendWeekly' if d.trend.weekly else 'maTrendDaily') }}</p>
+    <span class="dash-legend"><i class="sw-bar"></i>{{ t('maPaddyKg') }} <i class="sw-line"></i>{{ t('maYield') }} <i class="sw-exp"></i>{{ t('maExpected') }}</span></div>
+  {% set tr = d.trend %}
+  {% if tr.has %}
+  <svg class="ma-trend" viewBox="0 0 {{ tr.W }} {{ tr.H }}" role="img" aria-label="{{ t('maTrendDaily') }}">
+    {% for k in tr.ticks %}<line class="grid" x1="{{ tr.L }}" x2="{{ tr.W - tr.R }}" y1="{{ k.y }}" y2="{{ k.y }}"/>
+      <text class="ax" x="{{ tr.L - 6 }}" y="{{ k.y + 3 }}" text-anchor="end">{% if k.kg >= 1000 %}{{ '%g'|format(k.kg / 1000) }}k{% else %}{{ '%g'|format(k.kg) }}{% endif %}</text>
+      <text class="ax" x="{{ tr.W - tr.R + 6 }}" y="{{ k.y + 3 }}">{{ '%.0f'|format(k.pct) }}%</text>{% endfor %}
+    {% for b in tr.bars %}<g class="mark"><title>{{ b.label }} · {{ t('maOrders') }} {{ b.orders }} · {{ b.paddy|num(0) }} kg → {{ b.rice|num(0) }} kg · {{ t('maYield') }} {{ pc(b['yield']) }}</title>
+      <rect class="hit" x="{{ b.x - 2 }}" y="{{ tr.T }}" width="{{ b.w + 4 }}" height="{{ tr.ph }}"/>
+      {% if b.h > 0 %}<rect class="bar" x="{{ b.x }}" y="{{ b.y }}" width="{{ b.w }}" height="{{ b.h }}" rx="3"/>{% endif %}</g>
+      {% if b.show %}<text class="ax" x="{{ b.cx }}" y="{{ tr.H - 10 }}" text-anchor="middle">{{ b.label }}</text>{% endif %}{% endfor %}
+    {% if tr.exp_y is not none %}<line class="exp" x1="{{ tr.L }}" x2="{{ tr.W - tr.R }}" y1="{{ tr.exp_y }}" y2="{{ tr.exp_y }}"/>{% endif %}
+    {% if tr.line %}<path class="yl" d="{{ tr.line }}"/>{% for x, y in tr.dots %}<circle class="yd" cx="{{ x }}" cy="{{ y }}" r="3"/>{% endfor %}{% endif %}
+  </svg>
+  {% else %}<p class="hint">{{ t('autoNoData') }}</p>{% endif %}
+</div>
+
+{# ---------- where the time goes ---------- #}
+<div class="card dash-card" id="ma-flow">
+  <p class="card-title">{{ t('maFlowTitle') }}</p>
+  {% if d.flow_total %}
+  <p class="ma-flow-total">{{ mins(d.flow_total) }}</p>
+  <svg class="ma-flow-bar" viewBox="0 0 100 14" preserveAspectRatio="none" role="img" aria-label="{{ t('maFlowTitle') }}">
+    {% for f in d.flow %}{% if f.w > 0 %}<rect class="fl-{{ f.key }}" x="{{ f.x }}" y="0" width="{{ f.w }}" height="14"><title>{{ t('maStage_' ~ f.key) }}: {{ mins(f.min) }}</title></rect>{% endif %}{% endfor %}
+  </svg>
+  <ul class="ma-flow-list">
+    {% for f in d.flow %}<li><i class="fl-{{ f.key }}"></i><span>{{ t('maStage_' ~ f.key) }}</span><b>{{ mins(f.min) }}</b><small>{{ '%.0f'|format(f.w) }}%</small></li>{% endfor %}
+  </ul>
+  {% else %}<p class="hint">{{ t('autoNoData') }}</p>{% endif %}
+</div>
+
+{# ---------- rice varieties ---------- #}
+<div class="card dash-card span2" id="ma-varieties">
+  <p class="card-title">{{ t('maByVariety') }}</p>
+  {% if d.varieties %}
+  <div class="ma-var-wrap">
+    <div class="ma-donut-box">
+      <svg class="ma-donut" viewBox="0 0 120 120" role="img" aria-label="{{ t('maShare') }}">
+        <circle class="track" cx="60" cy="60" r="46"/>
+        {% for v in d.varieties %}{% if v.arc == 'full' %}<circle class="vs vc-{{ v.key }}" cx="60" cy="60" r="46"><title>{{ t(var_keys[v.key]) }} {{ '%.0f'|format(v.share * 100) }}%</title></circle>
+        {% elif v.arc %}<path class="vs vc-{{ v.key }}" d="{{ v.arc }}"><title>{{ t(var_keys[v.key]) }} {{ '%.0f'|format(v.share * 100) }}%</title></path>{% endif %}{% endfor %}
+        <text x="60" y="58" text-anchor="middle" class="v">{{ s.paddy|num(0) }}</text>
+        <text x="60" y="74" text-anchor="middle" class="u">kg {{ t('skuPaddy') }}</text>
+      </svg>
+      <p class="cap-note center tight">{{ t('maShare') }}</p>
+    </div>
+    <div class="ma-var-cards">
+      {% for v in d.varieties %}{% set g = v.g %}
+      <div class="ma-var {{ v.level }}">
+        <div class="top"><span class="nm"><i class="vdot vc-{{ v.key }}"></i>{{ t(var_keys[v.key]) }}</span><span class="pill">{{ '%.0f'|format(v.share * 100) }}%</span></div>
+        <div class="mid"><b>{{ pc(g['yield']) }}</b><small>{{ t('maYield') }} ({{ gap(g['yield'], g.expected) }} pt)</small></div>
+        <div class="ma-yscale" title="{{ t('maExpected') }} {{ pc(g.expected) }}">
+          <svg viewBox="0 0 100 10" preserveAspectRatio="none"><rect class="bg" x="0" y="3" width="100" height="4"/>
+            {% if v.e_pos is not none %}<rect class="ex" x="{{ v.e_pos - 0.6 }}" y="0" width="1.2" height="10"/>{% endif %}
+            {% if v.y_pos is not none %}<rect class="yv" x="0" y="3" width="{{ v.y_pos }}" height="4"/>{% endif %}</svg>
+          <div class="lbl"><span>{{ d.v_scale[0] }}%</span><span>{{ t('maExpected') }} {{ pc(g.expected) }}</span><span>{{ d.v_scale[1] }}%</span></div>
+        </div>
+        <div class="ma-tbars">
+          <div><span>{{ t('maWait') }}</span><svg viewBox="0 0 100 6" preserveAspectRatio="none"><rect class="bg" width="100" height="6"/><rect class="tw" width="{{ v.wait_w }}" height="6"/></svg><b>{{ mins(g.wait) }}</b></div>
+          <div><span>{{ t('maMilling') }}</span><svg viewBox="0 0 100 6" preserveAspectRatio="none"><rect class="bg" width="100" height="6"/><rect class="tm" width="{{ v.mill_w }}" height="6"/></svg><b>{{ mins(g.milling) }}</b></div>
+        </div>
+        <div class="foot"><span>{{ t('maOrders') }} <b>{{ g.orders }}</b></span><span>{{ g.paddy|num(0) }} &rarr; {{ g.rice|num(0) }} kg</span>
+          <span>{% if g.held %}<span class="tag e4">{{ t('maHeld') }} {{ g.held }}</span>{% endif %}{% if g.cancelled %} <span class="tag e5">{{ t('maCancelled') }} {{ g.cancelled }}</span>{% endif %}</span></div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% else %}<p class="hint">{{ t('autoNoData') }}</p>{% endif %}
+</div>
+
+{# ---------- registrations by hour ---------- #}
+<div class="card dash-card" id="ma-hours">
+  <p class="card-title">{{ t('maHourTitle') }}</p>
+  <svg class="ma-hours" viewBox="0 0 360 150" role="img" aria-label="{{ t('maHourTitle') }}">
+    <line class="grid" x1="0" x2="360" y1="130" y2="130"/>
+    {% for h in d.hourly %}<g class="mark"><title>{{ '%02d'|format(h.h) }}:00 · {{ h.n }} {{ t('maOrders') }}</title>
+      <rect class="hit" x="{{ h.x }}" y="0" width="{{ h.w }}" height="130"/>
+      {% if h.n %}<rect class="bar{% if h.h == d.busiest %} peak{% endif %}" x="{{ h.x }}" y="{{ h.y }}" width="{{ h.w }}" height="{{ h.bh }}" rx="3"/>{% endif %}</g>
+      {% if loop.index0 % 2 == 0 %}<text class="ax" x="{{ h.cx }}" y="146" text-anchor="middle">{{ h.h }}</text>{% endif %}{% endfor %}
+  </svg>
+  {% if d.busiest is not none %}<p class="cap-note tight">{{ t('maBusiest', h='%02d:00'|format(d.busiest)) }}</p>{% endif %}
+</div>
+
+{# ---------- top customers ---------- #}
+<div class="card dash-card span3" id="ma-customers">
+  <p class="card-title">{{ t('maTopCustomers') }}</p>
+  {% if d.customers %}
+  <ul class="ma-cust">
+    {% for c in d.customers %}{% set g = c.g %}
+    <li class="{{ c.level }}"><div class="nm">{{ cust_name(c.code) }}<small>{{ c.code }} &middot; {{ t('maOrders') }} {{ g.orders }}</small></div>
+      <svg viewBox="0 0 100 10" preserveAspectRatio="none"><rect class="bg" width="100" height="10"/><rect class="cb" width="{{ c.w }}" height="10"/></svg>
+      <div class="val"><b>{{ g.paddy|num(0) }} kg</b><small>{{ t('maYield') }} {{ pc(g['yield']) }}{% if g.cancelled %} &middot; {{ t('maCancelled') }} {{ g.cancelled }}{% endif %}</small></div></li>
+    {% endfor %}
+  </ul>
+  {% else %}<p class="hint">{{ t('autoNoData') }}</p>{% endif %}
+</div>
+</div>
+
+<details class="card mt14 ma-tables">
+  <summary>{{ t('maShowTables') }}</summary>
+<div class="ma-table-block">
   <p class="card-title">{{ t('maByVariety') }}</p>
   <div class="inv-table-wrap"><table class="tv-table" id="ma-variety-table">
     <thead><tr><th>{{ t('lblVariety') }}</th><th class="num">{{ t('maOrders') }}</th><th class="num">{{ t('maPaddyKg') }}</th><th class="num">{{ t('maRiceKg') }}</th>
@@ -45,7 +165,7 @@
   </table></div>
 </div>
 
-<div class="card mt14">
+<div class="ma-table-block mt14">
   <p class="card-title">{{ t('maByCustomer') }}</p>
   <div class="inv-table-wrap"><table class="tv-table" id="ma-customer-table">
     <thead><tr><th>{{ t('colCustomer') }}</th><th class="num">{{ t('maOrders') }}</th><th class="num">{{ t('maPaddyKg') }}</th><th class="num">{{ t('maRiceKg') }}</th>
@@ -54,6 +174,9 @@
     {% else %}<tr><td colspan="10" class="hint center">{{ t('autoNoData') }}</td></tr>{% endfor %}</tbody>
   </table></div>
   <p class="cap-note">{{ t('maNote') }}</p>
+</div>
+
+</details>
 </div>
 
 <div class="card mt14" id="ma-export">

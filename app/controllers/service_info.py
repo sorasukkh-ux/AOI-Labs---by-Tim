@@ -212,5 +212,5 @@ def analysis_view():
         rows = [tuple((to_local(e[c]).strftime("%Y-%m-%d %H:%M:%S") if c == "EVENT_DATE" else
                        ("" if e.get(c) is None else e.get(c))) for c in CSV_EVENT_COLS) for e in events]
         return _csv("milling_status_events_%s.csv" % stamp, CSV_EVENT_COLS, rows)
-    return dict(start=start, end=end, variety=variety, result=result, cust_name=cust_name, pct=ma.pct,
+    return dict(start=start, end=end, variety=variety, result=result, cust_name=cust_name, pct=ma.pct, dash=ma.dashboard(result, start, end),
                 branch_name=branch_label(branch))

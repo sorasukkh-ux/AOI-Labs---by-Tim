@@ -8,7 +8,7 @@
 <link rel="icon" href="{{ url_for('static', filename='img/favicon.png') }}">
 {% block head %}{% endblock %}
 </head>
-{% set embedded = request.args.get('embed') == '1' and request.endpoint in ('automation.scada', 'automation.plant3d') %}<body{% if embedded %} class="embed"{% elif request.endpoint in ('automation.ai_screen', 'automation.ai_prices', 'automation.plant3d') %} class="wide"{% endif %}{% if request.path.startswith('/admin') or (request.endpoint == 'home.index' and request.args.get('g') == 'AD') or request.endpoint == 'automation.hardware' %} data-quick-jump="{{ t('qjLabel') }}" data-quick-top="{{ t('qjTop') }}"{% endif %}>
+{% set embedded = request.args.get('embed') == '1' and request.endpoint in ('automation.scada', 'automation.plant3d') %}<body{% if embedded %} class="embed"{% elif request.endpoint in ('automation.ai_screen', 'automation.ai_prices', 'automation.ai_milling', 'automation.plant3d') %} class="wide"{% endif %}{% if request.path.startswith('/admin') or (request.endpoint == 'home.index' and request.args.get('g') == 'AD') or request.endpoint == 'automation.hardware' %} data-quick-jump="{{ t('qjLabel') }}" data-quick-top="{{ t('qjTop') }}"{% endif %}>
 
 <div class="top-row">
   {# update 76: the logo (and name) open the home page #}

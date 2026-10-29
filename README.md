@@ -340,6 +340,12 @@ are kept in `AOITS_SYSLOG` (14 days), the checks in `AOITS_HEALTH` (7 days).
 customer's LINE when "Also send to the customer's LINE" is ticked (shown for customers linked to LINE); "Send to LINE
 only" sends without printing. The same public https address is needed as for the queue QR (update 47).
 
+## Milling Analysis as a dashboard (update 80)
+
+- AI > Milling Analysis > Analysis by period is now a wide dashboard: 8 KPI tiles (orders with a finished / in progress / cancelled bar, paddy -> rice, real yield coloured against expected, QR scan ring, waiting, milling, registration to ready, held).
+- Charts: paddy per day (bars) with the real yield line and the expected yield (dashed) - per week for periods over 62 days; where the time goes (queue / milling / hold-finishing / ready-to-closed); rice varieties (paddy share donut, yield vs expected scale, waiting and milling bars, held / cancelled); registrations by hour (busiest hour); top 8 customers by paddy.
+- Colours: green = yield within 0.5 pt of expected, amber = up to 2 pt below, red = more. Hover a bar for its numbers. The number tables are still there under "Show the number tables"; CSV export unchanged. Drawn on the server as SVG (no chart library).
+
 ## Bran / broke price typed by hand on the milling order - super user (update 79, DB 1.56)
 
 - Same right as update 78: Administrator, or a role with **Approve** on Customer Service.

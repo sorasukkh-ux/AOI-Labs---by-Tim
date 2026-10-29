@@ -4408,5 +4408,31 @@ class Update79(Base):
         self.assertIsNone(self.order(o["ORD_ID"])["PRICE_BRAN"])
 
 
+class Update80(Base):
+    """Milling Analysis as a dashboard: charts first, the number tables folded away."""
+
+    def test_dashboard(self):
+        self.login("admin")
+        self.client.get("/lang/en")
+        a = self.new_order(RICE_VARIETY="HM", REGIST_PADDY="100")["ORD_ID"]
+        self.set_status(a, "I", ACT_PADDY="98")
+        self.set_status(a, "F", INV_QTY="49")
+        page = self.text("/automation/ai/milling?tab=period")
+        for marker in ('id="ma-kpis"', 'id="ma-trend"', 'id="ma-flow"', 'id="ma-varieties"', 'id="ma-hours"', 'id="ma-customers"',
+                       'ma-tables"', 'id="ma-variety-table"', "Busiest hour", 'class="wide"'):
+            self.assertIn(marker, page)
+        self.assertIn('class="yd"', page)                        # a yield point on the trend
+        with self.app.app_context():
+            from app.models import mill_analysis as ma
+            from app.timeutil import today_local
+            r = ma.analyse("factory2", today_local(), today_local())
+            d = ma.dashboard(r, today_local(), today_local())
+        self.assertEqual(d["varieties"][0]["arc"], "full")
+        self.assertEqual(sum(1 for b in d["trend"]["bars"] if b["orders"]), 1)
+        self.assertIn(round(sum(f["w"] for f in d["flow"])), (0, 100))
+        empty = self.text("/automation/ai/milling?tab=period&variety=GL")
+        self.assertIn('id="ma-trend"', empty)
+
+
 if __name__ == "__main__":
     unittest.main()
