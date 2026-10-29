@@ -4,7 +4,7 @@ Every change is also written to AOILOG_ORDMILLING.
 """
 import re
 from .account import Account
-from .buysell_order import BuySellOrder
+from .buysell_order import BuySellOrder, PRICE_MIN, PRICE_MAX
 from .inventory import Inventory, MOVE_MILL, MOVE_MILL_PICKUP, lot_of
 from .base import col, NO_ID, ValidationError, audit_new, audit_update, clean_text, to_number, round_half_up, DuplicateKey
 from .branch import Branch
@@ -77,9 +77,10 @@ class MillingOrder:
     # ---------- calculation shared by the live preview and the saved order ----------
     @classmethod
     def quote(cls, branch_id, paddy_kg, take_bran=0, take_broken=0, order_type=flow.TAKEAWAY, distance_km=None, priority="M",
-              existing=None, variety=None):
+              existing=None, variety=None, bran_price=None, broken_price=None):
         """Expected outputs, what the customer pays and when the order can be received.
-        `existing`: the saved order being edited; it keeps its place in the queue."""
+        `existing`: the saved order being edited; it keeps its place in the queue.
+        `bran_price` / `broken_price`: a price typed by a super user (update 79); None = the branch's selling price."""
         branch = Branch.get(branch_id)
         if not branch:
             raise ValidationError("errBranchUnknown")
@@ -91,7 +92,8 @@ class MillingOrder:
             outputs["rice"], outputs["bran"], outputs["broken"], take_bran, take_broken,
             (distance_km or 0) if is_delivery else None,
             branch.get("SYSP_MILLFEEUNITKG"), branch.get("SYSP_MILLFEEPERUNIT"), branch.get("SYSP_DELIVERYFEEKM"),
-            Price.sell_price(branch_id, MAT_BRAN), Price.sell_price(branch_id, var.code(variety, var.BROKEN)),
+            bran_price if bran_price is not None else Price.sell_price(branch_id, MAT_BRAN),
+            broken_price if broken_price is not None else Price.sell_price(branch_id, var.code(variety, var.BROKEN)),
             Promotion.milling_discount_pct(branch_id, today_local()))
         candidate = {"ORD_ID": NEW, "MILL_STATUS": flow.QUEUE, "MILL_PRIORITY": priority,
                      "REGIST_PADDY": paddy_kg, "REGIST_DATE": now_utc()}
@@ -123,8 +125,56 @@ class MillingOrder:
             raise ValidationError("custErrDistance")
         return address, round_half_up(distance, 3)
 
+    # ---------- update 79: bran / broke price typed by a super user ----------
+    @staticmethod
+    def branch_prices(branch_id, variety):
+        return {"bran": round_half_up(Price.sell_price(branch_id, MAT_BRAN) or 0, 3),
+                "broken": round_half_up(Price.sell_price(branch_id, var.code(variety, var.BROKEN)) or 0, 3)}
+
     @classmethod
-    def parse(cls, branch_id, form):
+    def price_inputs(cls, branch_id, form, variety, can_override, current=None):
+        """PRICE_BRAN / PRICE_BROKE (THB/kg). Blank = the branch price; a field not sent keeps `current` (the saved order).
+        A price other than the branch price needs the right (Approve on Customer Service) and PRICE_REASON."""
+        current = current or {}
+        listed = cls.branch_prices(branch_id, variety)
+        prices, changed = {}, False
+        for kind, field in (("bran", "PRICE_BRAN"), ("broken", "PRICE_BROKE")):
+            if field not in form:
+                prices[kind] = current.get(field)
+                continue
+            raw = (form.get(field) or "").strip()
+            value = None
+            if raw:
+                try:
+                    value = round_half_up(float(raw), 3)
+                except ValueError:
+                    raise ValidationError("errNumber")
+                if value == listed[kind]:
+                    value = None
+            if value is not None:
+                if not can_override:
+                    raise ValidationError("errPriceRight")
+                if not (PRICE_MIN <= value <= PRICE_MAX):
+                    raise ValidationError("errOrderPriceRange", lo="%.2f" % PRICE_MIN, hi="%.0f" % PRICE_MAX)
+            changed = changed or value != current.get(field)
+            prices[kind] = value
+        reason = clean_text(form.get("PRICE_REASON"), 200)
+        if changed and (prices["bran"] is not None or prices["broken"] is not None) and not reason:
+            raise ValidationError("errPriceReason")
+        return {"bran": prices["bran"], "broken": prices["broken"], "changed": changed, "reason": reason}
+
+    @staticmethod
+    def price_fields(prices, ope_user):
+        values = {"PRICE_BRAN": prices["bran"], "PRICE_BROKE": prices["broken"]}
+        if prices["bran"] is None and prices["broken"] is None:
+            values.update({"PRICE_OVR_FLG": False, "PRICE_OVR_USER": None, "PRICE_OVR_DATE": None, "PRICE_OVR_REASON": None})
+        else:
+            values.update({"PRICE_OVR_FLG": True, "PRICE_OVR_USER": ope_user, "PRICE_OVR_DATE": now_utc(),
+                           "PRICE_OVR_REASON": prices["reason"]})
+        return values
+
+    @classmethod
+    def parse(cls, branch_id, form, can_override=False):
         """Validates the registration form and returns the cleaned inputs."""
         customer = Customer.find(form.get("CUST_CODE"))
         if not customer or customer.get("CUST_STATUS") == "D":          # a deleted customer takes no new orders
@@ -147,16 +197,18 @@ class MillingOrder:
         address, distance = None, None
         if order_type == flow.DELIVER:
             address, distance = cls._delivery_inputs(form, customer)
+        prices = cls.price_inputs(branch_id, form, variety, can_override)
         return {"customer": customer, "paddy": round_half_up(paddy, 3), "take_bran": round_half_up(take_bran, 3),
                 "take_broken": round_half_up(take_broken, 3), "order_type": order_type, "priority": priority,
                 "address": address, "distance": distance, "remark": clean_text(form.get("REMARK")),
-                "variety": variety}
+                "variety": variety, "prices": prices}
 
     @classmethod
-    def create(cls, branch_id, form, ope_user):
-        data = cls.parse(branch_id, form)
+    def create(cls, branch_id, form, ope_user, can_override=False):
+        data = cls.parse(branch_id, form, can_override)
         quote = cls.quote(branch_id, data["paddy"], data["take_bran"], data["take_broken"],
-                          data["order_type"], data["distance"], data["priority"], variety=data["variety"])
+                          data["order_type"], data["distance"], data["priority"], variety=data["variety"],
+                          bran_price=data["prices"]["bran"], broken_price=data["prices"]["broken"])
         charges, outputs = quote["charges"], quote["outputs"]
         day = cls._day_key()
         seq = Counter.next("ML-" + day)
@@ -181,6 +233,7 @@ class MillingOrder:
             "REMARK": data["remark"], "REF_QR_PRINT": None, "REF_BUYING_ORDER": None, "REF_INV_LOC": None,
             "SCAN_DATE": None, "ACT_PADDY": None, "ACT_RICE": None,
         }
+        order.update(cls.price_fields(data["prices"], ope_user))
         order.update(audit_new(ope_user))
         try:
             col(cls.COL).insert_one(dict(order))
@@ -427,7 +480,7 @@ class MillingOrder:
 
     # ---------- editing the details ----------
     @classmethod
-    def update_details(cls, ord_id, branch_id, form, ope_user):
+    def update_details(cls, ord_id, branch_id, form, ope_user, can_override=False):
         """The editable order details: customer, delivery address/distance, remark, and - before Finished -
         paddy weight and take-home bran/broken rice. Outputs, charges and receive time are recalculated."""
         order = cls._open_order(ord_id, branch_id)
@@ -451,6 +504,7 @@ class MillingOrder:
                                                                    order.get("BROKE_ORDER") or 0, old_variety)
         if qty_changed and not flow.quantities_editable(order):
             raise ValidationError("errQtyLocked")
+        prices = cls.price_inputs(branch_id, form, variety, can_override, current=order)
         if paddy <= 0:
             raise ValidationError("alertEnterPaddy")
         if take_bran < 0 or take_broken < 0:
@@ -463,10 +517,16 @@ class MillingOrder:
                                "EST_PAY_DELIVERY": cls._delivery_fee(branch_id, distance)})
                 if order["MILL_STATUS"] == flow.DELIVERY:
                     values["DELIVERY_CONFIRM_FLG"] = False        # changed details are confirmed again
-        if qty_changed:
+        if prices["changed"]:
+            values.update(cls.price_fields(prices, ope_user))
+        if qty_changed or prices["changed"]:
             quote = cls.quote(branch_id, paddy, take_bran, take_broken, order["ORDER_TYPE"], distance,
-                              order.get("MILL_PRIORITY") or "M", existing=order, variety=variety)
+                              order.get("MILL_PRIORITY") or "M", existing=order, variety=variety,
+                              bran_price=prices["bran"], broken_price=prices["broken"])
             outputs, charges = quote["outputs"], quote["charges"]
+        if prices["changed"] and not qty_changed:               # only the price: the queue / receive time stay
+            values.update({"EST_PAY_BRAN": charges["bran"]["amount"], "EST_PAY_BROKE": charges["broken"]["amount"]})
+        if qty_changed:
             values.update({"REGIST_PADDY": paddy, "BRAN_ORDER": take_bran, "BROKE_ORDER": take_broken, "RICE_VARIETY": variety,
                            "EXPCT_RICE": outputs["rice"], "EXPCT_BRAN": outputs["bran"], "EXPCT_BROKE": outputs["broken"],
                            "EXPCT_HUSK": outputs["husk"], "EXPCT_RECEIVE_TIME": quote["receive"],

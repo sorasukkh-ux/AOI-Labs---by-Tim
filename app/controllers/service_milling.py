@@ -13,7 +13,7 @@ from ..models.mill_yield import MillYield
 from ..models import notify, mill_event, phone, line_link
 from ..models.milling_order import MillingOrder, PRIORITIES
 from ..models.rules import status_flow as flow
-from ..models.variety import mat_name
+from ..models.variety import mat_name, VARIETIES as MILL_VARIETIES
 from ..security import can, current_user, operating_branch, require
 from ..models.branch import Branch
 from .service_buysell import INV_STATUS_KEYS
@@ -112,7 +112,7 @@ def new_order():
             abort(403)
         wants_json = request.accept_mimetypes.best == "application/json"
         try:
-            order, _quote = MillingOrder.create(branch, request.form, _user_id())
+            order, _quote = MillingOrder.create(branch, request.form, _user_id(), can_override=can(REGISTER, "approve"))
         except ValidationError as error:
             if wants_json:
                 return jsonify({"ok": False, "error": t(error.key, **error.params)}), 422
@@ -139,10 +139,11 @@ def new_order():
         priority_keys=PRIORITY_KEYS, ratios=MillYield.all_ratios(branch), editable=can(REGISTER, "create"),
         can_add_customer=can("AD_CUSTOMER", "create"), service=request.args.get("svc") if request.args.get("svc") in ("buy", "sell") else "milling",
         trade_rows=_trade_rows(branch), bs_editable=can(REGISTER, "create"), bs_price=can(REGISTER, "approve"), inv_status_keys=INV_STATUS_KEYS,
+        mill_prices={v: MillingOrder.branch_prices(branch, v) for v in MILL_VARIETIES} if can(REGISTER, "approve") else None,
         bs_text=texts("alertCustInfoRequired", "errNoItems", "errServer", "noStockAvailable", "insufficientStockWarning",
                       "confirmCloseQuestion", "sellReleaseDetailsTitle", "colSku", "colLocation", "colOnHand", "colQty",
                       "confirmOrderCreated", "errLocFormat", "errPriceReason"),
-        js_text=texts("custListEmpty", "errCustomerRequired", "alertEnterPaddy", "errServer", "btnPrintQR", "btnConfirmOrder"))
+        js_text=texts("custListEmpty", "errCustomerRequired", "alertEnterPaddy", "errServer", "btnPrintQR", "btnConfirmOrder", "errPriceReason"))
 
 
 def _send_label(order, browser_origin, force=False):
@@ -210,9 +211,10 @@ def quote():
     """Review: recalculates outputs, payment and receive time on the server. Nothing is saved."""
     branch = operating_branch()
     try:
-        data = MillingOrder.parse(branch, request.form)
+        data = MillingOrder.parse(branch, request.form, can_override=can(REGISTER, "approve"))
         result = MillingOrder.quote(branch, data["paddy"], data["take_bran"], data["take_broken"],
-                                    data["order_type"], data["distance"], data["priority"], variety=data["variety"])
+                                    data["order_type"], data["distance"], data["priority"], variety=data["variety"],
+                                    bran_price=data["prices"]["bran"], broken_price=data["prices"]["broken"])
     except ValidationError as error:
         return jsonify({"ok": False, "error": t(error.key, **error.params)}), 422
     charges = result["charges"]
@@ -261,6 +263,7 @@ def _decorate(orders, details=False):
             order["arrival_input"] = input_local_datetime(order.get("DELIVERY_ARRIVAL_TIME")) or default_arrival(order["BRANCH_ID"])
         if details:
             order["events"] = mill_event.for_order(order["ORD_ID"])
+            order["list_prices"] = MillingOrder.branch_prices(order["BRANCH_ID"], order.get("RICE_VARIETY"))
             order["linked"] = BuySellOrder.for_milling(order["ORD_ID"]) + BuySellOrder.linked_by_hand(order["ORD_ID"])   # update 56
             for bso in order["linked"]:                      # update 39: one order, a line per SKU
                 lines = [l for l in BuySellOrder.items_of(bso) if l["ORD_QTY"] > 0] or BuySellOrder.items_of(bso)[:1]
@@ -275,7 +278,8 @@ def _context():
     return {"ln_reason": notify.reason_key, "status_keys": STATUS_KEYS, "priority_keys": PRIORITY_KEYS, "type_keys": TYPE_KEYS, "status_class": STATUS_CLASS,
             "priorities": PRIORITIES, "flow": flow, "bs_status_keys": BS_STATUS_KEYS, "mat_keys": MAT_KEYS,
             "inv_status_keys": INV_STATUS_KEYS,
-            "can_edit": can(STATUS, "edit"), "can_approve": can(STATUS, "approve"), "can_cancel": can(STATUS, "delete")}
+            "can_edit": can(STATUS, "edit"), "can_approve": can(STATUS, "approve"), "can_cancel": can(STATUS, "delete"),
+            "can_price": can(REGISTER, "approve")}
 
 
 @bp.route("/")
@@ -471,4 +475,4 @@ def update_delivery(ord_id):
 def update_details(ord_id):
     """The editable order details pop-up."""
     return _run(ord_id, lambda order: MillingOrder.update_details(
-        order["ORD_ID"], operating_branch(), request.form, _user_id()))
+        order["ORD_ID"], operating_branch(), request.form, _user_id(), can_override=can(REGISTER, "approve")))

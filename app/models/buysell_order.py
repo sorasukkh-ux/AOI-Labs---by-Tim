@@ -206,14 +206,24 @@ class BuySellOrder:
         from ..timeutil import today_local
         disc = Promotion.milling_discount_pct(milling["BRANCH_ID"], today_local())
         lines = []
+        price_fields = ("PRICE_BRAN", "PRICE_BROKE")
         for n, (mat_code, qty_field, pay_field, own_field) in enumerate(cls._take_home(milling)):
+            price_field = price_fields[n]
             qty = round_half_up(milling.get(qty_field) or 0, 3)
             amount = round_half_up(milling.get(pay_field) or 0, 2)
+            listed = round_half_up(Price.sell_price(milling["BRANCH_ID"], mat_code) or 0, 3)
+            typed = milling.get(price_field)                 # update 79: a price typed by a super user
             lines.append({"LINE_NO": n + 1, "MAT_CODE": mat_code, "ORD_QTY": qty, "UOM_CODE": "KG",
                           "PRICING_UINT": round_half_up(amount / qty, 3) if qty else 0, "ORD_AMOUNT": amount,
-                          "UNIT_PRICE": round_half_up(Price.sell_price(milling["BRANCH_ID"], mat_code), 3),
-                          "OWN_KG": round_half_up(milling.get(own_field) or 0, 3), "DISC_PCT": disc, "REF_INV_LOC": None})
+                          "UNIT_PRICE": round_half_up(typed, 3) if typed is not None else listed,
+                          "OWN_KG": round_half_up(milling.get(own_field) or 0, 3), "DISC_PCT": disc, "REF_INV_LOC": None,
+                          "LIST_PRICE": listed, "PRICE_OVR_FLG": typed is not None})
         return lines
+
+    @staticmethod
+    def _milling_override(milling):
+        """Update 79: the take-home order shows who typed the bran / broke price on the milling order."""
+        return {k: milling.get(k) for k in ("PRICE_OVR_FLG", "PRICE_OVR_USER", "PRICE_OVR_DATE", "PRICE_OVR_REASON")}
 
     @classmethod
     def create_for_milling(cls, milling, ope_user):
@@ -227,6 +237,7 @@ class BuySellOrder:
                  "ORD_STATUS": OPEN, "QR_ID": qr_id, "UOM_CODE": "KG", "REMARK": None,
                  "REF_ORD_ID": milling["ORD_ID"], "REF_ORD_TYPE": "ML", "REF_QR_PRINT": None, "REF_INV_LOC": None}
         order.update(cls._header(lines))
+        order.update(cls._milling_override(milling))
         order.update(audit_new(ope_user))
         col(cls.COL).insert_one(dict(order))
         cls._log(ord_id)
@@ -512,6 +523,8 @@ class BuySellOrder:
             header = cls._header(lines)
             if header["ORD_ITEMS"] != o.get("ORD_ITEMS") or header["ORD_AMOUNT"] != cls.amount(o):
                 values.update(header)
+                if o["ORD_STATUS"] == OPEN:
+                    values.update(cls._milling_override(milling))
             if o["CUST_CODE"] != milling["CUST_CODE"] and o["ORD_STATUS"] == OPEN:
                 values["CUST_CODE"] = milling["CUST_CODE"]
             if values:

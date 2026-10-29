@@ -72,11 +72,24 @@
     <div><label class="field-label" for="od-broken-{{ order.ORD_ID }}">{{ t('lblTakeBroken') }}</label>
       <input type="number" id="od-broken-{{ order.ORD_ID }}" name="BROKE_ORDER" value="{{ (order.BROKE_ORDER or 0)|plain }}" min="0" step="0.01"></div>
   </div>
+  {% if can_price %}
+  {# update 79: bran / broke price typed by a super user; blank = the branch price #}
+  <div class="two-col od-field">
+    <div><label class="field-label" for="od-pbran-{{ order.ORD_ID }}">{{ t('lblPriceBran') }}</label>
+      <input type="number" id="od-pbran-{{ order.ORD_ID }}" name="PRICE_BRAN" value="{{ order.PRICE_BRAN|plain if order.PRICE_BRAN is not none else '' }}" min="0.01" max="1000" step="0.01" placeholder="{{ '%.2f'|format(order.list_prices.bran) }}"></div>
+    <div><label class="field-label" for="od-pbroke-{{ order.ORD_ID }}">{{ t('lblPriceBroke') }}</label>
+      <input type="number" id="od-pbroke-{{ order.ORD_ID }}" name="PRICE_BROKE" value="{{ order.PRICE_BROKE|plain if order.PRICE_BROKE is not none else '' }}" min="0.01" max="1000" step="0.01" placeholder="{{ '%.2f'|format(order.list_prices.broken) }}"></div>
+  </div>
+  <div class="od-field"><label class="field-label" for="od-preason-{{ order.ORD_ID }}">{{ t('lblPriceReason') }}</label>
+    <input type="text" id="od-preason-{{ order.ORD_ID }}" name="PRICE_REASON" value="{{ order.PRICE_OVR_REASON or '' }}" maxlength="200" placeholder="{{ t('priceReasonPh') }}"></div>
+  <p class="cap-note">{{ t('millPriceNote') }}</p>
+  {% endif %}
   {% else %}
   <div class="od-row"><span class="od-label">{{ t('lblTakeBran') }}</span><span class="od-value">{{ order.BRAN_ORDER|num }}</span></div>
   <div class="od-row"><span class="od-label">{{ t('lblTakeBroken') }}</span><span class="od-value">{{ order.BROKE_ORDER|num }}</span></div>
   {% if edit %}<p class="cap-note">{{ t('detQtyLockedNote') }}</p>{% endif %}
   {% endif %}
+  {% if order.PRICE_OVR_FLG %}<p class="cap-note bs-price-ovr">{{ t('millPriceOvrNote', bran=('%.2f'|format(order.PRICE_BRAN) if order.PRICE_BRAN is not none else '-'), broke=('%.2f'|format(order.PRICE_BROKE) if order.PRICE_BROKE is not none else '-'), user=order.PRICE_OVR_USER or '', reason=order.PRICE_OVR_REASON or '') }}</p>{% endif %}
   {% if edit %}
   <div class="od-field"><label class="field-label" for="od-remark-{{ order.ORD_ID }}">{{ t('lblRemark') }}</label>
     <input type="text" id="od-remark-{{ order.ORD_ID }}" name="REMARK" value="{{ order.REMARK or '' }}" maxlength="200"></div>

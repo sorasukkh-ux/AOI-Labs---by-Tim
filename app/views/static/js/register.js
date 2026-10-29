@@ -37,7 +37,21 @@
       if (distance.value === "") distance.value = form.getAttribute("data-distance") || "";
     }
   }
-  form.addEventListener("input", function () { showError(""); updateOutputs(); markStale(); });
+  // ----- update 79: bran / broke price typed by a super user (blank = the branch price, shown as the placeholder) -----
+  var prices = JSON.parse(form.getAttribute("data-prices") || "{}");
+  var priceBran = byId("reg-price-bran"), priceBroken = byId("reg-price-broken"), reasonRow = byId("reg-price-reason-row");
+  function priceTyped() {
+    return [priceBran, priceBroken].some(function (i) { return i && i.value !== "" && Number(i.value) !== Number(i.placeholder); });
+  }
+  function updatePrices() {
+    if (!priceBran) return;
+    var v = byId("reg-variety"), p = prices[v ? v.value : "WH"];
+    if (p) { priceBran.placeholder = p.bran.toFixed(2); priceBroken.placeholder = p.broken.toFixed(2); }
+    if (reasonRow) reasonRow.hidden = !priceTyped();
+  }
+  form.addEventListener("input", function () { showError(""); updateOutputs(); updatePrices(); markStale(); });
+  form.addEventListener("change", updatePrices);
+  updatePrices();
 
   // ----- default priority by variety (Jasmine high, white medium, glutinous low) until the operator picks one -----
   var varietySel = byId("reg-variety"), prioritySel = byId("reg-priority"), priorityTouched = false;
@@ -105,6 +119,7 @@
   function review() {
     if (!custCode.value) { panel.hidden = true; return showError(text.errCustomerRequired); }
     if (!(Number(paddy.value) > 0)) { panel.hidden = true; return showError(text.alertEnterPaddy); }
+    if (priceTyped() && !byId("reg-price-reason").value.trim()) { panel.hidden = true; return showError(text.errPriceReason); }
     reviewBtn.disabled = true;
     var data = new FormData(form);
     fetch(form.getAttribute("data-quote-url"), { method: "POST", body: data, credentials: "same-origin",

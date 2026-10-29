@@ -340,6 +340,13 @@ are kept in `AOITS_SYSLOG` (14 days), the checks in `AOITS_HEALTH` (7 days).
 customer's LINE when "Also send to the customer's LINE" is ticked (shown for customers linked to LINE); "Send to LINE
 only" sends without printing. The same public https address is needed as for the queue QR (update 47).
 
+## Bran / broke price typed by hand on the milling order - super user (update 79, DB 1.56)
+
+- Same right as update 78: Administrator, or a role with **Approve** on Customer Service.
+- Customer Service > Milling: new boxes **Bran price** and **Broke rice price** (THB/kg). Blank = branch price (shown in grey, follows the variety). A typed price needs a reason; Review shows the charge at that price.
+- Update Milling Status > order details > Edit details: the same two boxes while the quantities can be changed. Clear them to go back to the branch price. Changing only the price keeps the queue and receive time.
+- The take-home selling order line uses the typed price (UNIT_PRICE) and keeps the branch price (LIST_PRICE); the details show "Price set by hand ... by <user>: <reason>".
+
 ## Price typed by hand on a buy / sell order - super user (update 78, DB 1.55)
 
 - Who: the Administrator, or a role given **Approve** on Customer Service (SV_SERVICE) in User Authorization. Everyone else sees the branch price only (the server refuses a changed price: 403 / "No right to change the price").

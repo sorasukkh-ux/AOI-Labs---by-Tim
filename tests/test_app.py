@@ -4344,5 +4344,69 @@ class Update78(Base):
         self.assertEqual(r.status_code, 403)
 
 
+class Update79(Base):
+    """Bran / broke price typed by a super user on the milling order (registration and Edit details)."""
+
+    def test_admin_types_bran_and_broke_price(self):
+        self.login("admin")
+        self.client.get("/lang/en")
+        page = self.text("/service/milling/new")
+        self.assertIn('name="PRICE_BRAN"', page)
+        self.assertIn('name="PRICE_BROKE"', page)
+        # no reason: refused
+        r = self.post("/service/milling/new", {"CUST_CODE": "C261001001", "REGIST_PADDY": "1000", "BRAN_ORDER": "10",
+                      "BROKE_ORDER": "5", "ORDER_TYPE": "T", "MILL_PRIORITY": "M", "PRICE_BRAN": "20"}, "/service/milling/new")
+        self.assertEqual(self.db("AOITS_ORDMILLING"), [])
+        o = self.new_order(REGIST_PADDY="1000", BRAN_ORDER="10", BROKE_ORDER="5", PRICE_BRAN="20", PRICE_BROKE="", PRICE_REASON="Old customer")
+        self.assertEqual((o["PRICE_BRAN"], o["PRICE_BROKE"], o["PRICE_OVR_FLG"], o["PRICE_OVR_USER"], o["PRICE_OVR_REASON"]),
+                         (20.0, None, True, "admin", "Old customer"))
+        sl = self.db("AOITS_ORDBUYSELL")[0]
+        bran = next(l for l in sl["ORD_ITEMS"] if l["MAT_CODE"] == "BRAN")
+        self.assertEqual((bran["UNIT_PRICE"], bran["PRICE_OVR_FLG"]), (20.0, True))
+        self.assertNotEqual(bran["LIST_PRICE"], 20.0)
+        self.assertAlmostEqual(o["EST_PAY_BRAN"], round(10 * 20 * (1 - bran["DISC_PCT"] / 100.0), 2))
+        broke = next(l for l in sl["ORD_ITEMS"] if l["MAT_CODE"] != "BRAN")
+        self.assertFalse(broke["PRICE_OVR_FLG"])
+        self.assertTrue(sl["PRICE_OVR_FLG"])
+        # Edit details: change the broke price, bran back to the branch price
+        page = self.text("/service/milling/%s?popup=1" % o["ORD_ID"])
+        self.assertIn("Price set by hand: bran 20.00", page)
+        self.post("/service/milling/%s/details" % o["ORD_ID"], {"CUST_CODE": "C261001001", "REGIST_PADDY": "1000", "BRAN_ORDER": "10",
+                  "BROKE_ORDER": "5", "PRICE_BRAN": "", "PRICE_BROKE": "9.5", "PRICE_REASON": "Promo"})
+        o2 = self.order(o["ORD_ID"])
+        self.assertEqual((o2["PRICE_BRAN"], o2["PRICE_BROKE"], o2["PRICE_OVR_REASON"]), (None, 9.5, "Promo"))
+        self.assertEqual(o2["EXPCT_RECEIVE_TIME"], o["EXPCT_RECEIVE_TIME"])
+        sl = self.db("AOITS_ORDBUYSELL")[0]
+        broke = next(l for l in sl["ORD_ITEMS"] if l["MAT_CODE"] != "BRAN")
+        self.assertEqual((broke["UNIT_PRICE"], broke["PRICE_OVR_FLG"]), (9.5, True))
+        self.assertAlmostEqual(sl["ORD_AMOUNT"], round(o2["EST_PAY_BRAN"] + o2["EST_PAY_BROKE"], 2))
+        # both back to the branch price
+        self.post("/service/milling/%s/details" % o["ORD_ID"], {"CUST_CODE": "C261001001", "REGIST_PADDY": "1000", "BRAN_ORDER": "10",
+                  "BROKE_ORDER": "5", "PRICE_BRAN": "", "PRICE_BROKE": ""})
+        self.assertFalse(self.order(o["ORD_ID"])["PRICE_OVR_FLG"])
+
+    def test_quote_uses_typed_price(self):
+        self.login("admin")
+        r = self.post("/service/milling/quote", {"CUST_CODE": "C261001001", "REGIST_PADDY": "1000", "BRAN_ORDER": "10",
+                      "ORDER_TYPE": "T", "PRICE_BRAN": "20", "PRICE_REASON": "x"}, "/service/milling/new")
+        body = r.get_json()
+        self.assertTrue(body["ok"], body)
+        self.assertTrue(any("20.00" in (l.get("detail") or "") for l in body["lines"]))
+
+    def test_manager_cannot(self):
+        self.login("prasert.m")
+        self.client.get("/lang/en")
+        self.assertNotIn('name="PRICE_BRAN"', self.text("/service/milling/new"))
+        r = self.post("/service/milling/quote", {"CUST_CODE": "C261001001", "REGIST_PADDY": "1000", "BRAN_ORDER": "10",
+                      "ORDER_TYPE": "T", "PRICE_BRAN": "20", "PRICE_REASON": "x"}, "/service/milling/new")
+        self.assertEqual(r.status_code, 422)
+        o = self.new_order(REGIST_PADDY="1000", BRAN_ORDER="10")
+        self.assertFalse(o["PRICE_OVR_FLG"])
+        self.assertNotIn('name="PRICE_BRAN"', self.text("/service/milling/%s?popup=1" % o["ORD_ID"]))
+        self.post("/service/milling/%s/details" % o["ORD_ID"], {"CUST_CODE": "C261001001", "REGIST_PADDY": "1000", "BRAN_ORDER": "10",
+                  "PRICE_BRAN": "5", "PRICE_REASON": "x"})
+        self.assertIsNone(self.order(o["ORD_ID"])["PRICE_BRAN"])
+
+
 if __name__ == "__main__":
     unittest.main()
