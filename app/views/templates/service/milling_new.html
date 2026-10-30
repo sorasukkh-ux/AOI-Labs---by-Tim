@@ -130,7 +130,7 @@
     <input type="hidden" name="ORD_TYPE" value="{{ code }}">
     <input type="hidden" name="CUST_CODE" value="">
     <table class="rate-table" id="{{ panel }}-rate-table">
-      <thead><tr><th>{{ t('colProduct') }}</th><th class="num">{{ t(rate_key) }}</th><th class="num">{{ t('colSummary') }}</th><th>{{ t(qty_key) }}</th></tr></thead>
+      <thead><tr><th>{{ t('colProduct') }}</th><th class="num">{{ t(rate_key) }}</th><th>{{ t(qty_key) }}</th><th class="num">{{ t('colSummary') }}</th></tr></thead>
       <tbody>
         {% for row in trade_rows %}
         {% set rate = row.buy if code == 'BY' else row.sell %}
@@ -146,9 +146,10 @@
           {% else %}
           <td class="rate-cell num" data-rate="{{ rate }}">{{ '%.2f'|format(rate) }}</td>
           {% endif %}
-          <td class="summary-cell num">0.00</td>
+          {# update 82 (Tim): price, quantity, sub-total #}
           <td class="qty-cell"><input type="number" name="QTY_{{ row.mat }}" value="0" min="0" step="0.01" aria-label="{{ row.name }}"
               {% if not bs_editable or (rate <= 0 and not bs_price) %}disabled{% endif %}></td>
+          <td class="summary-cell num">0.00</td>
         </tr>
         {% endfor %}
       </tbody>

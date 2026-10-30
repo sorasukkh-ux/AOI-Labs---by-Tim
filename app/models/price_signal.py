@@ -142,7 +142,28 @@ def sources(branch_id, code, start, cfg=None, export_keys=None):
     return out
 
 
-def base_of(code, found, cfg):
+# update 81 (Tim): an export (FOB) price far from the home price of the same SKU is the wrong row or exchange rate.
+# FOB is milled rice at the port, so it is normally about the home wholesale price or above.
+EXPORT_LOW, EXPORT_HIGH = 0.65, 1.8
+HOME_SOURCES = ("TRMA", "APPLIED", "NABC", "AIWEB")
+
+
+def export_check(code, found, cfg, export_keys=None):
+    """None, or the figures when the latest export price is outside 65% - 180% of the latest home price."""
+    if not found.get("TREA"):
+        return None
+    home = next((n for n in HOME_SOURCES if found.get(n)), None)
+    if not home:
+        return None
+    trea, dom = found["TREA"][-1][1], found[home][-1][1]
+    if not dom or EXPORT_LOW <= trea / dom <= EXPORT_HIGH:
+        return None
+    label, usd = export_price.label_of(trea_key(code, cfg, export_keys))
+    return {"trea": round_half_up(trea, 2), "home": round_half_up(dom, 2), "home_src": home, "ratio": round_half_up(trea / dom * 100, 0),
+            "label": label, "usd": usd, "fx": cfg.get("FX_USD_THB")}
+
+
+def base_of(code, found, cfg, export_suspect=False):
     """The source the signals are worked out on: the one chosen in the settings; else (update 77) the SKU's market
     mapping, NABC, millers' report, applied, export, AI web price - the first with at least BASE_MIN_POINTS prices;
     else the source with the most prices (the AI monthly estimate and own prices last)."""
@@ -151,10 +172,16 @@ def base_of(code, found, cfg):
     if chosen in found:
         return chosen
     m = next((x for x in MarketMap.all() if x["MAT_CODE"] == code), {})
-    order = ([m.get("SOURCE")] if m.get("SOURCE") in found else []) + ["NABC", "TRMA", "APPLIED", "TREA", "AIWEB", "AIHIST", "SELL", "BUY"]
+    # update 81: home prices first - the export price is the world market, and only when it agrees with home prices
+    order = ([m.get("SOURCE")] if m.get("SOURCE") in found else []) + ["NABC", "TRMA", "APPLIED", "AIWEB", "TREA", "AIHIST", "SELL", "BUY"]
+    if export_suspect:
+        order = [n for n in order if n != "TREA"]
     for name in order:
         if name in found and len(found[name]) >= BASE_MIN_POINTS and name not in ("AIHIST", "SELL", "BUY"):
             return name
+    home = [n for n in order if n in found and n in HOME_SOURCES and len(found[n]) >= 2]
+    if home:                                              # a few home prices beat many export prices
+        return max(home, key=lambda n: len(found[n]))
     ranked = sorted((name for name in order if name in found), key=lambda n: -len(found[n]))
     return ranked[0] if ranked else None
 
@@ -443,7 +470,8 @@ def analyse(branch_id, code, period="12M", cfg=None, entry=None, export_keys=Non
     shown_from = end - timedelta(days=PERIODS.get(period, 365))
     start = shown_from - timedelta(days=max(cfg["SMA_LONG"], RANGE_DAYS) + 5)   # warm-up for the averages
     found = sources(branch_id, code, start, cfg, export_keys)
-    base = base_of(code, found, cfg)
+    check = export_check(code, found, cfg, export_keys)
+    base = base_of(code, found, cfg, export_suspect=bool(check))
     days = daily(found.get(base) or [], end)
     obs = sorted({d: v for d, v in (found.get(base) or [])}.items())
     obs = [(date.fromisoformat(d), v) for d, v in obs]
@@ -465,7 +493,7 @@ def analyse(branch_id, code, period="12M", cfg=None, entry=None, export_keys=Non
     trade["notes"] = trade_notes(trade)
     spark = [v for d, v in days[-90:]][::3] + ([days[-1][1]] if days else [])  # last 90 days, every 3rd day
     return {"code": code, "name": var.mat_name(code), "base": base, "signal": sig, "position": pos, "chart": chart,
-            "latest": latest, "period": period, "spark": spark, "trade": trade}
+            "latest": latest, "period": period, "spark": spark, "trade": trade, "export_check": check}
 
 
 def _change(pts):
@@ -495,7 +523,7 @@ def overview(branch_id, cfg=None):
                     "own_buy_vs_market_pct": a["trade"]["buy"]["vs_market_pct"], "own_sell_kg": a["trade"]["sell"]["kg"],
                     "own_sell_avg": a["trade"]["sell"]["avg"], "own_sell_vs_market_pct": a["trade"]["sell"]["vs_market_pct"],
                     "own_margin_kg": a["trade"]["margin_kg"], "own_gross_profit": a["trade"]["gross_profit"],
-                    "stock_cover_days": a["trade"]["cover_days"]})
+                    "stock_cover_days": a["trade"]["cover_days"], "export_check": a["export_check"]})
     return out
 
 
@@ -507,6 +535,12 @@ def warnings(overview_rows):
     last = {o["code"]: o["last"] for o in overview_rows if o.get("last")}
     for low, high, pct in quality_check(last):
         out.append(("psWarnQuality", {"low": var.mat_name(low), "high": var.mat_name(high), "pct": "%.0f" % pct}))
+    for o in overview_rows:                               # update 81: export row / exchange rate
+        c = o.get("export_check")
+        if c:
+            out.append(("psWarnExport", {"name": o["name"], "v": "%.2f" % c["trea"], "home": "%.2f" % c["home"], "pct": "%.0f" % c["ratio"],
+                                         "src": c["home_src"], "row": c["label"] or "-", "usd": "%.0f" % (c["usd"] or 0),
+                                         "fx": "%.2f" % (c["fx"] or 0)}))
     web = ai_price.latest()
     for o in overview_rows:
         w = web.get(o["code"])

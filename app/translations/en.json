@@ -1625,6 +1625,7 @@
  "psTrend": "Trend /30 days",
  "psUnitNote": "Prices THB/kg. Buy point = support or the lower band (cheap); sell point = resistance or the upper band (expensive). Profit / loss of the stock on hand at the latest base price.",
  "psUpload": "Or import a saved page (HTML / PDF)",
+ "psWarnExport": "{name}: the export price (FOB) {v} THB/kg is {pct}% of the home price ({src}) {home} - it is not used for the signals. Row \"{row}\" US${usd}/ton x rate {fx}. Check the export row of this SKU and the USD/THB rate in Sources.",
  "psWarnFarFromWeb": "{name}: the base price ({src}) {v} is more than 25% from the price the AI found on the web ({web}) - check the price source.",
  "psWarnQuality": "{low} is {pct}% of {high} - unusual for a different quality; probably the wrong row or product. Check Financial > Pricing Maintenance > Market Price.",
  "psWhyDeath": "death cross on {day}: the short average went below the long one (turning down)",

@@ -340,6 +340,17 @@ are kept in `AOITS_SYSLOG` (14 days), the checks in `AOITS_HEALTH` (7 days).
 customer's LINE when "Also send to the customer's LINE" is ticked (shown for customers linked to LINE); "Send to LINE
 only" sends without printing. The same public https address is needed as for the queue QR (update 47).
 
+## Buy / Sell table column order (update 82)
+
+- Customer Service > Buy / Sell: columns are now Product, Price, Quantity (kg), Sub-total. Tapping a quantity of 0 selects it, so typing 30 gives 30 (not 030).
+
+## Export (FOB) price check (update 81)
+
+- AI > Price analysis: when the latest export price of a SKU is below 65% or above 180% of its home price (millers' report, applied, NABC or AI web), a warning shows the export row, US$/ton and the exchange rate used, and the export price is NOT used as the base of the signals.
+- Base source order is now home first: NABC, millers' report, applied, AI web, then export. With fewer than 20 prices, a home source with 2+ prices is used before the export price.
+- First guess of the export row: a whole-grain SKU never takes a broken rice row (ปลาย / A1 Super), and the plainest matching row is chosen.
+- To fix the jasmine row yourself: Price analysis > Sources > export rows - choose "Hom Mali 100%" for Jasmine rice, and check the USD/THB rate (about 32-33 in Oct 2026).
+
 ## Milling Analysis as a dashboard (update 80)
 
 - AI > Milling Analysis > Analysis by period is now a wide dashboard: 8 KPI tiles (orders with a finished / in progress / cancelled bar, paddy -> rice, real yield coloured against expected, QR scan ring, waiting, milling, registration to ready, held).

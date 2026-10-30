@@ -4434,5 +4434,27 @@ class Update80(Base):
         self.assertIn('id="ma-trend"', empty)
 
 
+class Update81(Base):
+    """An export (FOB) price far from the home price is flagged and not used for the signals."""
+
+    def test_export_check_and_base(self):
+        with self.app.app_context():
+            from app.models import price_signal as ps, export_price
+            cfg = dict(ps.settings(), FX_USD_THB=32.5)
+            found = {"TREA": [("2026-10-%02d" % d, 16.0) for d in range(1, 29)], "TRMA": [("2026-10-20", 35.0), ("2026-10-24", 35.4)]}
+            check = ps.export_check("RICE_HM", found, cfg, [])
+            self.assertEqual(check["ratio"], 45)
+            self.assertEqual(ps.base_of("RICE_HM", found, cfg, export_suspect=True), "TRMA")
+            few = {"TREA": [("2026-10-%02d" % d, 36.0) for d in range(1, 9)], "TRMA": [("2026-10-20", 35.0), ("2026-10-24", 35.4)]}
+            self.assertEqual(ps.base_of("RICE_HM", few, cfg), "TRMA")           # a few home prices beat a few more export prices
+            ok = {"TREA": [("2026-10-01", 36.0)], "TRMA": [("2026-10-24", 35.4)]}
+            self.assertIsNone(ps.export_check("RICE_HM", ok, cfg, []))
+            keys = ["hommalibrokena1super", "hommalirice100%(newcrop)gradeb", "hommalirice100%"]
+            self.assertEqual(export_price.guess_key("RICE_HM", keys), "hommalirice100%")
+            self.assertEqual(export_price.guess_key("BROKEN", ["a1superbroken", "whiterice5%"]), "a1superbroken")
+            rows = [{"code": "RICE_HM", "name": "Jasmine rice", "last": 35.4, "base": "TRMA", "export_check": check}]
+            self.assertEqual(ps.warnings(rows)[0][0], "psWarnExport")
+
+
 if __name__ == "__main__":
     unittest.main()

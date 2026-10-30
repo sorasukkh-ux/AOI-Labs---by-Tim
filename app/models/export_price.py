@@ -244,12 +244,17 @@ def guess_key(mat_code, keys=None):
     """The stored row that the default texts of the SKU point to, or None."""
     wanted = DEFAULT_KEYS.get(mat_code) or ()
     keys = keys if keys is not None else [i["key"] for i in items()]
+    if mat_code != "BROKEN":                  # update 81: a whole-grain SKU never takes a broken rice row
+        keys = [k for k in keys if not any(normalize(b) in k for b in BROKEN_WORDS)]
     for w in wanted:
         nw = normalize(w)
-        hit = next((k for k in keys if nw in k), None)
-        if hit:
-            return hit
+        hits = [k for k in keys if nw in k]
+        if hits:                              # the plainest row: "hom mali 100%" before "hom mali 100% (new crop, grade B)"
+            return min(hits, key=len)
     return None
+
+
+BROKEN_WORDS = ("broken", "ปลาย", "a1super", "a.1", "เอวัน", "brokens")
 
 
 def series(item_key, start, fx):
@@ -258,6 +263,11 @@ def series(item_key, start, fx):
         return []
     return [(r["PRICE_DATE"], round_half_up(r["USD_TON"] * fx / 1000.0, 2))
             for r in col(COL).find({"ITEM_KEY": item_key, "PRICE_DATE": {"$gte": start.isoformat()}}, NO_ID).sort([("PRICE_DATE", 1)])]
+
+
+def label_of(item_key):
+    r = col(COL).find_one({"ITEM_KEY": item_key}, NO_ID, sort=[("PRICE_DATE", -1)]) if item_key else None
+    return (r["ITEM_LABEL"], r["USD_TON"]) if r else (None, None)
 
 
 def latest_fetch():

@@ -24,6 +24,10 @@
   document.querySelectorAll("form.bs-panel").forEach(function (form) {
     var errorEl = form.querySelector(".bs-error");
     function showError(message) { errorEl.textContent = message || ""; errorEl.classList.toggle("show", !!message); }
+    // update 82: tapping a quantity of 0 selects it, so typing 30 gives 30 (not 030)
+    form.querySelectorAll(".qty-cell input").forEach(function (i) {
+      i.addEventListener("focus", function () { if (Number(i.value) === 0) i.select(); });
+    });
 
     function rows() {
       return Array.prototype.map.call(form.querySelectorAll("tbody tr[data-mat]"), function (tr) {
