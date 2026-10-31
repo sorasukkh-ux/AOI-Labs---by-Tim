@@ -68,6 +68,7 @@ def coupon_qr(coupon_id):
     c = coupon.get(coupon_id)
     if not c or not secrets.compare_digest(request.args.get("t", ""), notify.coupon_token(c["COUPON_ID"])):
         abort(404)
-    resp = Response(qr_png.png(coupon.qr_text(c), scale=12), mimetype="image/png")
-    resp.headers["Cache-Control"] = "no-store"
+    # update 105: LINE's image server must be allowed to cache the picture, else the QR shows blank on the card
+    resp = Response(qr_png.png(coupon.qr_text(c), scale=14), mimetype="image/png")
+    resp.headers["Cache-Control"] = "public, max-age=86400"
     return resp

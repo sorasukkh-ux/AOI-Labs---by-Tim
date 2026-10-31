@@ -646,3 +646,4 @@ html:has(body.theme-songkran), body.theme-songkran {
 .theme-songkran .sk-scene .ground { fill: #fbbf24; opacity: .9; }
 .theme-songkran .sk-drops i { opacity: .55; }
 .theme-songkran .bb-card .bb-spark { display: none; }
+.theme-songkran .xm-music { background: linear-gradient(90deg, #0284c7, #f97316); border-color: #e0f2fe; }

@@ -334,7 +334,7 @@ def coupon_token(coupon_id):
 def coupon_image_url(coupon_id, browser_origin=None):
     from flask import url_for
     base = public_base(browser_origin)
-    return base + url_for("line_api.coupon_qr", coupon_id=coupon_id, t=coupon_token(coupon_id)) if base else None
+    return base + url_for("line_api.coupon_qr", coupon_id=coupon_id, t=coupon_token(coupon_id), v=2) if base else None
 
 
 def send_coupon(coupon, browser_origin=None):

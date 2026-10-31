@@ -434,13 +434,20 @@
 
   // update 87: soft Christmas music with the Christmas theme (settings: on / off, volume). The browser needs one tap
   // or key press first; the speaker button starts it, or mutes it on this TV (remembered on this TV).
-  var musicBtn = document.getElementById("xm-music"), M = window.AOIXmasMusic;
+  // update 104: Songkran has its own (original) music - the player follows the theme
+  var musicBtn = document.getElementById("xm-music"), PLAYERS = { christmas: window.AOIXmasMusic, songkran: window.AOISongkranMusic }, M = null;
+  function curTheme() { return fixedTheme || data.theme; }
+  function pick() {
+    var want = PLAYERS[curTheme()] || null;
+    if (M && M !== want) M.stop();
+    M = want;
+  }
   function muted() { try { return window.localStorage.getItem("aoi-bb-mute") === "1"; } catch (e) { return false; } }
-  function wanted() { return !!M && (fixedTheme || data.theme) === "christmas" && data.music !== false && (data.volume || 0) > 0; }
+  function wanted() { pick(); return !!M && data.music !== false && (data.volume || 0) > 0; }
   function music() {
     if (!musicBtn) return;
     musicBtn.hidden = !wanted();
-    if (!wanted()) { if (M) M.stop(); return; }
+    if (!wanted()) { for (var k in PLAYERS) if (PLAYERS[k]) PLAYERS[k].stop(); return; }
     M.setVolume(data.volume);
     if (muted()) { M.stop(); musicBtn.innerHTML = musicBtn.getAttribute("data-mute"); musicBtn.className = "xm-music off"; return; }
     if (M.running()) { musicBtn.innerHTML = musicBtn.getAttribute("data-play"); musicBtn.className = "xm-music on"; }
@@ -451,6 +458,7 @@
   }
   if (musicBtn) musicBtn.onclick = function (e) {
     e.stopPropagation();
+    if (!wanted()) return;
     var nowMuted = M.running();
     try { window.localStorage.setItem("aoi-bb-mute", nowMuted ? "1" : "0"); } catch (err) { /* private mode */ }
     if (nowMuted) M.stop(); else M.start();

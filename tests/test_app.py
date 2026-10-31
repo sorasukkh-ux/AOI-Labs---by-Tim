@@ -4778,6 +4778,8 @@ class Update101(Base):
         self.assertIn("theme-songkran", page)
         self.assertIn('id="sk-drops"', page)
         self.assertIn('class="sk-scene"', page)                                   # update 103: people playing water
+        self.assertIn("songkran_music.js", page)                                    # update 104: Songkran music
+        self.assertEqual(self.client.get("/static/js/songkran_music.js").status_code, 200)
         self.assertIn('class="ele"', page)
         self.login("admin")
         self.client.get("/lang/en")
@@ -4796,3 +4798,24 @@ class Update101(Base):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Update105(Base):
+    """The coupon QR picture is public (LINE fetches it without a login), cacheable, and refused with a wrong token."""
+
+    def test_coupon_qr_public(self):
+        import os
+        with self.app.app_context():
+            col("AOITS_COUPON").insert_one({"COUPON_ID": "CPNTEST0001", "CODE": "aB3dE5gH7j", "CUST_CODE": "C261001001", "BRANCH_ID": "factory2"})
+            from app.models import notify
+            os.environ["AOI_PUBLIC_URL"] = "https://aoi.example"
+            try:
+                with self.app.test_request_context():
+                    url = notify.coupon_image_url("CPNTEST0001")
+            finally:
+                os.environ.pop("AOI_PUBLIC_URL", None)
+        path = url.replace("https://aoi.example", "")
+        r = self.client.get(path)
+        self.assertEqual((r.status_code, r.mimetype), (200, "image/png"))
+        self.assertIn("max-age", r.headers["Cache-Control"])
+        self.assertEqual(self.client.get(path.split("?")[0] + "?t=bad").status_code, 404)

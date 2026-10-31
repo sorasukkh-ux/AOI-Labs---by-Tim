@@ -340,6 +340,14 @@ are kept in `AOITS_SYSLOG` (14 days), the checks in `AOITS_HEALTH` (7 days).
 customer's LINE when "Also send to the customer's LINE" is ticked (shown for customers linked to LINE); "Send to LINE
 only" sends without printing. The same public https address is needed as for the queue QR (update 47).
 
+## Coupon QR on LINE (update 105)
+
+The QR picture of the LINE coupon card was blank: the picture route sent `Cache-Control: no-store`, which LINE's image server does not show. It now sends `public, max-age=86400` like the order and member-card QR routes, and the picture URL has `v=2` so LINE fetches it again. After installing, press "ส่ง LINE อีกครั้ง" on the coupon to resend the card.
+
+## Songkran music (update 104)
+
+- With the Songkran theme the billboard plays an original, cheerful tune written for AOI in the Thai pentatonic scale: ranat-like xylophone melody (4 phrases in turn), soft khong bass, klong drum and ching-chap in a ramwong-style beat. Not a copy of any copyrighted Songkran song. Same switch and volume as the Christmas music (billboard settings "Festival music"), same tap-to-start / mute button.
+
 ## Songkran billboard: people playing water (update 103)
 
 - The Songkran theme is now bright daytime (blue sky, sun, clouds drifting, golden chedi and a red giant swing that slowly pan) with a lively street at the bottom: one throws water from a bowl, one gets splashed and jumps, one shoots a water gun, one runs across with a bucket, an elephant sprays water with its trunk with a rider waving, one sprays a hose; bunting flags sway and palms move. Original flat drawings.
