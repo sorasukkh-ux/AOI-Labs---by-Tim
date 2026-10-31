@@ -181,6 +181,39 @@
       {% if editable %}<button class="action primary" type="submit" id="bb-save">{{ t('btnSave') }}</button>{% endif %}
     </div>
   </form>
+  {# update 106 (Tim): the shop's own music file per theme (plays instead of the built-in tune) #}
+  <section class="bb-sec bb-music-file" id="bb-music">
+    <h3><span>&#9835;</span>{{ t('bbMusicFile') }}</h3>
+    <p class="cap-note tight">{{ t('bbMusicFileNote', mb=music_max_mb) }}</p>
+    <div class="bb-table-wrap"><table class="bb-set-table bb-music-table">
+      <thead><tr><th>{{ t('bbTheme') }}</th><th>{{ t('bbMusicNow') }}</th><th>{{ t('bbMusicListen') }}</th><th></th></tr></thead>
+      <tbody>
+      {% for th_ in music_themes %}{% set f = music_files.get(th_) %}
+      <tr id="bb-music-{{ th_ }}">
+        <td class="bb-name">{{ t('bbTheme_' ~ th_) }}</td>
+        <td>{% if f %}<b>{{ f.name }}</b><br><small class="cp-code">{{ '%.1f'|format((f.size or 0) / 1048576) }} MB &middot; {{ fmt_dt(f.date) }} &middot; {{ f.user }}</small>
+          {% else %}<span class="hint">{{ t('bbMusicBuiltin') }}</span>{% endif %}</td>
+        <td>{% if f and music_urls.get(th_) %}<audio controls preload="none" src="{{ music_urls[th_] }}" class="bb-audio"></audio>{% elif f %}<small class="hint">{{ t('bbMusicNeedKey') }}</small>{% endif %}</td>
+        <td class="cpn-acts">{% if editable and f %}
+          <form method="post" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="branch" value="{{ branch }}"><input type="hidden" name="action" value="bb_music_del"><input type="hidden" name="BB_MUSIC_THEME" value="{{ th_ }}">
+            <button class="action small" type="submit" data-confirm="{{ t('bbMusicConfirmDel', theme=t('bbTheme_' ~ th_)) }}">{{ t('bbMusicDel') }}</button></form>{% endif %}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+    {% if editable %}
+    <form method="post" enctype="multipart/form-data" class="bb-music-up" id="bb-music-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="branch" value="{{ branch }}"><input type="hidden" name="action" value="bb_music">
+      <div><label class="field-label" for="bb-music-theme">{{ t('bbTheme') }}</label>
+        <select id="bb-music-theme" name="BB_MUSIC_THEME">{% for th_ in music_themes %}<option value="{{ th_ }}"{% if th_ == 'songkran' %} selected{% endif %}>{{ t('bbTheme_' ~ th_) }}</option>{% endfor %}</select></div>
+      <div><label class="field-label" for="bb-music-file">{{ t('bbMusicChoose') }}</label>
+        <input type="file" id="bb-music-file" name="BB_MUSIC_FILE" accept=".mp3,.m4a,.ogg,.wav,audio/*" required></div>
+      <div><button class="action primary" type="submit" id="bb-music-up">&#11014; {{ t('bbMusicUpload') }}</button></div>
+    </form>
+    {% endif %}
+  </section>
 </div>
 
 <div class="card mt14" id="line-setup">

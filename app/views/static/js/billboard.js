@@ -437,8 +437,22 @@
   // update 104: Songkran has its own (original) music - the player follows the theme
   var musicBtn = document.getElementById("xm-music"), PLAYERS = { christmas: window.AOIXmasMusic, songkran: window.AOISongkranMusic }, M = null;
   function curTheme() { return fixedTheme || data.theme; }
+  // update 106: the shop's own music file (settings) plays instead of the built-in tune, looped, same controls
+  var FILES = {};
+  function filePlayer(url) {
+    var a = new Audio(), vol = 0.3;
+    a.loop = true; a.preload = "auto"; a.src = url;
+    return {
+      start: function () { a.volume = vol; var p = a.play(); if (p && p.catch) p.catch(function () { /* needs a tap first */ }); return true; },
+      stop: function () { a.pause(); },
+      setVolume: function (pct) { vol = Math.max(0, Math.min(100, pct || 0)) / 100; a.volume = vol; },
+      running: function () { return !a.paused; }
+    };
+  }
   function pick() {
-    var want = PLAYERS[curTheme()] || null;
+    var url = (data.music_urls || {})[curTheme()];
+    if (url && !FILES[url]) FILES[url] = filePlayer(url);
+    var want = url ? FILES[url] : (PLAYERS[curTheme()] || null);
     if (M && M !== want) M.stop();
     M = want;
   }
@@ -447,7 +461,7 @@
   function music() {
     if (!musicBtn) return;
     musicBtn.hidden = !wanted();
-    if (!wanted()) { for (var k in PLAYERS) if (PLAYERS[k]) PLAYERS[k].stop(); return; }
+    if (!wanted()) { for (var k in PLAYERS) if (PLAYERS[k]) PLAYERS[k].stop(); for (var u in FILES) FILES[u].stop(); return; }
     M.setVolume(data.volume);
     if (muted()) { M.stop(); musicBtn.innerHTML = musicBtn.getAttribute("data-mute"); musicBtn.className = "xm-music off"; return; }
     if (M.running()) { musicBtn.innerHTML = musicBtn.getAttribute("data-play"); musicBtn.className = "xm-music on"; }

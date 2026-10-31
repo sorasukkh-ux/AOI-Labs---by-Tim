@@ -4819,3 +4819,57 @@ class Update105(Base):
         self.assertEqual((r.status_code, r.mimetype), (200, "image/png"))
         self.assertIn("max-age", r.headers["Cache-Control"])
         self.assertEqual(self.client.get(path.split("?")[0] + "?t=bad").status_code, 404)
+
+
+class Update106(Base):
+    """The shop's own music file per billboard theme: upload (type and size checked), streamed with the TV key, delete."""
+
+    MP3 = b"ID3\x03\x00\x00\x00\x00\x00\x00" + b"\xff\xfb\x90\x00" * 500
+
+    def upload(self, data, theme="songkran", name="song.mp3"):
+        import io
+        return self.client.post("/admin/milling/maintenance?branch=factory2", data={
+            "csrf_token": self.token("/"), "branch": "factory2", "action": "bb_music", "BB_MUSIC_THEME": theme,
+            "BB_MUSIC_FILE": (io.BytesIO(data), name)}, content_type="multipart/form-data")
+
+    def test_music_file(self):
+        self.login("admin")
+        self.client.get("/lang/en")
+        self.upload(b"hello not audio", name="x.mp3")
+        self.assertEqual(self.db("AOITS_BB_MUSIC"), [])
+        self.upload(self.MP3, theme="default")
+        self.assertEqual(self.db("AOITS_BB_MUSIC"), [])
+        r = self.upload(self.MP3)
+        self.assertEqual(r.status_code, 302)
+        doc = self.db("AOITS_BB_MUSIC")[0]
+        self.assertEqual((doc["THEME"], doc["FILE_EXT"], doc["MIME"], doc["FILE_SIZE"]), ("songkran", "mp3", "audio/mpeg", len(self.MP3)))
+        # saving the other billboard settings keeps the file
+        with self.app.app_context():
+            from app.models import tv
+            from app.models.branch import Branch
+            form = {"BB_SHOW_" + c: "1" for c in tv.PRICE_SKUS}
+            form.update({"BB_BUY_" + c: "1" for c in tv.PRICE_SKUS})
+            tv.save_bb_settings("factory2", form, "admin")
+            self.assertIn("songkran", Branch.get("factory2")["SYSP_BB"]["MUSIC_FILES"])
+            if not tv.key_of("factory2"):
+                tv.issue_key("factory2", "admin")
+            key = tv.key_of("factory2")
+        self.logout()
+        data = self.client.get("/tv/factory2/prices/data?key=%s" % key).get_json()
+        url = data["music_urls"]["songkran"]
+        self.assertNotIn("christmas", data["music_urls"])
+        r = self.client.get(url)
+        self.assertEqual((r.status_code, r.mimetype, r.data), (200, "audio/mpeg", self.MP3))
+        r = self.client.get(url, headers={"Range": "bytes=0-9"})
+        self.assertEqual((r.status_code, r.data), (206, self.MP3[:10]))
+        self.assertEqual(self.client.get(url.replace(key, "wrong")).status_code, 403)
+        self.assertIn("music_urls", self.text("/tv/factory2/prices?key=%s" % key))
+        # the settings page lists it; delete goes back to the built-in tune
+        self.login("admin")
+        page = self.text("/admin/milling/maintenance?branch=factory2")
+        self.assertIn("song.mp3", page)
+        self.client.post("/admin/milling/maintenance?branch=factory2", data={"csrf_token": self.token("/"), "branch": "factory2",
+                         "action": "bb_music_del", "BB_MUSIC_THEME": "songkran"})
+        self.assertEqual(self.db("AOITS_BB_MUSIC"), [])
+        self.logout()
+        self.assertEqual(self.client.get(url).status_code, 404)

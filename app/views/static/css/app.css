@@ -1625,3 +1625,10 @@ tr.cpn-used td, tr.cpn-cancelled td, tr.cpn-expired td { color: var(--text-muted
 .cp-th-songkran .cp-sub, .cp-th-songkran .cp-note { color: #e0f2fe; } .cp-th-songkran .cp-pointer { border-top-color: #38bdf8; }
 .cp-th-songkran .cp-hub { background: radial-gradient(circle at 35% 30%, #e0f2fe, #38bdf8 60%, #0369a1); color: #fff; }
 .cp-th-songkran .cp-bulb { fill: #7dd3fc; } .cp-th-songkran .cp-result-in .l { color: #0369a1; }
+
+/* update 106: own music file */
+.bb-music-file{margin-top:14px}
+.bb-music-table .bb-audio{width:240px;max-width:100%;height:34px}
+.bb-music-up{display:grid;grid-template-columns:200px 1fr auto;gap:12px;align-items:end;margin-top:12px}
+.bb-music-up input[type="file"]{width:100%;min-width:0}
+@media (max-width:700px){.bb-music-up{grid-template-columns:1fr}}

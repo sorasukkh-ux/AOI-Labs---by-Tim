@@ -14,6 +14,7 @@ from .milling_order import MillingOrder
 from .price import Price
 from .rules import status_flow as flow
 from . import variety as var
+from . import bb_music
 from ..timeutil import now_local, now_utc, to_local
 
 READY = (flow.FINISHED, flow.DELIVERY)
@@ -252,7 +253,9 @@ def save_bb_settings(branch_id, form, ope_user):
     values = {"SYSP_BB": {"SKUS": [r[2] for r in sorted(rows, key=lambda x: (x[0], x[1]))], "SECONDS": seconds,
                           "PROMO_MILL": form.get("BB_PROMO") == "1", "MESSAGES": [m for m in messages if m],
                           "THEME": form.get("BB_THEME") if form.get("BB_THEME") in BB_THEMES else "default",
-                          "MUSIC": form.get("BB_MUSIC") == "1", "VOLUME": volume}}
+                          "MUSIC": form.get("BB_MUSIC") == "1", "VOLUME": volume,
+                          # update 106: the uploaded music files are kept
+                          "MUSIC_FILES": ((Branch.get(branch_id) or {}).get("SYSP_BB") or {}).get("MUSIC_FILES") or {}}}
     values.update(audit_update(ope_user))
     col(Branch.COL).update_one({"BRANCH_ID": branch_id}, {"$set": values})
     return bb_settings(branch_id)
@@ -296,4 +299,5 @@ def billboard(branch_id):
             "now_ms": int(now.timestamp() * 1000), "tz_min": int(local_now.utcoffset().total_seconds() // 60),
             "items": items, "discount": discount, "messages": cfg["messages"], "seconds": cfg["seconds"], "theme": cfg["theme"],
             "music": cfg["music"], "volume": cfg["volume"],
+            "music_files": {t: {"ext": f["ext"], "ver": f["ver"]} for t, f in bb_music.files(branch_id).items()},   # update 106
             "updated": local_now.strftime("%H:%M:%S")}

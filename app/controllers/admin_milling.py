@@ -8,7 +8,7 @@ from ..i18n import texts
 from ..models.base import ValidationError
 from ..models.branch import Branch
 from ..models.customer import Customer
-from ..models import tv, line_link
+from ..models import tv, line_link, bb_music
 from ..models.mill_test import MillTest
 from ..models.price import Price
 from ..models.mill_yield import MillYield
@@ -16,7 +16,7 @@ from ..models import variety as var
 from ..models.milling_order import MillingOrder
 from ..models.rules import receive_time
 from ..security import can, current_user, maintainable_branches, pick_maintenance_branch, require
-from ..timeutil import now_local, today_local
+from ..timeutil import now_local, to_local, today_local
 from .common import flash_error, flash_ok
 
 bp = Blueprint("admin_milling", __name__, url_prefix="/admin/milling")
@@ -88,6 +88,19 @@ def maintenance():
             else:
                 flash_ok("msgTvKey")
             return redirect(url_for("admin_milling.maintenance", branch=branch, _anchor="tv-display"))
+        if request.form.get("action") in ("bb_music", "bb_music_del"):     # update 106: the shop's own music file
+            theme = request.form.get("BB_MUSIC_THEME")
+            try:
+                if request.form.get("action") == "bb_music":
+                    upload = request.files.get("BB_MUSIC_FILE")
+                    bb_music.save(branch, theme, upload.filename if upload else "", upload.read() if upload else b"", current_user()["USER_ID"])
+                else:
+                    bb_music.delete(branch, theme, current_user()["USER_ID"])
+            except ValidationError as error:
+                flash_error(error)
+            else:
+                flash_ok("bbMusicSaved" if request.form.get("action") == "bb_music" else "bbMusicDeleted")
+            return redirect(url_for("admin_milling.maintenance", branch=branch, _anchor="bb-music"))
         if request.form.get("action") == "billboard":            # update 84: what the price billboard shows
             try:
                 tv.save_bb_settings(branch, request.form, current_user()["USER_ID"])
@@ -109,8 +122,11 @@ def maintenance():
     tv_path = url_for("tv.board", branch=branch, key=key) if key else None
     tv_link = (request.url_root.rstrip("/") + tv_path) if key else None
     bb_path = url_for("tv.prices", branch=branch, key=key) if key else None          # update 83: price billboard
+    music_files = bb_music.files(branch)                                            # update 106
+    music_urls = {t: url_for("tv.music", branch=branch, theme=t, ext=f["ext"], key=key, v=f["ver"]) for t, f in music_files.items()} if key else {}
     return render_template("admin/milling_maintenance.html", branch=branch, branches=maintainable_branches(), tv_link=tv_link,
-                           tv_path=tv_path, bb_path=bb_path, bb=tv.bb_settings(branch), bb_prices={c: (Price.get(branch, c) or {}) for c in tv.PRICE_SKUS}, line=line_link.status(), line_events=line_link.recent(8),
+                           tv_path=tv_path, bb_path=bb_path, bb=tv.bb_settings(branch), music_files=music_files, music_urls=music_urls, music_themes=bb_music.THEMES,
+                           music_max_mb=bb_music.MAX_BYTES // (1024 * 1024), fmt_dt=lambda d: to_local(d).strftime("%d/%m/%Y %H:%M") if d else "", bb_prices={c: (Price.get(branch, c) or {}) for c in tv.PRICE_SKUS}, line=line_link.status(), line_events=line_link.recent(8),
                            webhook_path=url_for("line_api.webhook"),
                            values=values or saved, editable=can("AD_MILLTIME", "edit"), preview=_queue_preview(saved))
 

@@ -60,6 +60,7 @@ COLLECTIONS = {
     "AOITS_NABC_INDEX": [(["SCOPE", "PERIOD"], True)],
     "AOITS_MILL_TEST": [(["TEST_ID"], True), (["BRANCH_ID", "TEST_DATE"], False)],
     "AOILOG_AI_ASK": [(["BRANCH_ID", "LOG_DATE"], False), (["USER_ID", "LOG_DATE"], False)],
+    "AOITS_BB_MUSIC": [(["BRANCH_ID", "THEME"], True)],                # update 106
     # ---- technical (not in the DB structure workbook): running numbers for order and customer codes ----
     "AOISYS_COUNTER": [(["COUNTER_KEY"], True)],
 }

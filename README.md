@@ -340,6 +340,10 @@ are kept in `AOITS_SYSLOG` (14 days), the checks in `AOITS_HEALTH` (7 days).
 customer's LINE when "Also send to the customer's LINE" is ticked (shown for customers linked to LINE); "Send to LINE
 only" sends without printing. The same public https address is needed as for the queue QR (update 47).
 
+## Your own billboard music (update 106, DB 1.65)
+
+Milling Maintenance > Price billboard > "เพลงของร้านเอง (ไฟล์เพลง)": upload an MP3 / M4A / OGG / WAV file (up to 10 MB) for the Christmas or Songkran theme. The billboard then loops that file instead of the built-in tune, with the same on / off switch, volume and speaker button; delete it to go back to the built-in tune. The file is kept in MongoDB (`AOITS_BB_MUSIC`) and streamed at `/tv/<branch>/music/<theme>.<ext>?key=...` with the display key. The shop must own the music and hold a licence to play it in public.
+
 ## Coupon QR on LINE (update 105)
 
 The QR picture of the LINE coupon card was blank: the picture route sent `Cache-Control: no-store`, which LINE's image server does not show. It now sends `public, max-age=86400` like the order and member-card QR routes, and the picture URL has `v=2` so LINE fetches it again. After installing, press "ส่ง LINE อีกครั้ง" on the coupon to resend the card.

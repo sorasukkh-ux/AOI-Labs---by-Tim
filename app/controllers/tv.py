@@ -1,8 +1,11 @@
 """TV display per factory: /tv/<branch>?key=<display key>. No sign-in; the key is in the link (see models/tv.py)."""
-from flask import Blueprint, abort, jsonify, render_template, request, url_for
+import io
+
+from flask import Blueprint, abort, jsonify, render_template, request, send_file, url_for
 
 from ..i18n import t_in
 from ..models import tv
+from ..models import bb_music
 from ..models import variety as var
 
 bp = Blueprint("tv", __name__, url_prefix="/tv")
@@ -50,7 +53,7 @@ def prices(branch):
     theme = request.args.get("theme") if request.args.get("theme") in tv.BB_THEMES else None     # update 85: ?theme= tries a theme
     text = {k: {"th": t_in("th", k), "en": t_in("en", k)} for k in BB_LABELS}
     text["days"], text["months"] = DAYS_TH, MONTHS_TH
-    data = tv.billboard(branch)
+    data = _with_music(tv.billboard(branch), branch)
     return render_template("tv/prices.html", data=data, text=text, show=show, theme=theme or data["theme"], fixed_theme=theme,
                            data_url=url_for("tv.prices_data", branch=branch, key=request.args.get("key")))
 
@@ -58,4 +61,25 @@ def prices(branch):
 @bp.route("/<branch>/prices/data")
 def prices_data(branch):
     _check(branch)
-    return jsonify(tv.billboard(branch))
+    return jsonify(_with_music(tv.billboard(branch), branch))
+
+
+def _with_music(data, branch):
+    """Update 106: the links of the shop's own music files (the key is needed, so they are made here)."""
+    key = request.args.get("key")
+    data["music_urls"] = {t: url_for("tv.music", branch=branch, theme=t, ext=f["ext"], key=key, v=f["ver"])
+                          for t, f in (data.get("music_files") or {}).items()}
+    return data
+
+
+@bp.route("/<branch>/music/<theme>.<ext>")
+def music(branch, theme, ext):
+    """Update 106: the uploaded music file of a theme (byte ranges work, so the TV browser can stream and loop it)."""
+    _check(branch)
+    doc = bb_music.get(branch, theme)
+    if not doc or doc.get("FILE_EXT") != ext:
+        abort(404)
+    resp = send_file(io.BytesIO(bytes(doc["DATA"])), mimetype=doc["MIME"], conditional=True, etag=doc["FILE_VER"],
+                     max_age=86400, download_name="%s.%s" % (theme, ext))
+    resp.headers["Cache-Control"] = "public, max-age=86400"
+    return resp
