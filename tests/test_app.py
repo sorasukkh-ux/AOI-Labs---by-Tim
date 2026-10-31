@@ -4591,5 +4591,62 @@ class Update87(Base):
         self.assertIn('value="ranking"', self.text("/admin/milling/maintenance?branch=factory2"))
 
 
+class Update93(Base):
+    """Christmas / New Year campaign: points add up per customer and type, 3 gift levels, the special lucky draw."""
+
+    def form(self, **extra):
+        from app.timeutil import today_local
+        from datetime import timedelta
+        with self.app.app_context():
+            d = today_local()
+        f = {"branch": "factory2", "CAMP_NAME": "Xmas", "DATE_FROM": (d - timedelta(days=3)).isoformat(),
+             "DATE_TO": (d + timedelta(days=30)).isoformat(), "KG_PER_POINT": "10", "STATUS": "A"}
+        for tp, pts in (("ML", (5, 10, 20)), ("BY", (2, 4, 6)), ("SL", (1, 2, 3))):
+            for n, p in enumerate(pts, 1):
+                f["PTS_%s_%d" % (tp, n)] = str(p); f["GIFT_%s_%d" % (tp, n)] = "%s gift %d" % (tp, n)
+            f["SPECIAL_" + tp] = "%s gold" % tp
+        f.update(extra)
+        return f
+
+    def test_campaign(self):
+        self.login("admin")
+        self.client.get("/lang/en")
+        self.assertIn('id="cp-entry"', self.text("/finance/marketing?branch=factory2"))
+        bad = self.form(PTS_ML_2="3")                             # level 2 below level 1
+        self.post("/finance/campaign", bad, "/finance/campaign?branch=factory2")
+        self.assertEqual(self.db("AOIMS_CAMPAIGN"), [])
+        self.post("/finance/campaign", self.form(), "/finance/campaign?branch=factory2")
+        camp = self.db("AOIMS_CAMPAIGN")[0]
+        a = self.new_order(REGIST_PADDY="120")["ORD_ID"]            # 120 kg -> 12 points, level 2
+        self.set_status(a, "I", ACT_PADDY="118")
+        self.set_status(a, "F", INV_QTY="60")
+        b = self.new_order(CUST_CODE="C261001002", REGIST_PADDY="55")["ORD_ID"]   # still in queue: no points
+        page = self.text("/finance/campaign?branch=factory2&id=%s&kind=ML" % camp["CAMP_ID"])
+        self.assertIn("ML gift 2", page)
+        with self.app.app_context():
+            from app.models import campaign as cp
+            rows = cp.standings(cp.get(camp["CAMP_ID"]), "ML")
+        self.assertEqual([(r["cust"], r["points"], r["level"]) for r in rows], [("C261001001", 11, 2)])
+        self.post("/finance/campaign", {"branch": "factory2", "id": camp["CAMP_ID"], "action": "give", "kind": "ML",
+                                        "cust": "C261001001", "level": "2"}, "/finance/campaign?branch=factory2")
+        self.post("/finance/campaign", {"branch": "factory2", "id": camp["CAMP_ID"], "action": "give", "kind": "ML",
+                                        "cust": "C261001001", "level": "3"}, "/finance/campaign?branch=factory2")   # not reached
+        gifts = self.db("AOITS_CAMPGIFT")
+        self.assertEqual([(g["LEVEL"], g["GIFT"]) for g in gifts], [(2, "ML gift 2")])
+        draw_page = self.text("/finance/campaign/%s/draw/ML" % camp["CAMP_ID"])
+        self.assertIn('id="cp-wheel"', draw_page)
+        token = re.search(r'data-csrf="([^"]+)"', draw_page).group(1)
+        r = self.client.post("/finance/campaign/%s/draw/ML" % camp["CAMP_ID"], headers={"X-CSRF-Token": token, "Accept": "application/json"})
+        body = r.get_json()
+        self.assertTrue(body["ok"], body)
+        self.assertEqual((body["winner"], body["gift"]), ("C261001001", "ML gold"))
+        again = self.client.post("/finance/campaign/%s/draw/ML" % camp["CAMP_ID"], headers={"X-CSRF-Token": token, "Accept": "application/json"}).get_json()
+        self.assertEqual(again["winner"], body["winner"])
+        self.assertEqual(len(self.db("AOITS_CAMPDRAW")), 1)
+        none = self.client.post("/finance/campaign/%s/draw/SL" % camp["CAMP_ID"], headers={"X-CSRF-Token": token, "Accept": "application/json"})
+        self.assertEqual(none.status_code, 422)
+        self.assertIn("Winner", self.text("/finance/campaign?branch=factory2&id=%s&kind=ML" % camp["CAMP_ID"]))
+
+
 if __name__ == "__main__":
     unittest.main()

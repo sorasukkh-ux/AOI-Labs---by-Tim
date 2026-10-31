@@ -340,6 +340,14 @@ are kept in `AOITS_SYSLOG` (14 days), the checks in `AOITS_HEALTH` (7 days).
 customer's LINE when "Also send to the customer's LINE" is ticked (shown for customers linked to LINE); "Send to LINE
 only" sends without printing. The same public https address is needed as for the queue QR (update 47).
 
+## Christmas / New Year campaign (update 93, DB 1.61)
+
+- Financial > Marketing > "Christmas / New Year campaign" (right: Marketing; Edit to change, hand gifts over and draw).
+- Set-up: name, dates, kg per point (default 10 kg = 1 point), on / off; for each order type - Milling, Buying (from customers), Selling (to customers) - 3 gift levels (points + gift you type) and one special gift.
+- Points add up per customer and type during the campaign: milling = finished orders (weighed paddy, else registered), buying / selling = closed orders. The customers' table shows kg, points, level medals, points to the next level and the gifts earned; "mark as given" records the hand-over (once per level).
+- Special gift: Open the lucky wheel. Customers who reached level 1 are on the wheel, slice size = points. SPIN asks the server, which draws the winner once (secure random, weighted by points) and keeps it; the wheel spins with ticks and stops on the winner, then confetti, a fanfare and the winner card. Afterwards the wheel only replays the same result.
+- New collections AOIMS_CAMPAIGN, AOITS_CAMPGIFT, AOITS_CAMPDRAW.
+
 ## Ranking: buying and selling take turns (update 92)
 
 - The ranking theme now shows both lists: the selling-price ranking (blue), then the buying-price ranking (green), switching after the highlight has walked through the list. Only one list when only one side has prices. Five rows or fewer are drawn bigger.

@@ -344,3 +344,77 @@ def investment():
         edit_date=to_local(editing["BUY_DATE"]).date().isoformat() if editing and editing.get("BUY_DATE") else today_local().isoformat(),
         years=list(range(today_local().year - 2, today_local().year + 3)),
         can_create=can(INVEST, "create"), can_edit=can(INVEST, "edit"), can_delete=can(INVEST, "delete"))
+
+
+# ---------- Christmas / New Year campaign (update 93) ----------
+CP_TYPE_KEYS = {"ML": "cpTypeML", "BY": "cpTypeBY", "SL": "cpTypeSL"}
+
+
+@bp.route("/campaign", methods=["GET", "POST"])
+@require(MARKETING)
+def campaign():
+    """Marketing > Campaign: the campaign set-up (3 levels of gifts per order type + a special gift), the customers'
+    points, gifts handed over and the lucky draw."""
+    from ..models import campaign as cp
+    branch = _branch_or_403()
+    camp_id = request.values.get("id") or None
+    if request.method == "POST":
+        if not can(MARKETING, "edit"):
+            abort(403)
+        action = request.form.get("action")
+        if action == "give":
+            try:
+                cp.give(camp_id, branch, request.form.get("kind"), request.form.get("cust"), int(request.form.get("level") or 0), _user_id())
+            except (ValidationError, ValueError) as error:
+                flash_error(error if isinstance(error, ValidationError) else ValidationError("errNumber"))
+            else:
+                flash_ok("cpMsgGiven")
+            return redirect(url_for("finance.campaign", branch=branch, id=camp_id, kind=request.form.get("kind"), _anchor="cp-standings"))
+        try:
+            saved = cp.save(branch, camp_id, request.form, _user_id())
+        except ValidationError as error:
+            flash_error(error)
+            return redirect(url_for("finance.campaign", branch=branch, id=camp_id))
+        flash_ok("cpMsgSaved")
+        return redirect(url_for("finance.campaign", branch=branch, id=saved["CAMP_ID"]))
+    camps = cp.for_branch(branch)
+    camp = (cp.get(camp_id) if camp_id else None) or (camps[0] if camps and request.args.get("new") != "1" else None)
+    if camp and camp["BRANCH_ID"] != branch:
+        abort(404)
+    kind = request.args.get("kind") if request.args.get("kind") in cp.TYPES else "ML"
+    data = None
+    if camp:
+        data = {t: {"rows": cp.standings(camp, t), "draw": cp.draw_of(camp["CAMP_ID"], t)} for t in cp.TYPES}
+    form = camp or cp.blank(branch)
+
+    def day(value):
+        return to_local(value).date().isoformat() if value else ""
+    return render_template("finance/campaign.html", branch=branch, branches=maintainable_branches(), camps=camps, camp=camp,
+                           form=form, data=data, kind=kind, types=cp.TYPES, type_keys=CP_TYPE_KEYS, day=day,
+                           state_of=cp.state, can_edit=can(MARKETING, "edit"))
+
+
+@bp.route("/campaign/<camp_id>/draw/<kind>", methods=["GET", "POST"])
+@require(MARKETING)
+def campaign_draw(camp_id, kind):
+    """The lucky wheel for the special gift of one order type. POST picks the winner (once) and returns it."""
+    from flask import jsonify
+    from ..models import campaign as cp
+    from ..i18n import texts
+    camp = cp.get(camp_id)
+    if not camp or kind not in cp.TYPES or camp["BRANCH_ID"] not in [b for b in maintainable_branches()]:
+        abort(404)
+    if request.method == "POST":
+        if not can(MARKETING, "edit"):
+            abort(403)
+        try:
+            d = cp.draw(camp_id, camp["BRANCH_ID"], kind, _user_id())
+        except ValidationError as error:
+            return jsonify({"ok": False, "error": t(error.key, **error.params)}), 422
+        return jsonify({"ok": True, "winner": d["WINNER_CUST"], "name": d["WINNER_NAME"], "gift": d["GIFT"],
+                        "tickets": d["WINNER_TICKETS"], "total": d["TICKETS"]})
+    done = cp.draw_of(camp_id, kind)
+    return render_template("finance/campaign_draw.html", camp=camp, kind=kind, type_keys=CP_TYPE_KEYS,
+                           entrants=cp.entrants(camp, kind), done=done, can_edit=can(MARKETING, "edit"),
+                           back=url_for("finance.campaign", branch=camp["BRANCH_ID"], id=camp_id, kind=kind),
+                           js_text=texts("cpSpin", "cpSpinning", "cpWinner", "cpReplay", "errServer", "cpTickets"))
