@@ -108,3 +108,22 @@ def receipt(title, orders_no, customer, date, lines, total, base=None, labels=No
                 {"type": "box", "layout": "vertical", "spacing": "sm", "contents": [item(*l) for l in lines] or [_text("-")]},
                 {"type": "separator", "color": LINE_GREY},
                 row(lb.get("total", "รวม"), "%s THB" % total, "md", "bold")]}}
+
+
+def coupon_card(title, name, value, expire, note, qr_url, code, base, labels):
+    """Update 96: the campaign coupon - festive header, value in THB, the customer, expiry, the QR to show at the counter."""
+    head = [_logo(base)] if base else []
+    return {"type": "bubble", "size": "mega",
+            "header": {"type": "box", "layout": "vertical", "backgroundColor": "#B91C1C", "paddingAll": "14px", "contents": [
+                _text("🎄 " + title, "md", "bold", "#FFFFFF"), _text(labels["coupon"], "xs", color="#FDE68A")]},
+            "body": {"type": "box", "layout": "vertical", "spacing": "md", "paddingAll": "16px", "contents": head + [
+                {"type": "box", "layout": "baseline", "contents": [
+                    _text(value, "3xl", "bold", "#15803D", flex=0), _text(" THB", "md", "bold", "#15803D", flex=0)]},
+                _text(labels["for"] + " " + name, "sm", "bold"),
+                _text(labels["expire"] + " " + expire, "xs", color=MUTED),
+                *([_text(note, "xs", color=MUTED)] if note else []),
+                {"type": "separator", "color": LINE_GREY},
+                {"type": "box", "layout": "horizontal", "contents": [
+                    {"type": "filler"}, {"type": "box", "layout": "vertical", "flex": 4, "contents": [_qr(qr_url)]}, {"type": "filler"}]},
+                _text(code, "xs", "bold", align="center"),
+                _text(labels["how"], "xxs", color=MUTED, align="center")]}}

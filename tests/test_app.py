@@ -4651,6 +4651,7 @@ class Update93(Base):
         self.assertEqual([(g["CUST_CODE"], g["LEVEL"], g["GIFT"]) for g in self.db("AOITS_CAMPGIFT")], [("C261001001", 1, "ML gift 1")])
         draw_page = self.text("/finance/campaign/%s/draw/ML" % camp["CAMP_ID"])
         self.assertIn('id="cp-wheel"', draw_page)
+        self.assertIn('id="cp-full"', draw_page)                               # update 97: full screen
         token = re.search(r'data-csrf="([^"]+)"', draw_page).group(1)
         hdr = {"X-CSRF-Token": token, "Accept": "application/json"}
         body = self.client.post("/finance/campaign/%s/draw/ML" % camp["CAMP_ID"], headers=hdr).get_json()
@@ -4661,6 +4662,86 @@ class Update93(Base):
         self.assertEqual(self.client.post("/finance/campaign/%s/draw/SL" % camp["CAMP_ID"], headers=hdr).status_code, 422)
         self.assertIn("Winner", self.text("/finance/campaign?branch=factory2&id=%s&kind=ML" % camp["CAMP_ID"]))
         self.assertIn("No customer has points", self.text("/finance/campaign?branch=factory2&id=%s&kind=BY" % camp["CAMP_ID"]))
+
+
+class Update96(Base):
+    """Campaign coupons: issued to one LINE customer, scanned on a milling or customer buying order, used once."""
+
+    def test_coupons(self):
+        from datetime import timedelta
+        self.login("admin")
+        self.client.get("/lang/en")
+        with self.app.app_context():
+            from app.timeutil import today_local
+            d = today_local()
+            col("AOIMS_CUSTOMER").update_one({"CUST_CODE": "C261001001"}, {"$set": {"LINE_USER_ID": "U" + "1" * 32}})
+            col("AOIMS_CUSTOMER").update_one({"CUST_CODE": "C261001002"}, {"$set": {"LINE_USER_ID": "U" + "2" * 32}})
+        f = {"branch": "factory2", "CAMP_NAME": "Xmas", "DATE_FROM": (d - timedelta(days=5)).isoformat(),
+             "DATE_TO": (d + timedelta(days=30)).isoformat(), "KG_PER_POINT": "10", "STATUS": "A"}
+        self.post("/finance/campaign", f, "/finance/campaign?branch=factory2")
+        camp = self.db("AOIMS_CAMPAIGN")[0]
+        issue = {"branch": "factory2", "id": camp["CAMP_ID"], "action": "coupon", "CPN_CUST": "C261001003", "CPN_VALUE": "100"}
+        self.post("/finance/campaign", issue, "/finance/campaign?branch=factory2")                 # not linked to LINE
+        self.assertEqual(self.db("AOITS_COUPON"), [])
+        self.post("/finance/campaign", dict(issue, CPN_CUST="C261001001"), "/finance/campaign?branch=factory2")
+        self.post("/finance/campaign", dict(issue, CPN_CUST="C261001001", CPN_VALUE="20"), "/finance/campaign?branch=factory2")
+        self.post("/finance/campaign", dict(issue, CPN_CUST="C261001002", CPN_VALUE="50"), "/finance/campaign?branch=factory2")
+        coupons = {(c["CUST_CODE"], c["VALUE"]): c for c in self.db("AOITS_COUPON")}
+        big, small, other = coupons[("C261001001", 100.0)], coupons[("C261001001", 20.0)], coupons[("C261001002", 50.0)]
+        self.assertEqual(big["EXPIRE_DATE"].date(), camp["DATE_TO"].date())
+        self.assertTrue(any(n["NOTIFY_KIND"] == "coupon" for n in self.db("AOITS_NOTIFY")))
+        page = self.text("/finance/campaign?branch=factory2&id=%s" % camp["CAMP_ID"])
+        self.assertIn(big["COUPON_ID"], page)
+        with self.app.app_context():
+            from app.models import coupon as cpn
+            qr = {c["COUPON_ID"]: cpn.qr_text(c) for c in (big, small, other)}
+        # milling order of 33 kg: payment is small, the 100 THB coupon is used up
+        o = self.new_order()
+        pay = o["EST_PAY_MILLFEE"] + o["EST_PAY_DELIVERY"]
+        use = {"ORD_TYPE": "ML", "ORD_ID": o["ORD_ID"], "action": "apply", "back": "detail"}
+        self.post("/service/milling/coupon", dict(use, COUPON_QR=qr[other["COUPON_ID"]]))           # another customer's coupon
+        self.post("/service/milling/coupon", dict(use, COUPON_QR="AOICPN-%s-wrongwrong" % big["COUPON_ID"]))   # bad secret
+        self.assertIsNone(self.order(o["ORD_ID"]).get("COUPON_ID"))
+        self.post("/service/milling/coupon", dict(use, COUPON_QR=qr[big["COUPON_ID"]]))
+        o2 = self.order(o["ORD_ID"])
+        self.assertEqual((o2["COUPON_ID"], o2["COUPON_AMT"]), (big["COUPON_ID"], round(min(100, pay), 2)))
+        used = next(c for c in self.db("AOITS_COUPON") if c["COUPON_ID"] == big["COUPON_ID"])
+        self.assertEqual((used["STATUS"], used["USED_ORD_ID"], used["FORFEIT"]), ("U", o["ORD_ID"], round(100 - min(100, pay), 2)))
+        self.post("/service/milling/coupon", dict(use, COUPON_QR=qr[small["COUPON_ID"]]))           # one coupon per order
+        self.assertEqual(self.order(o["ORD_ID"])["COUPON_ID"], big["COUPON_ID"])
+        self.assertIn("To pay after the coupon", self.text("/service/milling/%s?popup=1" % o["ORD_ID"]))
+        # remove: the coupon is active again; apply again; cancel the order: active again
+        self.post("/service/milling/coupon", dict(use, action="remove"))
+        self.assertEqual(next(c for c in self.db("AOITS_COUPON") if c["COUPON_ID"] == big["COUPON_ID"])["STATUS"], "A")
+        self.post("/service/milling/coupon", dict(use, COUPON_QR=qr[big["COUPON_ID"]]))
+        self.set_status(o["ORD_ID"], "CC")
+        self.assertEqual(next(c for c in self.db("AOITS_COUPON") if c["COUPON_ID"] == big["COUPON_ID"])["STATUS"], "A")
+        # a second order, closed: the ledger keeps the income and posts the coupon as an expense
+        o3 = self.new_order()["ORD_ID"]
+        self.post("/service/milling/coupon", {"ORD_TYPE": "ML", "ORD_ID": o3, "action": "apply", "back": "detail", "COUPON_QR": qr[small["COUPON_ID"]]})
+        self.set_status(o3, "I", ACT_PADDY="33")
+        self.set_status(o3, "F", INV_QTY="15")
+        self.set_status(o3, "C")
+        ex = [a for a in self.db("AOITS_ACCOUNT") if a["REF_ORD_ID"] == o3 and a["ACC_TYPE"] == "EX"]
+        self.assertEqual([a["ACC_AMOUNT"] for a in ex], [round(min(20, pay), 2)])
+        self.post("/service/milling/coupon", {"ORD_TYPE": "ML", "ORD_ID": self.new_order()["ORD_ID"], "action": "apply", "back": "detail",
+                                              "COUPON_QR": qr[small["COUPON_ID"]]})                 # used: refused
+        self.assertEqual(sum(1 for m in self.db("AOITS_ORDMILLING") if m.get("COUPON_ID") == small["COUPON_ID"]), 1)
+        # customer buying order (SL) of the other customer
+        r = self.client.post("/service/buysell/new", data={"csrf_token": self.token("/service/milling/new"), "ORD_TYPE": "SL", "mode": "open",
+                                                           "CUST_CODE": "C261001002", "QTY_PADDY": "10"}, headers={"Accept": "application/json"})
+        self.assertTrue(r.get_json()["ok"])
+        sl = next(x for x in self.db("AOITS_ORDBUYSELL") if x["ORD_TYPE"] == "SL" and x["CUST_CODE"] == "C261001002")
+        self.post("/service/milling/coupon", {"ORD_TYPE": "SL", "ORD_ID": sl["ORD_ID"], "action": "apply", "COUPON_QR": qr[other["COUPON_ID"]]},
+                  "/service/buysell/")
+        sl2 = next(x for x in self.db("AOITS_ORDBUYSELL") if x["ORD_ID"] == sl["ORD_ID"])
+        self.assertEqual(sl2["COUPON_AMT"], round(min(50, sl["ORD_AMOUNT"]), 2))
+        self.assertIn("To pay after the coupon", self.text("/service/buysell/billing?ids=" + sl["ORD_ID"]))
+        # cancel an unused coupon
+        with self.app.app_context():
+            col("AOITS_COUPON").update_one({"COUPON_ID": big["COUPON_ID"]}, {"$set": {"EXPIRE_DATE": camp["DATE_FROM"] - timedelta(days=1)}})
+            from app.models import coupon as cpn
+            self.assertEqual(cpn.state(cpn.get(big["COUPON_ID"])), "expired")
 
 
 if __name__ == "__main__":

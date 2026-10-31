@@ -90,6 +90,50 @@
     </tbody>
   </table></div>
 </div>
+{% if camp %}
+{# update 96: coupons - issued to one customer, sent by LINE only, scanned at the counter (milling / customer buying) #}
+<div class="card mt14" id="cp-coupons">
+  <div class="card-head"><p class="card-title">&#127903; {{ t('cpnTitle') }}</p></div>
+  <p class="cap-note tight">{{ t('cpnDesc') }}</p>
+  {% if can_edit %}
+  <form method="post" class="cpn-form" id="cpn-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="branch" value="{{ branch }}">
+    <input type="hidden" name="id" value="{{ camp.CAMP_ID }}"><input type="hidden" name="action" value="coupon"><input type="hidden" name="PUBLIC_BASE" value="" data-public-base>
+    <div class="cpn-grid">
+      <div class="cpn-cust"><label class="field-label" for="cpn-cust">{{ t('colCustomer') }} <small>({{ t('cpnLineOnly') }})</small></label>
+        <input type="text" id="cpn-cust" name="CPN_CUST" list="cpn-cust-list" required placeholder="{{ t('cpnCustPh') }}" autocomplete="off" data-scan>
+        <datalist id="cpn-cust-list">{% for c in line_customers %}<option value="{{ c.code }}">{{ c.name }}</option>{% endfor %}</datalist></div>
+      <div><label class="field-label" for="cpn-value">{{ t('cpnValue') }}</label><input type="number" id="cpn-value" name="CPN_VALUE" min="1" step="1" required placeholder="100"></div>
+      <div><label class="field-label" for="cpn-expire">{{ t('cpnExpire') }}</label><input type="date" id="cpn-expire" name="CPN_EXPIRE" value="{{ day(camp.DATE_TO) }}"></div>
+      <div class="cpn-note"><label class="field-label" for="cpn-note">{{ t('cpnNote') }}</label><input type="text" id="cpn-note" name="CPN_NOTE" maxlength="80" placeholder="{{ t('cpnNotePh') }}"></div>
+      <div class="cpn-send"><button class="action primary" type="submit" id="cpn-issue">&#128172; {{ t('cpnIssue') }}</button></div>
+    </div>
+    {% if not line_customers %}<p class="cap-note">{{ t('cpnNoLineCustomers') }}</p>{% endif %}
+  </form>
+  {% endif %}
+  <div class="inv-table-wrap mt14"><table class="tv-table cp-table">
+    <thead><tr><th>{{ t('cpnCode') }}</th><th>{{ t('colCustomer') }}</th><th class="num">THB</th><th>{{ t('cpnExpire') }}</th><th>LINE</th><th>{{ t('cpnStatus') }}</th><th></th></tr></thead>
+    <tbody>
+    {% for c in coupons %}
+    <tr class="cpn-{{ c.state }}">
+      <td><b>{{ c.COUPON_ID }}</b>{% if c.NOTE %}<br><small class="cp-code">{{ c.NOTE }}</small>{% endif %}</td>
+      <td>{{ c.name }}<br><small class="cp-code">{{ c.CUST_CODE }}</small></td>
+      <td class="num"><b>{{ c.VALUE|num }}</b></td>
+      <td>{{ fmt_date(c.EXPIRE_DATE) }}</td>
+      <td>{% if c.LINE_SENT_DATE %}<span class="badge approved">{{ t('cpnSent') }}</span>{% else %}<span class="badge blocked" title="{{ t(c.LINE_ERROR or 'lnNotConfigured') }}">{{ t('cpnNotSent') }}</span>{% endif %}</td>
+      <td><span class="cpn-st">{{ t('cpnSt_' ~ c.state) }}</span>
+        {% if c.state == 'used' %}<br><small class="cp-code">{{ t('cpnUsedOn', no=c.USED_ORD_ID, amt='{:,.2f}'.format(c.USED_AMOUNT or 0)) }}{% if c.FORFEIT %} · {{ t('cpnForfeit', amt='{:,.2f}'.format(c.FORFEIT)) }}{% endif %}</small>{% endif %}</td>
+      <td class="cpn-acts">{% if can_edit and c.state == 'active' %}
+        <form method="post" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="branch" value="{{ branch }}">
+          <input type="hidden" name="id" value="{{ camp.CAMP_ID }}"><input type="hidden" name="coupon" value="{{ c.COUPON_ID }}"><input type="hidden" name="PUBLIC_BASE" value="" data-public-base>
+          <button class="action small" type="submit" name="action" value="coupon_resend">{{ t('cpnResend') }}</button>
+          <button class="action small" type="submit" name="action" value="coupon_cancel" data-confirm="{{ t('cpnConfirmCancel', id=c.COUPON_ID) }}">{{ t('btnCancel') }}</button></form>{% endif %}</td>
+    </tr>
+    {% else %}<tr><td colspan="7" class="hint center">{{ t('cpnNone') }}</td></tr>{% endfor %}
+    </tbody>
+  </table></div>
+</div>
+{% endif %}
 {% else %}
 {# update 94: the points table is there before the first save too, with what to do #}
 <div class="card mt14" id="cp-standings">

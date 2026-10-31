@@ -16,7 +16,10 @@
         <tr><td>{{ mat_name(l.MAT_CODE) }}</td><td class="num">{{ l.ORD_QTY|num }}</td><td class="num">{{ l.PRICING_UINT|num }}</td><td class="num">{{ l.ORD_AMOUNT|num }}</td></tr>
       {% endfor %}{% endfor %}
       </tbody>
-      <tfoot><tr><td colspan="3">{{ t('totalLabel') }}</td><td class="num">{{ total|num }}</td></tr></tfoot>
+      <tfoot><tr><td colspan="3">{{ t('totalLabel') }}</td><td class="num">{{ total|num }}</td></tr>
+      {% set cpn = orders|selectattr('COUPON_AMT')|map(attribute='COUPON_AMT')|sum %}
+      {% if cpn %}<tr><td colspan="3">&#127903; {{ t('cpnLabel') }} {% for o in orders if o.COUPON_ID %}{{ o.COUPON_ID }} {% endfor %}</td><td class="num">-{{ cpn|num }}</td></tr>
+      <tr><td colspan="3"><b>{{ t('cpnToPay') }}</b></td><td class="num"><b>{{ (total - cpn)|num }}</b></td></tr>{% endif %}</tfoot>
     </table>
   </div>
   <div class="rc-actions">

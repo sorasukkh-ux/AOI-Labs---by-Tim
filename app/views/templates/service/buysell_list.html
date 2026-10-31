@@ -78,6 +78,16 @@
     {% if order.REF_INV_LOC %}<p class="bs-note">{{ t('lblLocation') }}: {{ order.REF_INV_LOC }}</p>{% endif %}
 
     <a class="action bs-billing-btn" href="{{ url_for('service_buysell.billing', ids=order.ORD_ID) }}" data-popup>{{ t('btnPrintBilling') }}</a>
+    {# update 96: campaign coupon for a customer buying order (SL) #}
+    {% if order.COUPON_ID %}<p class="bs-note cpn-on" data-coupon>&#127903; {{ t('cpnLabel') }} {{ order.COUPON_ID }} -{{ order.COUPON_AMT|num }} THB &middot; <b>{{ t('cpnToPay') }} {{ (order.amount - (order.COUPON_AMT or 0))|num }} THB</b></p>{% endif %}
+    {% if order.ORD_TYPE == 'SL' and editable and order.ORD_STATUS in ('O', 'P', 'U') %}
+    <form method="post" action="{{ url_for('service_milling.coupon_use') }}" class="cpn-use">
+      {{ hidden() }}<input type="hidden" name="ORD_TYPE" value="SL"><input type="hidden" name="ORD_ID" value="{{ order.ORD_ID }}">
+      {% if order.COUPON_ID %}<button class="action small" type="submit" name="action" value="remove">{{ t('cpnRemove') }}</button>
+      {% else %}<input type="text" name="COUPON_QR" placeholder="{{ t('cpnScanPh') }}" autocomplete="off" data-scan="submit" aria-label="{{ t('cpnScanPh') }}">
+        <button class="action small" type="submit" name="action" value="apply">&#127903; {{ t('cpnApply') }}</button>{% endif %}
+    </form>
+    {% endif %}
     {% if order.PRICE_OVR_FLG %}<p class="bs-note bs-price-ovr" data-price-ovr>&#9998; {{ t('priceOvrNote', user=order.PRICE_OVR_USER or '-', reason=order.PRICE_OVR_REASON or '-') }}</p>{% endif %}
     {% if can_price and order.ORD_STATUS in ('O', 'P', 'U') and not order.milling %}
     {# update 78: a super user (Approve right) changes the price of this order, with a reason #}

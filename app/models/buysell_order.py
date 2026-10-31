@@ -275,6 +275,11 @@ class BuySellOrder:
         updated = cls._save(order, values, ope_user)
         if new_status == CLOSED:
             cls._on_close(updated, ope_user, describe)
+        if new_status == CANCELLED:
+            from . import coupon                              # update 96: the coupon can be used again
+            coupon.release_for(updated, ope_user)
+        if new_status == CLOSED:
+            pass
         elif new_status == CANCELLED and order["ORD_TYPE"] == SELL and not cls.is_linked(order):
             Inventory.unreserve(order["BRANCH_ID"], order["ORD_ID"], SELL, ope_user)   # update 56: back to the mill's stock
         elif new_status == CANCELLED and cls.is_linked(order):
@@ -300,6 +305,9 @@ class BuySellOrder:
                                            MOVE_SELLING, ope_user)
         Account.post_order(order, cls.amount(order), "EX" if order["ORD_TYPE"] == BUY else "IN",
                            describe(order), ope_user)
+        if order["ORD_TYPE"] == SELL:
+            from . import coupon                              # update 96: the coupon as an expense
+            coupon.post_on_close(order, SELL, ope_user)
 
     @staticmethod
     def needs_inbound(order):

@@ -23,8 +23,10 @@
     var d = people.length === 1 ? "M0 -200 A200 200 0 1 1 -0.01 -200 Z" : "M0 0 L" + s[0] + " " + s[1] + " A200 200 0 " + large + " 1 " + e[0] + " " + e[1] + " Z";
     wheel.appendChild(svg("path", { d: d, fill: COLORS[i % COLORS.length], stroke: "#fff", "stroke-width": "2" }));
     if (span > 7) {
-      var mid = a + span / 2, tp = pt(118, mid), label = svg("text", { x: tp[0], y: tp[1], "text-anchor": "middle", "dominant-baseline": "middle",
-        transform: "rotate(" + (mid - 90) + " " + tp[0] + " " + tp[1] + ")", "class": "cp-lbl" });
+      var mid = a + span / 2, tp = pt(118, mid), turn = mid - 90;
+      if (mid > 180) turn += 180;                         // update 97: names on the left half read the right way up
+      var label = svg("text", { x: tp[0], y: tp[1], "text-anchor": "middle", "dominant-baseline": "middle",
+        transform: "rotate(" + turn + " " + tp[0] + " " + tp[1] + ")", "class": "cp-lbl" });
       label.textContent = short(p.name);
       wheel.appendChild(label);
     }
@@ -116,5 +118,23 @@
     req.onerror = function () { busy = false; window.AOIModal.alert(text.errServer); };
     req.send();
   });
+  // update 97: full screen (button, or F key) - the wheel fills the screen for the crowd
+  var fullBtn = document.getElementById("cp-full");
+  function isFull() { return !!(document.fullscreenElement || document.webkitFullscreenElement); }
+  function toggleFull() {
+    try {
+      if (isFull()) { (document.exitFullscreen || document.webkitExitFullscreen).call(document); }
+      else if (stage.requestFullscreen) { stage.requestFullscreen(); } else if (stage.webkitRequestFullscreen) { stage.webkitRequestFullscreen(); }
+    } catch (e) { /* not allowed */ }
+  }
+  function fullLabel() { if (fullBtn) fullBtn.innerHTML = fullBtn.getAttribute(isFull() ? "data-off" : "data-on"); stage.classList.toggle("is-full", isFull()); }
+  if (fullBtn) {
+    if (!(stage.requestFullscreen || stage.webkitRequestFullscreen)) fullBtn.hidden = true;
+    fullBtn.addEventListener("click", toggleFull);
+  }
+  document.addEventListener("keydown", function (e) { if ((e.key === "f" || e.key === "F") && !/INPUT|TEXTAREA/.test(e.target.tagName)) toggleFull(); });
+  document.addEventListener("fullscreenchange", fullLabel);
+  document.addEventListener("webkitfullscreenchange", fullLabel);
+
   document.getElementById("cp-close").addEventListener("click", function () { document.getElementById("cp-result").hidden = true; });
 })();

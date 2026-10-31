@@ -362,9 +362,13 @@ class MillingOrder:
         elif new_status == flow.CANCELLED:                    # update 72: the customer's goods -> mill's stock, Pending
             Inventory.release_to_mill(branch_id, order["ORD_ID"], "ML", ope_user)
             BuySellOrder.pending_with_milling(updated, ope_user)
+            from . import coupon                              # update 96: the coupon can be used again
+            coupon.release_for(updated, ope_user)
         if new_status == flow.CLOSED:
             Inventory.release(branch_id, order["ORD_ID"], "ML", MOVE_MILL_PICKUP, ope_user)
             Account.post_milling_income(updated, descriptions or {"full": "", "fee": ""}, ope_user)
+            from . import coupon                              # update 96: the coupon as an expense
+            coupon.post_on_close(updated, "ML", ope_user)
         elif new_status == flow.FINISHED and updated["ORDER_TYPE"] == flow.TAKEAWAY:
             cls._notify(updated, "finished", now_utc())      # LINE: the rice is ready to pick up
         elif new_status == flow.FINISHED:

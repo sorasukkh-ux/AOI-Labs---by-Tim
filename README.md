@@ -340,6 +340,17 @@ are kept in `AOITS_SYSLOG` (14 days), the checks in `AOITS_HEALTH` (7 days).
 customer's LINE when "Also send to the customer's LINE" is ticked (shown for customers linked to LINE); "Send to LINE
 only" sends without printing. The same public https address is needed as for the queue QR (update 47).
 
+## Lucky wheel full screen (update 97)
+
+- The lucky wheel page has a Full screen button (top right, or the F key): the wheel, title and winner card fill the screen for showing to customers. Names on the left half of the wheel now read the right way up.
+
+## Campaign coupons by LINE (update 96, DB 1.63)
+
+- Campaign page > Discount coupons: pick a customer linked to LINE (type or scan the customer code), value (THB), valid-until (default the campaign's last day) and a note, then "Issue and send by LINE". The customer gets a coupon card with a QR (needs the public https address, AOI_PUBLIC_URL, like the queue card). The list shows sent / not sent, status (active, used, cancelled, expired), Send LINE again and Cancel.
+- At the counter: milling order details (payment part) and the Buy/Sell list for customer buying orders (SL) have "Scan the customer's coupon QR" + Use coupon. The coupon must belong to that customer and branch, be active and not expired; one coupon per order. It takes off min(value, payment); if it is worth more, the rest is lost and the coupon is used up. "To pay after the coupon" shows on the order and on the receipt.
+- Remove coupon (order still open) or cancelling the order makes the coupon active again. At Closed the ledger keeps the full income and posts the coupon as an expense (EX "Coupon ...").
+- Not for buying orders where the mill pays the customer (BY).
+
 ## Campaign levels are ranks (update 95, DB 1.62)
 
 - Level 1 / 2 / 3 = rank 1 / 2 / 3, ONE customer each: the customer with the most points per order type gets the level 1 gift, the next one level 2, then level 3 (ties: more kg, then who got there first).

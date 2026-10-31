@@ -58,3 +58,16 @@ def customer_qr(code):
     resp = Response(qr_png.png(customer["CUST_CODE"], scale=14), mimetype="image/png")
     resp.headers["Cache-Control"] = "public, max-age=86400"
     return resp
+
+
+@bp.route("/coupon/<coupon_id>.png")
+def coupon_qr(coupon_id):
+    """Update 96: the QR picture of a campaign coupon for the customer's LINE (secret token in the address)."""
+    import secrets
+    from ..models import notify, qr_png, coupon
+    c = coupon.get(coupon_id)
+    if not c or not secrets.compare_digest(request.args.get("t", ""), notify.coupon_token(c["COUPON_ID"])):
+        abort(404)
+    resp = Response(qr_png.png(coupon.qr_text(c), scale=12), mimetype="image/png")
+    resp.headers["Cache-Control"] = "no-store"
+    return resp

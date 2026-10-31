@@ -111,6 +111,20 @@
   {% endif %}
   <p class="od-section">{{ t('detSecPay') }}</p>
   <div class="od-row"><span class="od-label">{{ t('payAmountLabel') }}</span><span class="od-value" id="od-pay-total">{{ order.pay_total|num }} THB</span></div>
+  {# update 96: campaign coupon - scanned at the counter, takes off up to its value #}
+  {% if order.COUPON_ID %}
+  <div class="od-row cpn-on"><span class="od-label">&#127903; {{ t('cpnLabel') }} {{ order.COUPON_ID }}</span><span class="od-value">-{{ order.COUPON_AMT|num }} THB</span></div>
+  <div class="od-row"><span class="od-label"><b>{{ t('cpnToPay') }}</b></span><span class="od-value"><b>{{ (order.pay_total - (order.COUPON_AMT or 0))|num }} THB</b></span></div>
+  {% endif %}
+  {% if can_edit and order.MILL_STATUS not in ('C', 'CC') %}
+  <form method="post" action="{{ url_for('service_milling.coupon_use') }}" class="cpn-use">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="back" value="{{ 'list' if popup else 'detail' }}">
+    <input type="hidden" name="ORD_TYPE" value="ML"><input type="hidden" name="ORD_ID" value="{{ order.ORD_ID }}">
+    {% if order.COUPON_ID %}<button class="action small" type="submit" name="action" value="remove">{{ t('cpnRemove') }}</button>
+    {% else %}<input type="text" name="COUPON_QR" placeholder="{{ t('cpnScanPh') }}" autocomplete="off" data-scan="submit" aria-label="{{ t('cpnScanPh') }}">
+      <button class="action small" type="submit" name="action" value="apply">&#127903; {{ t('cpnApply') }}</button>{% endif %}
+  </form>
+  {% endif %}
   <div class="od-row od-part"><span class="od-label">{{ t('payFeeLabel') }}</span><span class="od-value">{{ order.EST_PAY_MILLFEE|num }} THB</span></div>
   <div class="od-row od-part"><span class="od-label">{{ t('payBranLabel') }}</span><span class="od-value">{{ order.EST_PAY_BRAN|num }} THB</span></div>
   <div class="od-row od-part"><span class="od-label">{{ t('payBrokenLabel') }}</span><span class="od-value">{{ order.EST_PAY_BROKE|num }} THB</span></div>

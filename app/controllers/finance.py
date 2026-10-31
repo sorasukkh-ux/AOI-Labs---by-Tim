@@ -7,6 +7,7 @@ from flask import Blueprint, abort, current_app, redirect, render_template, requ
 
 from ..i18n import t
 from ..models.account import Account
+from ..models.customer import Customer
 from ..models.base import ValidationError
 from ..models.price import CUSTOM, WAITING, Price, Promotion
 from ..security import can, current_user, maintainable_branches, operating_branch, pick_maintenance_branch, require
@@ -362,6 +363,26 @@ def campaign():
         if not can(MARKETING, "edit"):
             abort(403)
         action = request.form.get("action")
+        if action in ("coupon", "coupon_resend", "coupon_cancel"):          # update 96: coupons by LINE
+            from ..models import coupon as cpn
+            try:
+                if action == "coupon":
+                    camp = cp.get(camp_id)
+                    if not camp or camp["BRANCH_ID"] != branch:
+                        raise ValidationError("cpErrNotFound")
+                    c = cpn.issue(camp, request.form.get("CPN_CUST"), request.form, _user_id(), request.form.get("PUBLIC_BASE"))
+                    flash_ok("cpnMsgIssued" if c.get("LINE_SENT_DATE") else "cpnMsgIssuedNotSent", id=c["COUPON_ID"])
+                elif action == "coupon_resend":
+                    c = cpn.get(request.form.get("coupon"))
+                    if not c or c["BRANCH_ID"] != branch:
+                        raise ValidationError("cpnErrNotFound")
+                    flash_ok("cpnMsgSent" if cpn.send(c, request.form.get("PUBLIC_BASE")) else "cpnMsgIssuedNotSent", id=c["COUPON_ID"])
+                else:
+                    cpn.cancel(request.form.get("coupon"), branch, _user_id())
+                    flash_ok("cpnMsgCancelled")
+            except ValidationError as error:
+                flash_error(error)
+            return redirect(url_for("finance.campaign", branch=branch, id=camp_id, kind=request.form.get("kind"), _anchor="cp-coupons"))
         if action == "give":
             try:
                 cp.give(camp_id, branch, request.form.get("kind"), request.form.get("cust"), int(request.form.get("level") or 0), _user_id())
@@ -383,8 +404,15 @@ def campaign():
         abort(404)
     kind = request.args.get("kind") if request.args.get("kind") in cp.TYPES else "ML"
     data = None
+    coupons = []
     if camp:
+        from ..models import coupon as cpn
         data = {t: {"rows": cp.standings(camp, t), "draw": cp.draw_of(camp["CAMP_ID"], t)} for t in cp.TYPES}
+        names = {}
+        for c in cpn.for_campaign(camp["CAMP_ID"]):
+            if c["CUST_CODE"] not in names:
+                names[c["CUST_CODE"]] = (Customer.find(c["CUST_CODE"]) or {}).get("CUST_NAME", c["CUST_CODE"])
+            coupons.append(dict(c, state=cpn.state(c), name=names[c["CUST_CODE"]]))
     form = camp or cp.blank(branch)
 
     def day(value):
@@ -392,7 +420,16 @@ def campaign():
     return render_template("finance/campaign.html", branch=branch, branches=maintainable_branches(), camps=camps, camp=camp,
                            form=form, data=data, kind=kind, types=cp.TYPES, type_keys=CP_TYPE_KEYS, day=day,
                            state_of=cp.state, can_edit=can(MARKETING, "edit"),
+                           coupons=coupons, fmt_date=fmt_date, line_customers=_line_customers() if camp else [],
                            is_final=bool(camp) and cp.final(camp), final_day=to_local(camp["DATE_TO"]).strftime("%d/%m/%Y") if camp else "")
+
+
+def _line_customers():
+    """Customers linked to LINE (coupons go only by LINE)."""
+    from ..models.base import col, NO_ID
+    return sorted(({"code": c["CUST_CODE"], "name": c.get("CUST_NAME", c["CUST_CODE"])}
+                   for c in col("AOIMS_CUSTOMER").find({}, NO_ID) if (c.get("LINE_USER_ID") or "").strip() and c.get("CUST_STATUS") != "D"),
+                  key=lambda c: c["name"])
 
 
 @bp.route("/campaign/<camp_id>/draw/<kind>", methods=["GET", "POST"])

@@ -9,6 +9,7 @@
      data-entrants='{{ entrants|tojson }}' data-text='{{ js_text|tojson }}' data-csrf="{{ csrf_token() }}"
      data-done='{{ ({"winner": done.WINNER_CUST, "name": done.WINNER_NAME, "gift": done.GIFT, "tickets": done.WINNER_TICKETS, "total": done.TICKETS} if done else None)|tojson }}'>
   <div class="cp-snow" aria-hidden="true"></div>
+  <button type="button" class="cp-full" id="cp-full" data-on="&#x26F6; {{ t('tvbFull') }}" data-off="&#x2715; {{ t('tvbFullExit') }}">&#x26F6; {{ t('tvbFull') }}</button>
   <h2 class="cp-h">&#127876; {{ camp.CAMP_NAME }}</h2>
   <p class="cp-sub">{{ t(type_keys[kind]) }} &middot; &#127873; <b>{{ camp.TYPES[kind].SPECIAL }}</b> &middot; {{ t('cpEntrants', n=entrants|length) }}</p>
   {% if entrants %}

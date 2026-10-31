@@ -476,3 +476,28 @@ def update_details(ord_id):
     """The editable order details pop-up."""
     return _run(ord_id, lambda order: MillingOrder.update_details(
         order["ORD_ID"], operating_branch(), request.form, _user_id(), can_override=can(REGISTER, "approve")))
+
+
+# ---------- update 96: campaign coupon at the counter (milling orders and customer buying orders) ----------
+@bp.route("/coupon", methods=["POST"])
+def coupon_use():
+    """Scan (apply) or take off (remove) a coupon on an open order. ORD_TYPE ML needs Edit on Update Milling Status,
+    SL Edit on Update Buy/Sell Status."""
+    from ..models import coupon as cpn
+    from .service_buysell import MENU as BS_MENU, _back_to_list
+    if not current_user():
+        abort(401)
+    ord_type, ord_id = request.form.get("ORD_TYPE"), request.form.get("ORD_ID") or ""
+    if ord_type not in ("ML", "SL") or not can(STATUS if ord_type == "ML" else BS_MENU, "edit"):
+        abort(403)
+    try:
+        if request.form.get("action") == "remove":
+            cpn.remove(ord_type, ord_id, operating_branch(), _user_id())
+            flash_ok("cpnMsgRemoved")
+        else:
+            c, used, forfeit = cpn.apply(ord_type, ord_id, operating_branch(), request.form.get("COUPON_QR"), _user_id())
+            flash_ok("cpnMsgApplied" if not forfeit else "cpnMsgAppliedForfeit", id=c["COUPON_ID"],
+                     amt="{:,.2f}".format(used), forfeit="{:,.2f}".format(forfeit))
+    except ValidationError as error:
+        flash_error(error)
+    return _back(ord_id) if ord_type == "ML" else _back_to_list()

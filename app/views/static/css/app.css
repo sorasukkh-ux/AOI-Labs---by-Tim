@@ -1592,3 +1592,24 @@ table.bb-set-table { min-width: 600px; }
 .cp-table tr.cp-top td { background: #fffbeb; } .cp-table tr.cp-out td { color: var(--text-muted); }
 .cp-provisional { margin: 10px 0 0; padding: 8px 12px; border-radius: 10px; background: var(--warn-bg); color: var(--warn-text); font-size: 13px; }
 .cp-medal.m1 { background: linear-gradient(180deg, #fde047, #ca8a04); color: #fff; } .cp-medal.m3 { background: linear-gradient(180deg, #d6a06b, #a0643a); }
+/* update 96: coupons */
+.cpn-grid { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 10px 12px; align-items: end; }
+.cpn-grid input { width: 100%; box-sizing: border-box; } .cpn-grid .cpn-note { grid-column: span 2; } .cpn-grid .cpn-send .action { width: 100%; margin: 0; }
+@media (max-width: 720px) { .cpn-grid { grid-template-columns: 1fr; } .cpn-grid .cpn-note { grid-column: auto; } }
+.cpn-acts .action.small { margin: 2px; }
+tr.cpn-used td, tr.cpn-cancelled td, tr.cpn-expired td { color: var(--text-muted); }
+.cpn-use { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin: 6px 0; } .cpn-use input[type="text"] { flex: 1; min-width: 160px; }
+.cpn-use .action.small { margin: 0; }
+.cpn-on { color: #15803d; font-weight: 600; }
+.cpn-cust { display: grid; grid-template-columns: 1fr auto; gap: 6px; align-items: center; } .cpn-cust label { grid-column: 1 / -1; } .cpn-cust .action, .cpn-cust button { margin: 0; }
+/* update 97: lucky wheel full screen */
+.cp-full { position: absolute; right: 14px; top: 14px; z-index: 4; padding: 8px 16px; border-radius: 999px; border: 2px solid rgba(255,255,255,.8);
+  background: rgba(0,0,0,.25); color: #fff; font: 600 14px inherit; font-family: inherit; cursor: pointer; }
+.cp-full:hover { background: rgba(0,0,0,.4); } .cp-full[hidden] { display: none; }
+.cp-stage.is-full, .cp-stage:fullscreen { border-radius: 0; min-height: 100vh; display: flex; flex-direction: column; justify-content: center; padding: 3vh 2vw; }
+.cp-stage.is-full .cp-h { font-size: 5vh; } .cp-stage.is-full .cp-sub { font-size: 2.6vh; }
+.cp-stage.is-full .cp-wheel-box { width: min(76vh, 92vw); }
+.cp-stage.is-full .cp-hub { width: 16vh; height: 16vh; margin: -8vh 0 0 -8vh; font-size: 2.6vh; }
+.cp-stage.is-full .cp-pointer { border-left-width: 3vh; border-right-width: 3vh; border-top-width: 6vh; margin-left: -3vh; top: -1.5vh; }
+.cp-stage.is-full .cp-result-in .n { font-size: 6vh; } .cp-stage.is-full .cp-result-in .g { font-size: 3.4vh; }
+.cp-stage.is-full .cp-confetti i { animation-name: cp-fall-full; } @keyframes cp-fall-full { to { transform: translate(var(--dx), 110vh) rotate(var(--rot)); opacity: .8; } }

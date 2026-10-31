@@ -320,3 +320,50 @@ def send_receipt(orders, customer, browser_origin=None):
                                             "date": t_in("th", "receiptDate"), "total": t_in("th", "totalLabel")})
     col(COL).insert_one(dict(doc))
     return send(doc)
+
+
+# ---------- update 96: campaign coupon to the customer's LINE ----------
+def coupon_token(coupon_id):
+    import hashlib
+    import hmac
+    from flask import current_app
+    key = (current_app.config.get("SECRET_KEY") or "aoi").encode("utf-8")
+    return hmac.new(key, ("cpn:" + coupon_id).encode("utf-8"), hashlib.sha256).hexdigest()[:24]
+
+
+def coupon_image_url(coupon_id, browser_origin=None):
+    from flask import url_for
+    base = public_base(browser_origin)
+    return base + url_for("line_api.coupon_qr", coupon_id=coupon_id, t=coupon_token(coupon_id)) if base else None
+
+
+def send_coupon(coupon, browser_origin=None):
+    """The coupon card (Flex) with its QR; the text is the alternative text. Saved in AOITS_NOTIFY (kind coupon)."""
+    from . import line_flex
+    from . import campaign as cp
+    from .tv import short_name
+    from ..i18n import t_in
+    customer = Customer.find(coupon["CUST_CODE"]) or {}
+    camp = cp.get(coupon["CAMP_ID"]) or {}
+    name = short_name(customer.get("CUST_NAME", "")) or coupon["CUST_CODE"]
+    value = "{:,.2f}".format(coupon["VALUE"])
+    expire = to_local(coupon["EXPIRE_DATE"]).strftime("%d/%m/%Y")
+    now = now_utc()
+    seq = Counter.next("NT-" + coupon["COUPON_ID"])
+    doc = {"NOTIFY_ID": "NT-%s-%02d" % (coupon["COUPON_ID"], seq), "ORD_ID": None, "ORD_TYPE": "CP",
+           "CUST_CODE": coupon["CUST_CODE"], "NOTIFY_KIND": "coupon", "NOTIFY_DATETIME": None, "NOTIFY_FLG": UNSENT,
+           "NOTIFY_MESSAGE": t_in("th", "cpnLineText", name=name, value=value, expire=expire, camp=camp.get("CAMP_NAME", "")),
+           "ERROR": None, "REGIST_DATE": now, "LAST_UPDATE": now, "IMAGE_URL": None}
+    qr = coupon_image_url(coupon["COUPON_ID"], browser_origin)
+    if qr:
+        doc["NOTIFY_FLEX"] = line_flex.coupon_card(camp.get("CAMP_NAME", ""), name, value, expire, coupon.get("NOTE"), qr,
+                                                   coupon["COUPON_ID"], public_base(browser_origin),
+                                                   {"coupon": t_in("th", "cpnCardSub"), "for": t_in("th", "cpnCardFor"),
+                                                    "expire": t_in("th", "cpnCardExpire"), "how": t_in("th", "cpnCardHow")})
+    else:
+        doc["NOTIFY_FLEX"] = None
+        doc["NOTIFY_FLG"], doc["ERROR"] = ERROR, "lnNoPublicUrl"
+        col(COL).insert_one(dict(doc))
+        return doc
+    col(COL).insert_one(dict(doc))
+    return send(doc)
