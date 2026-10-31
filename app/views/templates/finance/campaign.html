@@ -84,9 +84,16 @@
         {% else %}<span class="cp-gift">&#127873; {{ g.gift }}</span>{% endif %}
       {% else %}-{% endfor %}</td>
     </tr>
-    {% else %}<tr><td colspan="7" class="hint center">{{ t('cpNoPoints') }}</td></tr>{% endfor %}
+    {% else %}<tr><td colspan="7" class="hint center">{{ t('cpNoPoints') }}{% if state_of(camp) != 'running' %}<br>{{ t('cpNotRunning_' ~ state_of(camp)) }}{% endif %}</td></tr>{% endfor %}
     </tbody>
   </table></div>
+</div>
+{% else %}
+{# update 94: the points table is there before the first save too, with what to do #}
+<div class="card mt14" id="cp-standings">
+  <div class="card-head"><p class="card-title">&#127942; {{ t('cpStandings') }}</p></div>
+  <div class="chips">{% for tp in types %}<span class="chip">{{ t(type_keys[tp]) }} <small>0</small></span>{% endfor %}</div>
+  <div class="cp-empty"><p>&#128221; {{ t('cpEmptySave') }}</p></div>
 </div>
 {% endif %}
 </div>

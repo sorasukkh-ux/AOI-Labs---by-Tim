@@ -1584,3 +1584,4 @@ table.bb-set-table { min-width: 600px; }
 .cp-code { color: var(--text-muted); font-size: 11.5px; } .cp-table td { vertical-align: middle; }
 .cp-level { grid-template-columns: 28px 64px auto minmax(0, 1fr); }
 #tab-campaign, #cp-draw-page { max-width: 1180px; margin: 0 auto; }
+.cp-empty { margin-top: 12px; padding: 22px; border: 2px dashed var(--border-strong); border-radius: 14px; text-align: center; color: var(--text-secondary); font-size: 15px; }

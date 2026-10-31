@@ -4612,6 +4612,9 @@ class Update93(Base):
         self.login("admin")
         self.client.get("/lang/en")
         self.assertIn('id="cp-entry"', self.text("/finance/marketing?branch=factory2"))
+        empty = self.text("/finance/campaign?branch=factory2")                   # update 94: before the first save
+        self.assertIn('id="cp-standings"', empty)
+        self.assertIn('class="cp-empty"', empty)
         bad = self.form(PTS_ML_2="3")                             # level 2 below level 1
         self.post("/finance/campaign", bad, "/finance/campaign?branch=factory2")
         self.assertEqual(self.db("AOIMS_CAMPAIGN"), [])
@@ -4646,6 +4649,7 @@ class Update93(Base):
         none = self.client.post("/finance/campaign/%s/draw/SL" % camp["CAMP_ID"], headers={"X-CSRF-Token": token, "Accept": "application/json"})
         self.assertEqual(none.status_code, 422)
         self.assertIn("Winner", self.text("/finance/campaign?branch=factory2&id=%s&kind=ML" % camp["CAMP_ID"]))
+        self.assertIn("No customer has points", self.text("/finance/campaign?branch=factory2&id=%s&kind=BY" % camp["CAMP_ID"]))
 
 
 if __name__ == "__main__":

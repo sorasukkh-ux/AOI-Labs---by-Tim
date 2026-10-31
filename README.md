@@ -340,6 +340,10 @@ are kept in `AOITS_SYSLOG` (14 days), the checks in `AOITS_HEALTH` (7 days).
 customer's LINE when "Also send to the customer's LINE" is ticked (shown for customers linked to LINE); "Send to LINE
 only" sends without printing. The same public https address is needed as for the queue QR (update 47).
 
+## Campaign points table before the first save (update 94)
+
+- The customers' points card now shows before the campaign is saved, with what to do (fill the gifts, switch the campaign on, Save). An empty table also says why: campaign off, not started yet (points count from the start date) or ended.
+
 ## Christmas / New Year campaign (update 93, DB 1.61)
 
 - Financial > Marketing > "Christmas / New Year campaign" (right: Marketing; Edit to change, hand gifts over and draw).
