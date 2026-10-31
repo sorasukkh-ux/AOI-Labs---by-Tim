@@ -10,6 +10,7 @@ from ..models.branch import Branch
 from ..models.customer import Customer
 from ..models import tv, line_link
 from ..models.mill_test import MillTest
+from ..models.price import Price
 from ..models.mill_yield import MillYield
 from ..models import variety as var
 from ..models.milling_order import MillingOrder
@@ -87,6 +88,14 @@ def maintenance():
             else:
                 flash_ok("msgTvKey")
             return redirect(url_for("admin_milling.maintenance", branch=branch, _anchor="tv-display"))
+        if request.form.get("action") == "billboard":            # update 84: what the price billboard shows
+            try:
+                tv.save_bb_settings(branch, request.form, current_user()["USER_ID"])
+            except ValidationError as error:
+                flash_error(error)
+            else:
+                flash_ok("bbSaved")
+            return redirect(url_for("admin_milling.maintenance", branch=branch, _anchor="bb-settings"))
         try:
             Branch.save_milling_settings(branch, request.form, current_user()["USER_ID"])
         except ValidationError as error:
@@ -101,7 +110,7 @@ def maintenance():
     tv_link = (request.url_root.rstrip("/") + tv_path) if key else None
     bb_path = url_for("tv.prices", branch=branch, key=key) if key else None          # update 83: price billboard
     return render_template("admin/milling_maintenance.html", branch=branch, branches=maintainable_branches(), tv_link=tv_link,
-                           tv_path=tv_path, bb_path=bb_path, line=line_link.status(), line_events=line_link.recent(8),
+                           tv_path=tv_path, bb_path=bb_path, bb=tv.bb_settings(branch), bb_prices={c: (Price.get(branch, c) or {}) for c in tv.PRICE_SKUS}, line=line_link.status(), line_events=line_link.recent(8),
                            webhook_path=url_for("line_api.webhook"),
                            values=values or saved, editable=can("AD_MILLTIME", "edit"), preview=_queue_preview(saved))
 

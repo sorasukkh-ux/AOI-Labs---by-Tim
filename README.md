@@ -340,6 +340,15 @@ are kept in `AOITS_SYSLOG` (14 days), the checks in `AOITS_HEALTH` (7 days).
 customer's LINE when "Also send to the customer's LINE" is ticked (shown for customers linked to LINE); "Send to LINE
 only" sends without printing. The same public https address is needed as for the queue QR (update 47).
 
+## Price billboard settings (update 84, DB 1.57)
+
+- Administration > Milling Maintenance > "Price billboard settings" (needs Edit on Milling Maintenance), per factory:
+  - per SKU: Show, Order (1 = first), buying price and / or selling price, and a promotion note (shown as a yellow ribbon on the spotlight and in the ticker);
+  - seconds per SKU in the spotlight (4-30);
+  - the milling discount promotion on / off;
+  - up to 3 running messages (they take turns at the top and run in the ticker).
+- Saved in AOIMS_SYSPARAM.SYSP_BB; the billboard follows within 15 seconds. &show=buy / &show=sell on the link still narrows it further.
+
 ## Price billboard - moving prices in the TV theme (update 83)
 
 - New page /tv/<branch>/prices?key=<TV key> (no sign-in, the same display key as the TV). Open it from Administration > Milling Maintenance > TV display > "Open the price billboard".

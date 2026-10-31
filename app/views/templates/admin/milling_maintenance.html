@@ -118,6 +118,46 @@
   {% endif %}
 </div>
 
+{# update 84 (Tim): what the price billboard shows - SKUs (order, buying / selling, a note), promotion, messages #}
+<div class="card mt14" id="bb-settings">
+  <p class="card-title sub">&#127915; {{ t('bbSetTitle') }} &middot; {{ branch_label(branch) }}</p>
+  <p class="cap-note tight">{{ t('bbSetNote') }}</p>
+  <form method="post" id="bb-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="branch" value="{{ branch }}"><input type="hidden" name="action" value="billboard">
+    <fieldset {% if not editable %}disabled{% endif %}>
+    <div class="inv-table-wrap"><table class="tv-table bb-set-table">
+      <thead><tr><th>{{ t('bbColShow') }}</th><th>{{ t('bbColOrder') }}</th><th>{{ t('colProduct') }}</th>
+        <th class="center">{{ t('bbBuy') }}</th><th class="center">{{ t('bbSell') }}</th><th>{{ t('bbColNote') }}</th></tr></thead>
+      <tbody>
+      {% for s in bb.skus %}{% set p = bb_prices[s.code] %}
+      <tr>
+        <td class="center"><input type="checkbox" name="BB_SHOW_{{ s.code }}" value="1" {% if s.show %}checked{% endif %} aria-label="{{ t('bbColShow') }} {{ mat_name(s.code) }}"></td>
+        <td><input type="number" class="bb-order" name="BB_ORDER_{{ s.code }}" value="{{ loop.index }}" min="1" max="99" step="1" aria-label="{{ t('bbColOrder') }} {{ mat_name(s.code) }}"></td>
+        <td>{{ mat_name(s.code) }}</td>
+        <td class="center"><label class="bb-side"><input type="checkbox" name="BB_BUY_{{ s.code }}" value="1" {% if s.buy %}checked{% endif %}> {{ '%.2f'|format(p.PRICE_BUY or 0) }}</label></td>
+        <td class="center"><label class="bb-side"><input type="checkbox" name="BB_SELL_{{ s.code }}" value="1" {% if s.sell %}checked{% endif %}> {{ '%.2f'|format(p.PRICE_SELL or 0) }}</label></td>
+        <td><input type="text" name="BB_NOTE_{{ s.code }}" value="{{ s.note }}" maxlength="80" placeholder="{{ t('bbNotePh') }}"></td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+    <div class="two-col field-row mt14">
+      <div><label class="field-label" for="bb-seconds">{{ t('bbSeconds') }}</label>
+        <input type="number" id="bb-seconds" name="BB_SECONDS" value="{{ bb.seconds }}" min="4" max="30" step="1"></div>
+      <div><label class="field-label">{{ t('bbPromoLbl') }}</label>
+        <label class="bb-side"><input type="checkbox" name="BB_PROMO" value="1" {% if bb.promo %}checked{% endif %}> {{ t('bbPromoShow') }}</label></div>
+    </div>
+    {% for n in range(1, 4) %}
+    <div class="field-row"><label class="field-label" for="bb-msg-{{ n }}">{{ t('bbMsg', n=n) }}</label>
+      <input type="text" id="bb-msg-{{ n }}" name="BB_MSG_{{ n }}" value="{{ bb.messages[n - 1] if bb.messages|length >= n else '' }}" maxlength="120" placeholder="{{ t('bbMsgPh') }}"></div>
+    {% endfor %}
+    </fieldset>
+    {% if editable %}<button class="action primary" type="submit" id="bb-save">{{ t('btnSave') }}</button>{% endif %}
+    {% if bb_path %}<a class="action mt6" href="{{ bb_path }}" target="_blank" rel="noopener">{{ t('tvBillboardOpen') }} &rarr;</a>{% endif %}
+  </form>
+</div>
+
 <div class="card mt14" id="line-setup">
   <p class="card-title sub">&#128172; {{ t('lnCardTitle') }}</p>
   <p class="cap-note tight">{{ t('lnCardNote') }}</p>

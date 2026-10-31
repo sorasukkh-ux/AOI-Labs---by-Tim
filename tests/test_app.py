@@ -4492,5 +4492,42 @@ class Update83(Base):
         self.assertEqual(b["series"][0], 14.0)
 
 
+class Update84(Base):
+    """Price billboard settings on Milling Maintenance: SKUs, order, buying / selling, notes, promotion, messages."""
+
+    def test_settings(self):
+        with self.app.app_context():
+            from app.models import tv
+            key = tv.issue_key("factory2", "admin")
+            self.assertEqual(len(tv.bb_settings("factory2")["skus"]), len(tv.PRICE_SKUS))      # default: everything
+        self.login("admin")
+        self.client.get("/lang/en")
+        page = self.text("/admin/milling/maintenance?branch=factory2")
+        self.assertIn('id="bb-settings"', page)
+        form = {"branch": "factory2", "action": "billboard", "BB_SECONDS": "9", "BB_MSG_1": "We buy paddy every day", "BB_PROMO": ""}
+        for i, c in enumerate(("PADDY_HM", "RICE_HM", "PADDY", "RICE_W5", "PADDY_GL", "RICE_GL", "BRAN", "BROKEN")):
+            form.update({"BB_SHOW_" + c: "1", "BB_ORDER_" + c: str(i + 1), "BB_BUY_" + c: "1" if c.startswith("PADDY") else "",
+                         "BB_SELL_" + c: "" if c.startswith("PADDY") else "1"})
+        form["BB_SHOW_PADDY_GL"] = ""
+        form["BB_ORDER_RICE_HM"] = "0"
+        form["BB_NOTE_RICE_HM"] = "50 kg: 1 THB off"
+        self.post("/admin/milling/maintenance?branch=factory2", form, "/admin/milling/maintenance?branch=factory2")
+        data = self.client.get("/tv/factory2/prices/data?key=" + key).get_json()
+        codes = [i["code"] for i in data["items"]]
+        self.assertEqual(codes[0], "RICE_HM")
+        self.assertNotIn("PADDY_GL", codes)
+        first = data["items"][0]
+        self.assertEqual((first["buy"], first["note"]), (0.0, "50 kg: 1 THB off"))
+        self.assertGreater(first["sell"], 0)
+        paddy = next(i for i in data["items"] if i["code"] == "PADDY_HM")
+        self.assertEqual(paddy["sell"], 0.0)
+        self.assertEqual((data["seconds"], data["messages"], data["discount"]), (9, ["We buy paddy every day"], 0))
+        # a shown SKU with neither price is refused, nothing changes
+        bad = dict(form, BB_BUY_BRAN="", BB_SELL_BRAN="", BB_SECONDS="12")
+        r = self.post("/admin/milling/maintenance?branch=factory2", bad, "/admin/milling/maintenance?branch=factory2")
+        self.assertIn("choose the buying or the selling price", self.text("/admin/milling/maintenance?branch=factory2"))
+        self.assertEqual(self.client.get("/tv/factory2/prices/data?key=" + key).get_json()["seconds"], 9)
+
+
 if __name__ == "__main__":
     unittest.main()

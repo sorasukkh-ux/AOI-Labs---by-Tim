@@ -193,6 +193,61 @@ def _side(steps, idx, current, today, changed_at=None):
             "since": to_local(when or changed_at).strftime("%d/%m") if (when or changed_at) else None}
 
 
+# ---------- update 84: what the billboard shows, per branch (AOIMS_SYSPARAM.SYSP_BB) ----------
+BB_SECONDS = (4, 30)
+BB_NOTE_MAX, BB_MSG_MAX, BB_MSGS = 80, 120, 3
+
+
+def bb_settings(branch_id):
+    """{'skus': [{'code', 'buy', 'sell', 'note'}] in display order, 'seconds', 'promo', 'messages'}. Without saved
+    settings: every SKU with both prices, 7 seconds, the milling promotion on, no messages."""
+    saved = (Branch.get(branch_id) or {}).get("SYSP_BB") or {}
+    rows = {r["MAT_CODE"]: r for r in saved.get("SKUS") or [] if r.get("MAT_CODE") in PRICE_SKUS}
+    order = [r["MAT_CODE"] for r in saved.get("SKUS") or [] if r.get("MAT_CODE") in PRICE_SKUS]
+    order += [c for c in PRICE_SKUS if c not in order]
+    skus = []
+    for code in order:
+        r = rows.get(code)
+        skus.append({"code": code, "show": r.get("SHOW", True) if r else True, "buy": r.get("BUY", True) if r else True,
+                     "sell": r.get("SELL", True) if r else True, "note": (r or {}).get("NOTE") or ""})
+    return {"skus": skus, "seconds": int(saved.get("SECONDS") or 7), "promo": saved.get("PROMO_MILL", True),
+            "messages": [m for m in saved.get("MESSAGES") or [] if m]}
+
+
+def save_bb_settings(branch_id, form, ope_user):
+    """Milling Maintenance > Price billboard. Per SKU: BB_SHOW_<code>, BB_BUY_<code>, BB_SELL_<code>, BB_ORDER_<code>,
+    BB_NOTE_<code>; BB_SECONDS, BB_PROMO, BB_MSG_1..3."""
+    from .base import clean_text
+    if not Branch.get(branch_id):
+        raise ValidationError("errBranchUnknown")
+    rows = []
+    for i, code in enumerate(PRICE_SKUS):
+        try:
+            rank = float(form.get("BB_ORDER_" + code) or (i + 1))
+        except ValueError:
+            raise ValidationError("errNumber")
+        show = form.get("BB_SHOW_" + code) == "1"
+        buy, sell = form.get("BB_BUY_" + code) == "1", form.get("BB_SELL_" + code) == "1"
+        if show and not (buy or sell):
+            raise ValidationError("bbErrSide", sku=_th_name(code))
+        rows.append((rank, i, {"MAT_CODE": code, "SHOW": show, "BUY": buy, "SELL": sell,
+                               "NOTE": clean_text(form.get("BB_NOTE_" + code), BB_NOTE_MAX) or None}))
+    if not any(r[2]["SHOW"] for r in rows):
+        raise ValidationError("bbErrNone")
+    try:
+        seconds = int(float(form.get("BB_SECONDS") or 7))
+    except ValueError:
+        raise ValidationError("errNumber")
+    if not (BB_SECONDS[0] <= seconds <= BB_SECONDS[1]):
+        raise ValidationError("bbErrSeconds", lo=BB_SECONDS[0], hi=BB_SECONDS[1])
+    messages = [clean_text(form.get("BB_MSG_%d" % n), BB_MSG_MAX) for n in range(1, BB_MSGS + 1)]
+    values = {"SYSP_BB": {"SKUS": [r[2] for r in sorted(rows, key=lambda x: (x[0], x[1]))], "SECONDS": seconds,
+                          "PROMO_MILL": form.get("BB_PROMO") == "1", "MESSAGES": [m for m in messages if m]}}
+    values.update(audit_update(ope_user))
+    col(Branch.COL).update_one({"BRANCH_ID": branch_id}, {"$set": values})
+    return bb_settings(branch_id)
+
+
 def billboard(branch_id):
     """Everything the price billboard shows: per SKU the buying and selling price, the last change and 30 days."""
     from ..i18n import t_in
@@ -201,10 +256,15 @@ def billboard(branch_id):
     now = now_utc()
     today = now_local().date()
     since = now - timedelta(days=BOARD_DAYS + 1)
+    cfg = bb_settings(branch_id)
     items = []
-    for code in PRICE_SKUS:
+    for sku in cfg["skus"]:                                     # update 84: chosen SKUs, in the chosen order
+        code = sku["code"]
+        if not sku["show"]:
+            continue
         p = Price.get(branch_id, code) or {}
-        buy, sell = float(p.get("PRICE_BUY") or 0), float(p.get("PRICE_SELL") or 0)
+        buy = float(p.get("PRICE_BUY") or 0) if sku["buy"] else 0.0
+        sell = float(p.get("PRICE_SELL") or 0) if sku["sell"] else 0.0
         if not (buy or sell):
             continue
         kind, variety = var.INFO.get(code, (None, None))
@@ -212,15 +272,17 @@ def billboard(branch_id):
         en = t_in("en", var.KIND_KEYS[kind]) + ((" (%s)" % t_in("en", var.VAR_KEYS[variety])) if variety else "") if kind else code
         items.append({"code": code, "name": _th_name(code), "name_en": en, "kind": kind, "variety": variety,
                       "buy": buy, "sell": sell, "b": _side(steps, 1, buy, today, p.get("LAST_UPDATE")), "s": _side(steps, 2, sell, today, p.get("LAST_UPDATE")),
+                      "note": sku["note"],
                       "changed": to_local(p["LAST_UPDATE"]).strftime("%d/%m %H:%M") if p.get("LAST_UPDATE") else None})
     key = "branch" + branch_id.capitalize()
     th_name, en_name = t_in("th", key), t_in("en", key)
     local_now = now_local()
     try:
-        discount = Promotion.milling_discount_pct(branch_id, today)
+        discount = Promotion.milling_discount_pct(branch_id, today) if cfg["promo"] else 0
     except Exception:                                          # noqa: BLE001
         discount = 0
     return {"branch": branch_id, "branch_name": th_name if th_name != key else (branch.get("BRANCH_NAME") or branch_id),
             "branch_name_en": en_name if en_name != key else (branch.get("BRANCH_NAME") or branch_id),
             "now_ms": int(now.timestamp() * 1000), "tz_min": int(local_now.utcoffset().total_seconds() // 60),
-            "items": items, "discount": discount, "updated": local_now.strftime("%H:%M:%S")}
+            "items": items, "discount": discount, "messages": cfg["messages"], "seconds": cfg["seconds"],
+            "updated": local_now.strftime("%H:%M:%S")}

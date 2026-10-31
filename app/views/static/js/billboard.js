@@ -8,7 +8,7 @@
   var text = JSON.parse(root.getAttribute("data-text"));
   var data = JSON.parse(root.getAttribute("data-board"));
   var url = root.getAttribute("data-url"), show = root.getAttribute("data-show") || "both";
-  var SPOT_MS = 7000, idx = -1, last = {}, spotTimer = null;
+  var SPOT_MS = (data.seconds || 7) * 1000, idx = -1, last = {}, spotTimer = null;
   var NS = "http://www.w3.org/2000/svg";
 
   function th(k) { return (text[k] && text[k].th) || ""; }
@@ -88,7 +88,7 @@
   }
 
   function spark(host, item) {
-    var main = sides()[0], series = item[main].series || [];
+    var main = sides().filter(function (sd) { return priceOf(item, sd) > 0; })[0] || sides()[0], series = item[main].series || [];
     var cap = el("div", "cap"); cap.appendChild(el("span", "", th("bbDays") + " · " + en("bbDays")));
     cap.appendChild(el("span", "", (main === "b" ? th("bbBuy") : th("bbSell")) + " " + th("bbUnit")));
     host.appendChild(cap);
@@ -116,6 +116,7 @@
     if (isNew) name.appendChild(el("div", "bb-new", th("bbNew") + " · " + en("bbNew")));
     name.appendChild(el("h2", "", item.name)); name.appendChild(el("p", "", item.name_en));
     top.appendChild(art); top.appendChild(name); c.appendChild(top);
+    if (item.note) c.appendChild(el("div", "bb-note-ribbon", "🏷 " + item.note));   // update 84: the SKU's promotion note
     var row = el("div", "bb-prices");
     sides().forEach(function (sd) {
       var value = priceOf(item, sd);
@@ -134,6 +135,7 @@
       row.appendChild(box);
       digits(num, value, isNew && item[sd].prev ? item[sd].prev : undefined);
     });
+    if (row.children.length === 1) row.className += " one";      // one price for this SKU: shown bigger
     c.appendChild(row);
     var sp = el("div", "bb-spark"); spark(sp, item); c.appendChild(sp);
     return c;
@@ -165,8 +167,8 @@
       r.appendChild(el("i", "vd v-" + (item.variety || "")));
       var nm = el("div", "nm", item.name); nm.appendChild(el("small", "", item.name_en)); r.appendChild(nm);
       ["b", "s"].forEach(function (sd) {
-        var pv = el("div", "pv " + sd, priceOf(item, sd) > 0 ? money(priceOf(item, sd)) : "-"), ch = changeText(item[sd]);
-        pv.appendChild(el("small", ch.cls, ch.arrow ? ch.arrow + " " + money(Math.abs(item[sd].change)) : "—"));
+        var has = priceOf(item, sd) > 0, pv = el("div", "pv " + sd, has ? money(priceOf(item, sd)) : ""), ch = changeText(item[sd]);
+        if (has) pv.appendChild(el("small", ch.cls, ch.arrow ? ch.arrow + " " + money(Math.abs(item[sd].change)) : "—"));
         r.appendChild(pv);
       });
       host.appendChild(r);
@@ -188,17 +190,28 @@
           var ch = changeText(item[sd]);
           if (ch.arrow) it.appendChild(el("em", ch.cls, ch.arrow + " " + money(Math.abs(item[sd].change))));
         });
+        if (item.note) it.appendChild(el("em", "nt", "🏷 " + item.note));
         tape.appendChild(it);
       });
+      (data.messages || []).forEach(function (m) { tape.appendChild(el("span", "it msg", "📢 " + m)); });
     }
     var px = tape.scrollWidth / 2;
     tape.style.animationDuration = Math.max(20, px / 90) + "s";       // about 90 px a second
   }
 
-  function promo() {
-    var p = document.getElementById("bb-promo");
-    p.hidden = !(data.discount > 0);
-    if (data.discount > 0) p.textContent = "🎉 " + th("bbDiscount").replace("{pct}", data.discount);
+  var promoAt = 0;
+  function promoLines() {
+    var lines = [];
+    if (data.discount > 0) lines.push("🎉 " + th("bbDiscount").replace("{pct}", data.discount));
+    (data.messages || []).forEach(function (m) { lines.push("📢 " + m); });
+    return lines;
+  }
+  function promo() {                                    // update 84: the discount and the messages take turns
+    var p = document.getElementById("bb-promo"), lines = promoLines();
+    p.hidden = !lines.length;
+    if (!lines.length) return;
+    promoAt = promoAt % lines.length;
+    p.textContent = lines[promoAt];
   }
 
   function snapshot() {
@@ -231,7 +244,7 @@
     req.open("GET", url, true);
     req.timeout = 10000;
     req.onload = function () {
-      if (req.status === 200) { try { data = JSON.parse(req.responseText); syncClock(); draw(false); lost(false); return; } catch (e) { /* keep */ } }
+      if (req.status === 200) { try { data = JSON.parse(req.responseText); SPOT_MS = (data.seconds || 7) * 1000; syncClock(); draw(false); lost(false); return; } catch (e) { /* keep */ } }
       lost(true);
     };
     req.onerror = req.ontimeout = function () { lost(true); };
@@ -272,6 +285,7 @@
   window.addEventListener("resize", fit);
   fit(); syncClock(); clock(); draw(true);
   setInterval(clock, 1000);
+  setInterval(function () { promoAt++; promo(); }, 6000);
   setInterval(refresh, 15000);
   setTimeout(function () { window.location.reload(); }, 6 * 3600 * 1000);
 })();

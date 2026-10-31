@@ -213,3 +213,11 @@ body.tvb.awake .tvb-full { opacity: 1; pointer-events: auto; }
 .show-buy .bb-price .val, .show-sell .bb-price .val { flex-direction: row; align-items: baseline; gap: 18px; }
 .show-buy .bb-price .bb-num, .show-sell .bb-price .bb-num { font-size: 180px; }
 .bb-prices { margin-top: 30px; } .bb-spark { flex-shrink: 0; } .bb-spark svg { height: 160px; }
+/* update 84: promotion note of a SKU, running messages */
+.bb-note-ribbon { align-self: flex-start; margin-top: 22px; font-size: 30px; font-weight: 700; color: #1a1205; padding: 8px 26px; border-radius: 16px;
+  background: linear-gradient(90deg, #fde047, #fbbf24); box-shadow: 0 0 30px rgba(251,191,36,.45); animation: bb-ribbon 2.6s ease-in-out infinite; }
+@keyframes bb-ribbon { 50% { transform: translateX(8px); box-shadow: 0 0 12px rgba(251,191,36,.25); } }
+.bb-tape .it .nt { color: #fde047; font-weight: 600; } .bb-tape .it.msg { color: #fde68a; font-weight: 600; font-size: 32px; }
+.bb-promo { max-width: 760px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (prefers-reduced-motion: reduce) { .bb-note-ribbon { animation: none; } }
+.bb-prices.one .bb-price .val { flex-direction: row; align-items: baseline; gap: 18px; } .bb-prices.one .bb-num { font-size: 180px; }
