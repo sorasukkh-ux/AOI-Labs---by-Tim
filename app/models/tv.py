@@ -196,7 +196,7 @@ def _side(steps, idx, current, today, changed_at=None):
 # ---------- update 84: what the billboard shows, per branch (AOIMS_SYSPARAM.SYSP_BB) ----------
 BB_SECONDS = (4, 30)
 BB_NOTE_MAX, BB_MSG_MAX, BB_MSGS = 80, 120, 3
-BB_THEMES = ("default", "christmas", "cards", "ranking")     # update 85: board themes; 89: price cards (replaces poster); 90: ranking
+BB_THEMES = ("default", "christmas", "cards", "ranking", "songkran")     # update 85: board themes; 89: price cards (replaces poster); 90: ranking
 
 
 def bb_settings(branch_id):

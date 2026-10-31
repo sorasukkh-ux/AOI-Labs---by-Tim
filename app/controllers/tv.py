@@ -37,7 +37,7 @@ def data(branch):
 
 # ---------- update 83: price billboard ----------
 BB_LABELS = ("tvbBuy", "tvbSell", "tvbUpdated", "tvbOffline", "tvbFull", "tvbFullExit", "bbTitle", "bbSub", "bbBuy", "bbSell",
-             "bbUnit", "bbUp", "bbDown", "bbSame", "bbSince", "bbNew", "bbDays", "bbDiscount", "bbAll", "bbNote", "bbXmas", "bbXmasEn", "bbMusicTap", "bbTheme_cards", "rkTitle", "rkSub", "rkOther")
+             "bbUnit", "bbUp", "bbDown", "bbSame", "bbSince", "bbNew", "bbDays", "bbDiscount", "bbAll", "bbNote", "bbXmas", "bbXmasEn", "bbMusicTap", "bbTheme_cards", "rkTitle", "rkSub", "rkOther", "bbSongkran")
 SHOW = ("both", "buy", "sell")
 
 

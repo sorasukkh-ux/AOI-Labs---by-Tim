@@ -110,12 +110,13 @@ def receipt(title, orders_no, customer, date, lines, total, base=None, labels=No
                 row(lb.get("total", "รวม"), "%s THB" % total, "md", "bold")]}}
 
 
-def coupon_card(title, name, value, expire, note, qr_url, code, base, labels):
+def coupon_card(title, name, value, expire, note, qr_url, code, base, labels, theme="xmas"):
     """Update 96: the campaign coupon - festive header, value in THB, the customer, expiry, the QR to show at the counter."""
     head = [_logo(base)] if base else []
     return {"type": "bubble", "size": "mega",
-            "header": {"type": "box", "layout": "vertical", "backgroundColor": "#B91C1C", "paddingAll": "14px", "contents": [
-                _text("🎄 " + title, "md", "bold", "#FFFFFF"), _text(labels["coupon"], "xs", color="#FDE68A")]},
+            "header": {"type": "box", "layout": "vertical", "backgroundColor": "#0369A1" if theme == "songkran" else "#B91C1C",
+                       "paddingAll": "14px", "contents": [
+                _text(("💦 " if theme == "songkran" else "🎄 ") + title, "md", "bold", "#FFFFFF"), _text(labels["coupon"], "xs", color="#FDE68A")]},
             "body": {"type": "box", "layout": "vertical", "spacing": "md", "paddingAll": "16px", "contents": head + [
                 {"type": "box", "layout": "baseline", "contents": [
                     _text(value, "3xl", "bold", "#15803D", flex=0), _text(" THB", "md", "bold", "#15803D", flex=0)]},

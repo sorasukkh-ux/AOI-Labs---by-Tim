@@ -22,6 +22,96 @@
 <div id="tvb" data-url="{{ data_url }}" data-board='{{ data|tojson }}' data-text='{{ text|tojson }}' data-show="{{ show }}" data-theme="{{ fixed_theme or '' }}">
   <div class="xm-3d" id="xm-3d" aria-hidden="true"></div>{# update 86: gifts, trees and baubles floating in 3D behind the board #}
   <div class="xm-bokeh" aria-hidden="true">{% for i in range(14) %}<i class="k{{ i % 7 }}"></i>{% endfor %}</div>
+  {# update 102 (Tim): Songkran theme - dusk sky, temple silhouettes (original simple shapes), water splashes and drops #}
+  <div class="sk-deco" aria-hidden="true">
+    <div class="sk-sun"></div>
+    <svg class="sk-land" viewBox="0 0 1920 420" preserveAspectRatio="xMidYMax meet">
+      <g class="swing" transform="translate(250 0)"><rect x="-70" y="60" width="16" height="360" class="sw-post"/><rect x="54" y="60" width="16" height="360" class="sw-post"/>
+        <path d="M-96 64 L96 64 L84 40 L-84 40 Z" class="sw-top"/><path d="M-110 64 L-96 40 M110 64 L96 40" class="sw-tip"/><rect x="-74" y="96" width="148" height="10" class="sw-post"/></g>
+      <g class="gold" transform="translate(1000 0)"><path d="M0 0 C6 70 18 120 30 160 L60 300 L80 420 L-80 420 L-60 300 L-30 160 C-18 120 -6 70 0 0 Z"/>
+        <path d="M-110 420 L-96 340 L96 340 L110 420 Z"/><path d="M-130 420 L-118 380 L118 380 L130 420 Z"/>
+        <g class="rings"><rect x="-34" y="150" width="68" height="8" rx="4"/><rect x="-44" y="185" width="88" height="8" rx="4"/><rect x="-54" y="220" width="108" height="8" rx="4"/></g></g>
+    </svg>
+    <svg class="sk-sky" viewBox="0 0 1920 300" preserveAspectRatio="none"><g class="far"><path d="M79 260 L86 206 Q100 155 141 141 L150 90 L159 141 L200 155 Q214 206 221 260 Z"/><path d="M292 260 L292 166 Q296 92 322 71 L330 50 L338 71 Q364 92 368 166 L368 260 Z"/><path d="M390 260 L390 210 L442 181 L494 124 L546 124 L598 181 L650 210 L650 260 Z"/><path d="M659 260 L669 183 Q689 111 748 92 L760 20 L772 92 L831 111 Q851 183 861 260 Z"/><path d="M933 260 L933 143 Q938 52 971 26 L980 0 L989 26 Q1022 52 1027 143 L1027 260 Z"/><path d="M1028 260 L1028 179 Q1031 116 1054 98 L1060 80 L1066 98 Q1089 116 1092 179 L1092 260 Z"/><path d="M1120 260 L1120 206 L1176 175 L1232 114 L1288 114 L1344 175 L1400 206 L1400 260 Z"/><path d="M1416 260 L1424 196 Q1441 136 1490 120 L1500 60 L1510 120 L1559 136 Q1576 196 1584 260 Z"/><path d="M1659 260 L1659 156 Q1663 76 1692 53 L1700 30 L1708 53 Q1737 76 1741 156 L1741 260 Z"/><path d="M1797 260 L1803 212 Q1816 167 1852 155 L1860 110 L1868 155 L1904 167 Q1917 212 1923 260 Z"/></g><g class="near"><path d="M-20 300 L-20 258 L24 233 L68 185 L112 185 L156 233 L200 258 L200 300 Z"/><path d="M273 300 L273 232 Q276 180 295 165 L300 150 L305 165 Q324 180 327 232 L327 300 Z"/><path d="M480 300 L488 239 Q504 182 550 167 L560 110 L570 167 L616 182 Q632 239 640 300 Z"/><path d="M710 300 L710 242 L770 209 L830 143 L890 143 L950 209 L1010 242 L1010 300 Z"/><path d="M1104 300 L1104 210 Q1108 140 1133 120 L1140 100 L1147 120 Q1172 140 1176 210 L1176 300 Z"/><path d="M1283 300 L1293 226 Q1312 157 1368 139 L1380 70 L1392 139 L1448 157 Q1467 226 1477 300 Z"/><path d="M1520 300 L1520 254 L1568 227 L1616 175 L1664 175 L1712 227 L1760 254 L1760 300 Z"/><path d="M1809 300 L1809 224 Q1812 164 1834 147 L1840 130 L1846 147 Q1868 164 1871 224 L1871 300 Z"/></g></svg>
+    <div class="sk-drops" id="sk-drops"></div>
+    <svg class="sk-splash s1" viewBox="0 0 200 120"><path d="M100 110 C70 60 40 50 10 60 M100 110 C90 50 95 25 105 5 M100 110 C130 60 160 50 190 58"/><circle cx="12" cy="58" r="5"/><circle cx="104" cy="6" r="5"/><circle cx="188" cy="56" r="5"/><circle cx="60" cy="30" r="3"/><circle cx="150" cy="28" r="3"/></svg>
+    <svg class="sk-splash s2" viewBox="0 0 200 120"><path d="M100 110 C70 60 40 50 10 60 M100 110 C90 50 95 25 105 5 M100 110 C130 60 160 50 190 58"/><circle cx="12" cy="58" r="5"/><circle cx="104" cy="6" r="5"/><circle cx="188" cy="56" r="5"/></svg>
+  </div>
+  {# update 103 (Tim): people and an elephant playing water, bunting, palms, drifting clouds - an original flat cartoon #}
+  <div class="sk-clouds" aria-hidden="true"><i class="c1"></i><i class="c2"></i><i class="c3"></i><i class="c4"></i></div>
+  <svg class="sk-scene" viewBox="0 0 1920 180" preserveAspectRatio="xMidYMax meet" aria-hidden="true">
+    <defs><linearGradient id="skg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#a5f3fc"/><stop offset="1" stop-color="#38bdf8"/></linearGradient></defs>
+    <rect x="0" y="150" width="1920" height="30" class="ground"/>
+    <ellipse cx="470" cy="166" rx="120" ry="9" class="puddle"/><ellipse cx="1330" cy="168" rx="160" ry="10" class="puddle"/>
+    <g class="palm pl1" transform="translate(40 0)"><path d="M0 170 Q8 110 4 60" class="trunk"/><g class="leaves"><path d="M4 60 Q-40 40 -70 70 Q-30 50 4 60Z"/><path d="M4 60 Q40 30 80 55 Q40 45 4 60Z"/><path d="M4 60 Q-10 20 -40 10 Q-5 30 4 60Z"/><path d="M4 60 Q30 15 60 18 Q25 30 4 60Z"/></g></g>
+    <g class="palm pl2" transform="translate(1880 0)"><path d="M0 170 Q-8 110 -4 60" class="trunk"/><g class="leaves"><path d="M-4 60 Q-40 40 -80 62 Q-40 50 -4 60Z"/><path d="M-4 60 Q40 35 70 65 Q30 50 -4 60Z"/><path d="M-4 60 Q-30 15 -60 15 Q-25 30 -4 60Z"/><path d="M-4 60 Q10 20 40 10 Q5 30 -4 60Z"/></g></g>
+    <!-- 1: throws water from a silver bowl -->
+    <g class="pp p1" transform="translate(300 0)">
+      <ellipse cx="0" cy="166" rx="26" ry="5" class="shadow"/>
+      <path d="M-9 120 L-12 162 M9 120 L12 162" class="leg" stroke="#7f1d1d"/>
+      <rect x="-15" y="70" width="30" height="54" rx="12" fill="#f97316"/><rect x="-15" y="108" width="30" height="18" rx="6" fill="#7f1d1d"/>
+      <circle cx="0" cy="56" r="15" fill="#f2c49b"/><path d="M-15 52 Q0 30 15 52 Q8 42 0 42 Q-8 42 -15 52Z" fill="#2b1d16"/><path d="M-5 58 Q0 63 5 58" class="smile"/>
+      <path d="M-12 80 L-28 100" class="limb" stroke="#f2c49b"/>
+      <g class="throw"><path d="M12 80 L36 66" class="limb" stroke="#f2c49b"/><path d="M30 58 Q44 72 58 58 Z" class="bowl"/></g>
+      <path d="M56 56 Q120 0 190 60" class="water w1"/><path d="M58 60 Q130 20 200 80" class="water w2"/>
+    </g>
+    <!-- 2: gets splashed, hands up, jumping -->
+    <g class="pp p2" transform="translate(520 0)">
+      <ellipse cx="0" cy="166" rx="26" ry="5" class="shadow"/>
+      <g class="jump"><path d="M-9 120 L-12 162 M9 120 L12 162" class="leg" stroke="#1e3a8a"/>
+      <rect x="-15" y="70" width="30" height="54" rx="12" fill="#facc15"/><rect x="-15" y="108" width="30" height="18" rx="6" fill="#1e3a8a"/>
+      <circle cx="0" cy="56" r="15" fill="#e8b48a"/><path d="M-15 52 Q0 32 15 52 Q6 44 0 44 Q-6 44 -15 52Z" fill="#111"/><ellipse cx="0" cy="61" rx="4" ry="3" class="mouth"/>
+      <path d="M-12 78 L-26 52 M12 78 L26 52" class="limb wave" stroke="#e8b48a"/>
+      <g class="drip"><circle cx="-18" cy="40" r="3"/><circle cx="16" cy="36" r="3"/><circle cx="4" cy="30" r="2.5"/></g></g>
+    </g>
+    <!-- 3: water gun -->
+    <g class="pp p3" transform="translate(820 0)">
+      <ellipse cx="0" cy="166" rx="26" ry="5" class="shadow"/>
+      <path d="M-9 120 L-12 162 M9 120 L12 162" class="leg" stroke="#14532d"/>
+      <rect x="-15" y="70" width="30" height="54" rx="12" fill="#22c55e"/><rect x="-15" y="108" width="30" height="18" rx="6" fill="#14532d"/>
+      <circle cx="0" cy="56" r="15" fill="#f2c49b"/><path d="M-15 50 Q0 34 15 50 L15 46 Q0 28 -15 46Z" fill="#7c2d12"/><path d="M-5 58 Q0 63 5 58" class="smile"/>
+      <path d="M-12 82 L22 84 M12 80 L30 86" class="limb" stroke="#f2c49b"/>
+      <g class="gun"><rect x="18" y="78" width="40" height="11" rx="4" fill="#ec4899"/><rect x="26" y="68" width="14" height="12" rx="3" fill="#38bdf8"/><rect x="24" y="88" width="8" height="14" rx="2" fill="#ec4899"/></g>
+      <path d="M60 83 L230 70" class="jet"/>
+    </g>
+    <!-- 4: runner with a bucket, crossing the band -->
+    <g class="runner"><g class="pp p4">
+      <ellipse cx="0" cy="166" rx="22" ry="5" class="shadow"/>
+      <g class="bob"><path d="M-8 120 L-18 160 M8 120 L18 160" class="leg run" stroke="#7c3aed"/>
+      <rect x="-14" y="72" width="28" height="50" rx="12" fill="#e0f2fe"/><rect x="-14" y="108" width="28" height="16" rx="6" fill="#7c3aed"/>
+      <circle cx="0" cy="58" r="14" fill="#f2c49b"/><path d="M-14 54 Q0 34 14 54 Q6 46 0 46 Q-6 46 -14 54Z" fill="#2b1d16"/><path d="M-5 60 Q0 65 5 60" class="smile"/>
+      <path d="M10 82 L26 100" class="limb" stroke="#f2c49b"/><path d="M18 98 h22 l-3 22 h-16 Z" class="bucket"/><path d="M-10 82 L-24 64" class="limb" stroke="#f2c49b"/></g>
+    </g></g>
+    <!-- 5: elephant sprays water with its trunk -->
+    <g class="ele" transform="translate(1280 0)">
+      <ellipse cx="0" cy="168" rx="90" ry="7" class="shadow"/>
+      <rect x="-60" y="122" width="22" height="44" rx="8" class="eb"/><rect x="-24" y="122" width="22" height="44" rx="8" class="eb"/>
+      <rect x="18" y="122" width="22" height="44" rx="8" class="eb"/><rect x="48" y="122" width="22" height="44" rx="8" class="eb"/>
+      <ellipse cx="0" cy="104" rx="84" ry="46" class="eb"/>
+      <path d="M-30 64 h70 l-6 24 h-58 Z" fill="#facc15"/><path d="M-26 70 h62 l-4 12 h-54 Z" fill="#dc2626"/>
+      <g class="head"><circle cx="-84" cy="88" r="34" class="eb"/><path class="ear" d="M-78 66 Q-40 60 -46 100 Q-56 118 -78 110 Z"/>
+        <circle cx="-96" cy="80" r="4" fill="#111"/><path d="M-104 70 q8 -10 16 0" stroke="#dc2626" stroke-width="4" fill="none"/>
+        <g class="trunk2"><path d="M-112 96 Q-134 110 -128 132 Q-124 120 -138 80 Q-150 50 -142 40" class="tr"/></g></g>
+      <path d="M-142 38 Q-200 -10 -270 40" class="water w3"/><path d="M-142 40 Q-210 0 -290 64" class="water w4"/>
+      <path d="M78 96 Q94 110 86 124" stroke="#6b7280" stroke-width="5" fill="none"/>
+      <g class="rider" transform="translate(10 0)"><rect x="-10" y="30" width="22" height="34" rx="9" fill="#ef4444"/><circle cx="1" cy="20" r="11" fill="#e8b48a"/><path d="M-10 18 Q1 4 12 18Z" fill="#111"/>
+        <path d="M10 40 L28 24" class="limb wave2" stroke="#e8b48a"/></g>
+    </g>
+    <!-- 6: splashes with a hose -->
+    <g class="pp p6" transform="translate(1620 0)">
+      <ellipse cx="0" cy="166" rx="26" ry="5" class="shadow"/>
+      <path d="M-9 120 L-12 162 M9 120 L12 162" class="leg" stroke="#0f172a"/>
+      <rect x="-15" y="70" width="30" height="54" rx="12" fill="#ec4899"/><rect x="-15" y="108" width="30" height="18" rx="6" fill="#0f172a"/>
+      <circle cx="0" cy="56" r="15" fill="#d9a07a"/><path d="M-16 54 Q0 28 16 54 Q16 70 12 74 L12 54 Q0 44 -12 54 L-12 74 Q-16 70 -16 54Z" fill="#111"/><path d="M-5 58 Q0 63 5 58" class="smile"/>
+      <path d="M-12 82 L-30 74 M12 82 L-24 76" class="limb" stroke="#d9a07a"/><path d="M-30 74 Q-20 120 60 160" class="hose"/>
+      <path d="M-34 72 Q-110 20 -170 70" class="water w5"/>
+    </g>
+    <g class="sprays"><circle cx="490" cy="66" r="4"/><circle cx="505" cy="80" r="3"/><circle cx="1010" cy="70" r="4"/><circle cx="1050" cy="64" r="3"/><circle cx="1000" cy="58" r="2.5"/>
+      <circle cx="1450" cy="70" r="4"/><circle cx="1010" cy="40" r="3"/><circle cx="1470" cy="56" r="3"/></g>
+    <!-- bunting -->
+    <path d="M0 8 Q480 40 960 8 T1920 8" class="string"/>
+    <g class="flags"><path d="M20 10 l14 0 l-7 18 Z" class="f0"/><path d="M80 15 l14 0 l-7 18 Z" class="f1"/><path d="M140 20 l14 0 l-7 18 Z" class="f2"/><path d="M200 25 l14 0 l-7 18 Z" class="f3"/><path d="M260 28 l14 0 l-7 18 Z" class="f4"/><path d="M320 31 l14 0 l-7 18 Z" class="f0"/><path d="M380 32 l14 0 l-7 18 Z" class="f1"/><path d="M440 33 l14 0 l-7 18 Z" class="f2"/><path d="M500 33 l14 0 l-7 18 Z" class="f3"/><path d="M560 33 l14 0 l-7 18 Z" class="f4"/><path d="M620 31 l14 0 l-7 18 Z" class="f0"/><path d="M680 29 l14 0 l-7 18 Z" class="f1"/><path d="M740 26 l14 0 l-7 18 Z" class="f2"/><path d="M800 22 l14 0 l-7 18 Z" class="f3"/><path d="M860 17 l14 0 l-7 18 Z" class="f4"/><path d="M920 12 l14 0 l-7 18 Z" class="f0"/><path d="M980 10 l14 0 l-7 18 Z" class="f1"/><path d="M1040 15 l14 0 l-7 18 Z" class="f2"/><path d="M1100 20 l14 0 l-7 18 Z" class="f3"/><path d="M1160 25 l14 0 l-7 18 Z" class="f4"/><path d="M1220 28 l14 0 l-7 18 Z" class="f0"/><path d="M1280 31 l14 0 l-7 18 Z" class="f1"/><path d="M1340 32 l14 0 l-7 18 Z" class="f2"/><path d="M1400 33 l14 0 l-7 18 Z" class="f3"/><path d="M1460 33 l14 0 l-7 18 Z" class="f4"/><path d="M1520 33 l14 0 l-7 18 Z" class="f0"/><path d="M1580 31 l14 0 l-7 18 Z" class="f1"/><path d="M1640 29 l14 0 l-7 18 Z" class="f2"/><path d="M1700 26 l14 0 l-7 18 Z" class="f3"/><path d="M1760 22 l14 0 l-7 18 Z" class="f4"/><path d="M1820 17 l14 0 l-7 18 Z" class="f0"/><path d="M1880 12 l14 0 l-7 18 Z" class="f1"/></g>
+  </svg>
   <div class="xm-deco" aria-hidden="true">
     <div class="xm-snow" id="xm-snow"></div>
     <svg class="xm-lights" viewBox="0 0 1920 70" preserveAspectRatio="none"><path class="wire" d="M0 14 Q120 54 240 18 T480 18 T720 18 T960 18 T1200 18 T1440 18 T1680 18 T1920 14"/>
@@ -35,6 +125,7 @@
     <div class="tvb-brand"><h1><span id="tvb-branch">{{ data.branch_name }}</span> · {{ text.bbTitle.th }}</h1>
       <p>{{ data.branch_name_en }} · {{ text.bbTitle.en }} &nbsp;·&nbsp; {{ text.bbSub.th }}</p></div>
     <div class="xm-greet"><b>Merry Christmas</b><span>{{ text.bbXmas.th }}</span></div>
+    <div class="sk-greet"><b>{{ text.bbSongkran.th }}</b><span>Happy Songkran</span></div>
     <button type="button" class="tvb-full" id="tvb-full" data-on="{{ text.tvbFull.th }} · {{ text.tvbFull.en }}" data-off="{{ text.tvbFullExit.th }} · {{ text.tvbFullExit.en }}"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg><span>{{ text.tvbFull.th }} · {{ text.tvbFull.en }}</span></button>
     <div class="bb-promo" id="bb-promo" hidden></div>
     <button type="button" class="xm-music" id="xm-music" hidden data-on="&#128264; {{ text.bbMusicTap.th }}" data-play="&#127925;" data-mute="&#128263;" aria-label="{{ text.bbMusicTap.en }}"></button>

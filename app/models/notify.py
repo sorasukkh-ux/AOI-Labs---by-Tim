@@ -359,7 +359,8 @@ def send_coupon(coupon, browser_origin=None):
         doc["NOTIFY_FLEX"] = line_flex.coupon_card(camp.get("CAMP_NAME", ""), name, value, expire, coupon.get("NOTE"), qr,
                                                    coupon["COUPON_ID"], public_base(browser_origin),
                                                    {"coupon": t_in("th", "cpnCardSub"), "for": t_in("th", "cpnCardFor"),
-                                                    "expire": t_in("th", "cpnCardExpire"), "how": t_in("th", "cpnCardHow")})
+                                                    "expire": t_in("th", "cpnCardExpire"), "how": t_in("th", "cpnCardHow")},
+                                                   cp.theme_of(camp))
     else:
         doc["NOTIFY_FLEX"] = None
         doc["NOTIFY_FLG"], doc["ERROR"] = ERROR, "lnNoPublicUrl"

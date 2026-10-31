@@ -1613,3 +1613,15 @@ tr.cpn-used td, tr.cpn-cancelled td, tr.cpn-expired td { color: var(--text-muted
 .cp-stage.is-full .cp-pointer { border-left-width: 3vh; border-right-width: 3vh; border-top-width: 6vh; margin-left: -3vh; top: -1.5vh; }
 .cp-stage.is-full .cp-result-in .n { font-size: 6vh; } .cp-stage.is-full .cp-result-in .g { font-size: 3.4vh; }
 .cp-stage.is-full .cp-confetti i { animation-name: cp-fall-full; } @keyframes cp-fall-full { to { transform: translate(var(--dx), 110vh) rotate(var(--rot)); opacity: .8; } }
+.cp-history { max-width: 520px; margin: 16px auto 0; padding: 10px 16px; border-radius: 14px; background: rgba(0,0,0,.22); text-align: left; } .cp-history[hidden] { display: none; } .cp-history .h { margin: 0 0 6px; font-weight: 700; color: #fde68a; } .cp-history ol { margin: 0; padding-left: 0; list-style: none; max-height: 160px; overflow: auto; } .cp-history li { padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,.15); } .cp-history li small { color: #fde68a; opacity: .8; } .cp-history li:first-child { font-weight: 700; color: #fff; }
+/* update 100: gift winners */
+.cp-count { font-size: 14px; color: var(--text-secondary); } .cp-count b { color: #15803d; font-size: 18px; }
+.cp-win-table tr.cpw-given td { background: #f0fdf4; } .cp-win-table tr.cpw-pending td { background: #fffbeb; }
+/* update 101: Songkran campaign */
+.cp-entries { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; } @media (max-width: 640px) { .cp-entries { grid-template-columns: 1fr; } }
+.cp-entries .cp-entry { margin: 0; } .cp-entry-sk { background: linear-gradient(90deg, #0369a1, #f97316); }
+.cp-th-songkran .cp-type { border-top-color: var(--c); }
+.cp-stage.cp-th-songkran { background: radial-gradient(700px 400px at 50% 0%, rgba(253,186,116,.45), transparent 70%), linear-gradient(160deg, #0c4a6e, #0369a1 45%, #f97316 100%); }
+.cp-th-songkran .cp-sub, .cp-th-songkran .cp-note { color: #e0f2fe; } .cp-th-songkran .cp-pointer { border-top-color: #38bdf8; }
+.cp-th-songkran .cp-hub { background: radial-gradient(circle at 35% 30%, #e0f2fe, #38bdf8 60%, #0369a1); color: #fff; }
+.cp-th-songkran .cp-bulb { fill: #7dd3fc; } .cp-th-songkran .cp-result-in .l { color: #0369a1; }

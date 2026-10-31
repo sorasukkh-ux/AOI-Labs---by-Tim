@@ -517,6 +517,20 @@
     for (var i = 0; i < 12; i++) make(i);
   })();
 
+  (function drops() {                                   // update 102: Songkran water drops (shown only with the theme)
+    var host = document.getElementById("sk-drops");
+    if (!host) return;
+    for (var i = 0; i < 60; i++) {
+      var d = document.createElement("i"), size = 6 + Math.random() * 12;
+      d.style.left = (Math.random() * 100) + "%";
+      d.style.width = (size * 0.62).toFixed(1) + "px"; d.style.height = size.toFixed(1) + "px";
+      d.style.animationDuration = (2.2 + Math.random() * 3).toFixed(2) + "s";
+      d.style.animationDelay = (-Math.random() * 5).toFixed(2) + "s";
+      d.style.setProperty("--dx", (Math.random() * 120 - 60).toFixed(0) + "px");
+      host.appendChild(d);
+    }
+  })();
+
   window.addEventListener("resize", fit);
   fit(); syncClock(); clock(); theme(); draw(true);
   setInterval(clock, 1000);

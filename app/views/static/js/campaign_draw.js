@@ -10,7 +10,9 @@
   var done = JSON.parse(stage.getAttribute("data-done") || "null");
   var wheel = document.getElementById("cp-wheel"), btn = document.getElementById("cp-spin");
   if (!wheel || !people.length) return;
-  var COLORS = ["#dc2626", "#16a34a", "#f59e0b", "#2563eb", "#db2777", "#0d9488", "#7c3aed", "#ea580c"];
+  var COLORS = stage.classList.contains("cp-th-songkran")          // update 101: water and sunset colours for Songkran
+    ? ["#0284c7", "#f97316", "#06b6d4", "#e11d48", "#2563eb", "#f59e0b", "#14b8a6", "#9333ea"]
+    : ["#dc2626", "#16a34a", "#f59e0b", "#2563eb", "#db2777", "#0d9488", "#7c3aed", "#ea580c"];
   var total = people.reduce(function (s, p) { return s + p.tickets; }, 0), slices = [], a = 0, rot = 0, busy = false;
 
   function svg(tag, attrs) { var n = document.createElementNS(NS, tag); for (var k in attrs) n.setAttribute(k, attrs[k]); return n; }
@@ -76,10 +78,19 @@
     document.getElementById("cp-win-code").textContent = r.winner;
     document.getElementById("cp-win-gift").textContent = r.gift;
     document.getElementById("cp-win-tickets").textContent = text.cpTickets.replace("{n}", r.tickets).replace("{total}", r.total);
+    document.getElementById("cp-win-round").textContent = r.round ? text.cpRound.replace("{n}", r.round) : "";
     document.getElementById("cp-result").hidden = false;
     confetti(); fanfare();
   }
 
+  function addHistory(r) {                            // update 99: the new spin on top of the list
+    var box = document.getElementById("cp-history"), list = document.getElementById("cp-history-list");
+    if (!box || !r.round) return;
+    var li = document.createElement("li"), b = document.createElement("b"), sm = document.createElement("small");
+    b.textContent = text.cpRound.replace("{n}", r.round); sm.textContent = r.time || "";
+    li.appendChild(b); li.appendChild(document.createTextNode(" " + r.name + " ")); li.appendChild(sm);
+    list.insertBefore(li, list.firstChild); box.hidden = false;
+  }
   function spinTo(r) {
     var s = slices.filter(function (x) { return x.cust === r.winner; })[0] || slices[0];
     var span = s.to - s.from, inside = s.from + span * (0.2 + Math.random() * 0.6);       // somewhere inside the slice
@@ -97,14 +108,13 @@
       for (var k = 0; k < slices.length; k++) if (at >= slices[k].from && at < slices[k].to) idx = k;
       if (idx !== last) { if (last !== null) tick(); last = idx; }
       if (Date.now() - started < 7100) requestAnimationFrame(loop);
-      else { busy = false; btn.disabled = false; btn.textContent = text.cpReplay; show(r); }
+      else { busy = false; btn.disabled = false; btn.textContent = text.cpReplay; show(r); addHistory(r); }
     })();
   }
 
   btn.addEventListener("click", function () {
     if (busy) return;
     busy = true;
-    if (done) { spinTo(done); return; }
     var req = new XMLHttpRequest();
     req.open("POST", stage.getAttribute("data-url"), true);
     req.setRequestHeader("X-CSRF-Token", stage.getAttribute("data-csrf"));
@@ -113,6 +123,7 @@
       var r = null;
       try { r = JSON.parse(req.responseText); } catch (e) { r = null; }
       if (!r || !r.ok) { busy = false; window.AOIModal.alert((r && r.error) || text.errServer); return; }
+      document.getElementById("cp-result").hidden = true;
       done = r; spinTo(r);
     };
     req.onerror = function () { busy = false; window.AOIModal.alert(text.errServer); };

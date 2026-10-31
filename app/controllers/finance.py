@@ -383,6 +383,14 @@ def campaign():
             except ValidationError as error:
                 flash_error(error)
             return redirect(url_for("finance.campaign", branch=branch, id=camp_id, kind=request.form.get("kind"), _anchor="cp-coupons"))
+        if action == "ungive":                                               # update 100
+            try:
+                cp.ungive(camp_id, branch, request.form.get("kind"), int(request.form.get("level") or -1), _user_id())
+            except (ValidationError, ValueError) as error:
+                flash_error(error if isinstance(error, ValidationError) else ValidationError("errNumber"))
+            else:
+                flash_ok("cpMsgUngiven")
+            return redirect(url_for("finance.campaign", branch=branch, id=camp_id, gf=request.form.get("gf"), _anchor="cp-winners"))
         if action == "give":
             try:
                 cp.give(camp_id, branch, request.form.get("kind"), request.form.get("cust"), int(request.form.get("level") or 0), _user_id())
@@ -390,6 +398,8 @@ def campaign():
                 flash_error(error if isinstance(error, ValidationError) else ValidationError("errNumber"))
             else:
                 flash_ok("cpMsgGiven")
+            if request.form.get("from") == "winners":
+                return redirect(url_for("finance.campaign", branch=branch, id=camp_id, gf=request.form.get("gf"), _anchor="cp-winners"))
             return redirect(url_for("finance.campaign", branch=branch, id=camp_id, kind=request.form.get("kind"), _anchor="cp-standings"))
         try:
             saved = cp.save(branch, camp_id, request.form, _user_id())
@@ -413,14 +423,16 @@ def campaign():
             if c["CUST_CODE"] not in names:
                 names[c["CUST_CODE"]] = (Customer.find(c["CUST_CODE"]) or {}).get("CUST_NAME", c["CUST_CODE"])
             coupons.append(dict(c, state=cpn.state(c), name=names[c["CUST_CODE"]]))
-    form = camp or cp.blank(branch)
+    form = camp or cp.blank(branch, request.args.get("theme") or "xmas")
 
     def day(value):
         return to_local(value).date().isoformat() if value else ""
     return render_template("finance/campaign.html", branch=branch, branches=maintainable_branches(), camps=camps, camp=camp,
                            form=form, data=data, kind=kind, types=cp.TYPES, type_keys=CP_TYPE_KEYS, day=day,
                            state_of=cp.state, can_edit=can(MARKETING, "edit"),
-                           coupons=coupons, fmt_date=fmt_date, line_customers=_line_customers() if camp else [],
+                           theme=cp.theme_of(form), theme_icon=cp.THEME_ICON, themes=cp.THEMES,
+                           coupons=coupons, fmt_date=fmt_date, winners=cp.winners(camp) if camp else [],
+                           gf=request.args.get("gf") if request.args.get("gf") in ("pending", "given") else "all", line_customers=_line_customers() if camp else [],
                            is_final=bool(camp) and cp.final(camp), final_day=to_local(camp["DATE_TO"]).strftime("%d/%m/%Y") if camp else "")
 
 
@@ -450,9 +462,12 @@ def campaign_draw(camp_id, kind):
         except ValidationError as error:
             return jsonify({"ok": False, "error": t(error.key, **error.params)}), 422
         return jsonify({"ok": True, "winner": d["WINNER_CUST"], "name": d["WINNER_NAME"], "gift": d["GIFT"],
-                        "tickets": d["WINNER_TICKETS"], "total": d["TICKETS"]})
-    done = cp.draw_of(camp_id, kind)
+                        "tickets": d["WINNER_TICKETS"], "total": d["TICKETS"], "round": d.get("ROUND") or 1,
+                        "time": to_local(d["DRAW_DATE"]).strftime("%d/%m/%Y %H:%M")})
+    history = cp.draws_of(camp_id, kind)
     return render_template("finance/campaign_draw.html", camp=camp, kind=kind, type_keys=CP_TYPE_KEYS,
-                           entrants=cp.entrants(camp, kind), done=done, can_edit=can(MARKETING, "edit"),
+                           theme=cp.theme_of(camp), theme_icon=cp.THEME_ICON,
+                           entrants=cp.entrants(camp, kind), done=history[0] if history else None, history=history,
+                           can_edit=can(MARKETING, "edit"), to_local=to_local,
                            back=url_for("finance.campaign", branch=camp["BRANCH_ID"], id=camp_id, kind=kind),
-                           js_text=texts("cpSpin", "cpSpinning", "cpWinner", "cpReplay", "errServer", "cpTickets"))
+                           js_text=texts("cpSpin", "cpSpinning", "cpWinner", "cpReplay", "errServer", "cpTickets", "cpRound"))

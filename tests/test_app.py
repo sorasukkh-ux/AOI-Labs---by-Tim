@@ -4656,12 +4656,35 @@ class Update93(Base):
         hdr = {"X-CSRF-Token": token, "Accept": "application/json"}
         body = self.client.post("/finance/campaign/%s/draw/ML" % camp["CAMP_ID"], headers=hdr).get_json()
         self.assertTrue(body["ok"], body)
-        self.assertEqual((body["winner"], body["gift"]), ("C261001004", "ML gold"))       # the only one not ranked 1-3
-        self.assertEqual(self.client.post("/finance/campaign/%s/draw/ML" % camp["CAMP_ID"], headers=hdr).get_json()["winner"], "C261001004")
-        self.assertEqual(len(self.db("AOITS_CAMPDRAW")), 1)
+        self.assertIn(body["winner"], ("C261001001", "C261001002", "C261001003", "C261001004"))   # update 98: everyone qualified
+        self.assertEqual(body["gift"], "ML gold")
+        again = self.client.post("/finance/campaign/%s/draw/ML" % camp["CAMP_ID"], headers=hdr).get_json()   # update 99: spin again
+        self.assertEqual((body["round"], again["round"]), (1, 2))
+        with self.app.app_context():
+            from app.models import campaign as cp
+            self.assertEqual(sorted(e["cust"] for e in cp.entrants(cp.get(camp["CAMP_ID"]), "ML")),
+                             ["C261001001", "C261001002", "C261001003", "C261001004"])
+        self.assertEqual(sorted(d["ROUND"] for d in self.db("AOITS_CAMPDRAW")), [1, 2])
+        self.assertIn("Spin 2", self.text("/finance/campaign/%s/draw/ML" % camp["CAMP_ID"]))
         self.assertEqual(self.client.post("/finance/campaign/%s/draw/SL" % camp["CAMP_ID"], headers=hdr).status_code, 422)
         self.assertIn("Winner", self.text("/finance/campaign?branch=factory2&id=%s&kind=ML" % camp["CAMP_ID"]))
         self.assertIn("No customer has points", self.text("/finance/campaign?branch=factory2&id=%s&kind=BY" % camp["CAMP_ID"]))
+        # update 100: the gift winners list - ranks 1-3 and the special gift, handed over or not
+        page = self.text("/finance/campaign?branch=factory2&id=%s" % camp["CAMP_ID"])
+        self.assertIn('id="cp-winners"', page)
+        with self.app.app_context():
+            from app.models import campaign as cp
+            w = cp.winners(cp.get(camp["CAMP_ID"]))
+        self.assertEqual([(x["level"], x["status"]) for x in w], [(1, "given"), (2, "pending"), (3, "pending"), (0, "pending")])
+        special = w[3]
+        self.post("/finance/campaign", {"branch": "factory2", "id": camp["CAMP_ID"], "action": "give", "kind": "ML", "level": "0",
+                                        "cust": special["cust"], "from": "winners"}, "/finance/campaign?branch=factory2")
+        self.post("/finance/campaign", {"branch": "factory2", "id": camp["CAMP_ID"], "action": "ungive", "kind": "ML", "level": "1"},
+                  "/finance/campaign?branch=factory2")
+        with self.app.app_context():
+            w = cp.winners(cp.get(camp["CAMP_ID"]))
+        self.assertEqual([(x["level"], x["status"]) for x in w], [(1, "pending"), (2, "pending"), (3, "pending"), (0, "given")])
+        self.assertIn("Handed over", self.text("/finance/campaign?branch=factory2&id=%s&gf=given" % camp["CAMP_ID"]))
 
 
 class Update96(Base):
@@ -4742,6 +4765,33 @@ class Update96(Base):
             col("AOITS_COUPON").update_one({"COUPON_ID": big["COUPON_ID"]}, {"$set": {"EXPIRE_DATE": camp["DATE_FROM"] - timedelta(days=1)}})
             from app.models import coupon as cpn
             self.assertEqual(cpn.state(cpn.get(big["COUPON_ID"])), "expired")
+
+
+class Update101(Base):
+    """Songkran: a campaign theme (Marketing) and a billboard theme."""
+
+    def test_songkran(self):
+        with self.app.app_context():
+            from app.models import tv
+            key = tv.issue_key("factory2", "admin")
+        page = self.text("/tv/factory2/prices?theme=songkran&key=" + key)
+        self.assertIn("theme-songkran", page)
+        self.assertIn('id="sk-drops"', page)
+        self.assertIn('class="sk-scene"', page)                                   # update 103: people playing water
+        self.assertIn('class="ele"', page)
+        self.login("admin")
+        self.client.get("/lang/en")
+        self.assertIn('id="cp-entry-songkran"', self.text("/finance/marketing?branch=factory2"))
+        blank = self.text("/finance/campaign?branch=factory2&new=1&theme=songkran")
+        self.assertIn('value="songkran" selected', blank)
+        self.assertIn("Songkran 20", blank)
+        self.assertIn('value="songkran"', self.text("/admin/milling/maintenance?branch=factory2"))
+        self.post("/finance/campaign", {"branch": "factory2", "CAMP_NAME": "Songkran", "THEME": "songkran", "DATE_FROM": "2027-04-01",
+                                        "DATE_TO": "2027-04-20", "KG_PER_POINT": "10", "MIN_ML": "1", "MIN_BY": "1", "MIN_SL": "1"},
+                  "/finance/campaign?branch=factory2")
+        camp = self.db("AOIMS_CAMPAIGN")[0]
+        self.assertEqual(camp["THEME"], "songkran")
+        self.assertIn("cp-th-songkran", self.text("/finance/campaign?branch=factory2&id=" + camp["CAMP_ID"]))
 
 
 if __name__ == "__main__":

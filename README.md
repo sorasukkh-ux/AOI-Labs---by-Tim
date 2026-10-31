@@ -340,6 +340,27 @@ are kept in `AOITS_SYSLOG` (14 days), the checks in `AOITS_HEALTH` (7 days).
 customer's LINE when "Also send to the customer's LINE" is ticked (shown for customers linked to LINE); "Send to LINE
 only" sends without printing. The same public https address is needed as for the queue QR (update 47).
 
+## Songkran billboard: people playing water (update 103)
+
+- The Songkran theme is now bright daytime (blue sky, sun, clouds drifting, golden chedi and a red giant swing that slowly pan) with a lively street at the bottom: one throws water from a bowl, one gets splashed and jumps, one shoots a water gun, one runs across with a bucket, an elephant sprays water with its trunk with a rider waving, one sprays a hose; bunting flags sway and palms move. Original flat drawings.
+
+## Songkran (updates 101-102, DB 1.64)
+
+- Marketing: a second entry "Songkran campaign"; the campaign page has + Christmas / New Year and + Songkran, and a Campaign theme choice. Songkran sets 1-20 April, water / sunset colours on the campaign page and the lucky wheel, and a blue coupon card on LINE (💦). Everything else (points, ranks, wheel, coupons) is the same.
+- Price billboard theme "Songkran": dusk sky with a warm sun, temple silhouettes (own simple drawings), falling water drops and splashes, glowing cyan / orange prices, "สุขสันต์วันสงกรานต์ · Happy Songkran". Choose it in the billboard settings or try &theme=songkran.
+
+## Gift winners list (update 100)
+
+- Campaign page > "Gift winners": everyone who earns a gift - rank 1-3 of each type and the special gift (latest spin) - with mobile / LINE, points and the status: waiting (campaign not ended), to hand over, handed over (date and staff). Filter All / To hand over / Handed over, the count handed over, "mark as given" and Undo.
+
+## Wheel can be spun again (update 99)
+
+- Each spin is a new random draw and is kept (Spin 1, 2, ...); the list of all spins is under the wheel and the latest is the winner on the campaign page.
+
+## Lucky draw includes everyone (update 98)
+
+- The special gift draw now includes every customer with the minimum points, the rank 1-3 winners too (chance still by points). Set the minimum points to 1 to let every customer with points in.
+
 ## Lucky wheel full screen (update 97)
 
 - The lucky wheel page has a Full screen button (top right, or the F key): the wheel, title and winner card fill the screen for showing to customers. Names on the left half of the wheel now read the right way up.

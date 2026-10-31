@@ -5,24 +5,29 @@
 {% block content %}
 <div id="cp-draw-page">
 {{ page_head(t('cpWheelTitle'), back) }}
-<div class="cp-stage" id="cp-stage" data-url="{{ url_for('finance.campaign_draw', camp_id=camp.CAMP_ID, kind=kind) }}"
+<div class="cp-stage cp-th-{{ theme }}" id="cp-stage" data-url="{{ url_for('finance.campaign_draw', camp_id=camp.CAMP_ID, kind=kind) }}"
      data-entrants='{{ entrants|tojson }}' data-text='{{ js_text|tojson }}' data-csrf="{{ csrf_token() }}"
      data-done='{{ ({"winner": done.WINNER_CUST, "name": done.WINNER_NAME, "gift": done.GIFT, "tickets": done.WINNER_TICKETS, "total": done.TICKETS} if done else None)|tojson }}'>
   <div class="cp-snow" aria-hidden="true"></div>
   <button type="button" class="cp-full" id="cp-full" data-on="&#x26F6; {{ t('tvbFull') }}" data-off="&#x2715; {{ t('tvbFullExit') }}">&#x26F6; {{ t('tvbFull') }}</button>
-  <h2 class="cp-h">&#127876; {{ camp.CAMP_NAME }}</h2>
+  <h2 class="cp-h">{{ theme_icon[theme] }} {{ camp.CAMP_NAME }}</h2>
   <p class="cp-sub">{{ t(type_keys[kind]) }} &middot; &#127873; <b>{{ camp.TYPES[kind].SPECIAL }}</b> &middot; {{ t('cpEntrants', n=entrants|length) }}</p>
   {% if entrants %}
   <div class="cp-wheel-box">
     <div class="cp-pointer" aria-hidden="true"></div>
     <svg class="cp-wheel" id="cp-wheel" viewBox="-210 -210 420 420" role="img" aria-label="{{ t('cpWheelTitle') }}"></svg>
-    <button type="button" class="cp-hub" id="cp-spin" {% if not can_edit and not done %}disabled{% endif %}>{{ t('cpReplay') if done else t('cpSpin') }}</button>
+    <button type="button" class="cp-hub" id="cp-spin" {% if not can_edit %}disabled{% endif %}>{{ t('cpSpin') if not done else t('cpSpinAgain') }}</button>
   </div>
   <p class="cp-note">{{ t('cpWheelNote') }}</p>
   {% else %}<p class="hint center">{{ t('cpNoEntrants') }}</p>{% endif %}
+  {# update 99: every spin is kept - the latest is the winner shown on the campaign page #}
+  <div class="cp-history" id="cp-history"{% if not history %} hidden{% endif %}>
+    <p class="h">{{ t('cpHistory') }}</p>
+    <ol id="cp-history-list">{% for h in history %}<li><b>{{ t('cpRound', n=h.ROUND or 1) }}</b> {{ h.WINNER_NAME }} <small>{{ to_local(h.DRAW_DATE).strftime('%d/%m/%Y %H:%M') }}</small></li>{% endfor %}</ol>
+  </div>
   <div class="cp-result" id="cp-result" hidden>
     <div class="cp-result-in"><p class="l">&#127881; {{ t('cpWinner') }}</p><p class="n" id="cp-win-name"></p><p class="c" id="cp-win-code"></p>
-      <p class="g">&#127873; <span id="cp-win-gift"></span></p><p class="k" id="cp-win-tickets"></p>
+      <p class="g">&#127873; <span id="cp-win-gift"></span></p><p class="k" id="cp-win-tickets"></p><p class="k" id="cp-win-round"></p>
       <button type="button" class="action" id="cp-close">OK</button></div>
   </div>
   <div class="cp-confetti" id="cp-confetti" aria-hidden="true"></div>

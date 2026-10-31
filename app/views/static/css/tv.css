@@ -522,3 +522,127 @@ html:has(body.theme-ranking), body.theme-ranking { background: linear-gradient(1
 .rk-rows.few { gap: 16px; } .rk-rows.few .rk-row { height: 104px; grid-template-columns: 96px minmax(0, 1.1fr) 1fr 220px; }
 .rk-rows.few .rk-row .no { font-size: 52px; } .rk-rows.few .rk-row .nm { font-size: 42px; } .rk-rows.few .rk-row .nm small { font-size: 17px; }
 .rk-rows.few .rk-row .val { font-size: 56px; } .rk-rows.few .rk-bar { height: 28px; }
+
+/* ---------- update 102: Songkran theme - dusk sky, temples, water (original drawings) ---------- */
+.sk-deco, .sk-greet { display: none; }
+body.theme-songkran { --text: #f0f9ff; --sub: #bae6fd; --dim: #7dd3fc; --line: rgba(186,230,253,.35); --sell: #a5f3fc; --mill: #fdba74; }
+html:has(body.theme-songkran), body.theme-songkran {
+  background: radial-gradient(900px 520px at 72% 78%, rgba(251,146,60,.85), rgba(251,146,60,0) 70%),
+              radial-gradient(800px 500px at 20% 20%, rgba(14,165,233,.55), transparent 70%),
+              linear-gradient(180deg, #0c1e4a 0%, #0b4f8a 38%, #1d7fb8 62%, #f59e0b 92%) fixed, #0b4f8a; }
+.theme-songkran .tvb-circuit, .theme-songkran .bb-glow { display: none; }
+.theme-songkran .sk-deco { display: block; position: absolute; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+.theme-songkran .tvb-head, .theme-songkran .bb-main, .theme-songkran .bb-ticker { position: relative; z-index: 1; }
+.sk-sun { position: absolute; right: 18%; bottom: 120px; width: 300px; height: 300px; border-radius: 50%;
+  background: radial-gradient(circle, #fff7d6 0%, #fdba74 40%, rgba(249,115,22,0) 70%); animation: sk-glow 6s ease-in-out infinite alternate; }
+@keyframes sk-glow { to { transform: scale(1.12); opacity: .8; } }
+.sk-sky { position: absolute; left: 0; right: 0; bottom: 96px; width: 100%; height: 300px; }
+.sk-sky .far path { fill: #0b2a52; opacity: .55; } .sk-sky .near path { fill: #071a36; opacity: .85; }
+.sk-drops { position: absolute; inset: 0; }
+.sk-drops i { position: absolute; top: -30px; border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
+  background: radial-gradient(circle at 35% 35%, #ffffff, #7dd3fc 45%, rgba(14,165,233,.5) 100%); opacity: .8; animation: sk-fall linear infinite; }
+@keyframes sk-fall { to { transform: translate3d(var(--dx, 0), 1120px, 0); } }
+.sk-splash { position: absolute; width: 240px; height: 144px; opacity: 0; } .sk-splash path { fill: none; stroke: #e0f2fe; stroke-width: 6; stroke-linecap: round; }
+.sk-splash circle { fill: #e0f2fe; } .sk-splash.s1 { left: 6%; bottom: 200px; animation: sk-splash 3.2s ease-out infinite; }
+.sk-splash.s2 { right: 8%; bottom: 260px; animation: sk-splash 3.2s ease-out 1.6s infinite; }
+@keyframes sk-splash { 0% { opacity: 0; transform: scale(.3) translateY(40px); } 25% { opacity: .9; } 70% { opacity: .5; transform: scale(1.15) translateY(-10px); } 100% { opacity: 0; transform: scale(1.3); } }
+.theme-songkran .sk-greet { display: block; margin-left: 18px; transform: rotate(-2deg); text-align: center; white-space: nowrap; }
+.theme-songkran .sk-greet b { display: block; font-size: 34px; font-weight: 800; color: #fff; text-shadow: 0 3px 0 #0369a1, 0 0 18px #38bdf8; }
+.theme-songkran .sk-greet span { font-size: 17px; color: #fed7aa; letter-spacing: .12em; }
+.theme-songkran .sk-greet + .tvb-full { margin-left: auto; }
+.theme-songkran .tvb-brand { flex: 0 0 auto; } .theme-songkran .tvb-brand h1, .theme-songkran .tvb-brand p { white-space: nowrap; }
+.theme-songkran .bb-promo { max-width: 470px; font-size: 22px; background: linear-gradient(90deg, #0284c7, #f97316); color: #fff; border: 2px solid #e0f2fe; }
+.theme-songkran .bb-hero, .theme-songkran .bb-list { background: linear-gradient(170deg, rgba(8,47,92,.72), rgba(3,105,161,.55) 55%, rgba(194,65,12,.45)); border: 2px solid rgba(186,230,253,.45);
+  box-shadow: 0 0 50px rgba(56,189,248,.3), inset 0 0 0 1px rgba(255,255,255,.08); }
+.theme-songkran .bb-price, .theme-songkran .bb-row { background: rgba(255,255,255,.1); border-color: rgba(186,230,253,.3); }
+.theme-songkran .bb-row.on { background: linear-gradient(90deg, rgba(2,132,199,.75), rgba(249,115,22,.6)); border-color: #fde68a; box-shadow: 0 0 30px rgba(253,186,116,.55); }
+.theme-songkran .bb-price.b::before { background: #67e8f9; box-shadow: 0 0 18px #67e8f9; } .theme-songkran .bb-price.s::before { background: #fdba74; box-shadow: 0 0 18px #fdba74; }
+.theme-songkran .bb-price.b .bb-num { color: #cffafe; text-shadow: 0 0 24px rgba(103,232,249,.8); }
+.theme-songkran .bb-price.s .bb-num { color: #fed7aa; text-shadow: 0 0 24px rgba(253,186,116,.85); }
+.theme-songkran .bb-row .pv.b { color: #a5f3fc; } .theme-songkran .bb-row .pv.s { color: #fdba74; }
+.theme-songkran .bb-name h2 { color: #fff; text-shadow: 0 4px 0 #075985, 0 0 26px rgba(56,189,248,.7); }
+.theme-songkran .bb-art { background: radial-gradient(circle at 35% 30%, #e0f2fe, #38bdf8 60%, #0369a1); border: 3px dashed #e0f2fe; }
+.theme-songkran .bb-ticker { background: linear-gradient(90deg, #075985, #0284c7, #ea580c); border: 2px solid rgba(224,242,254,.6); }
+.theme-songkran .bb-ticker::before { background: linear-gradient(90deg, #075985, transparent); } .theme-songkran .bb-ticker::after { background: linear-gradient(270deg, #ea580c, transparent); }
+.theme-songkran .bb-tape .it .b { color: #cffafe; } .theme-songkran .bb-tape .it .s { color: #fed7aa; }
+.theme-songkran .bb-timer i { background: linear-gradient(90deg, #38bdf8, #fdba74); }
+.theme-songkran .bb-note-ribbon { background: linear-gradient(90deg, #0284c7, #f97316); color: #fff; border: 2px dashed #e0f2fe; }
+@media (prefers-reduced-motion: reduce) { .sk-drops, .sk-splash, .sk-sun { animation: none; display: none; } }
+.theme-songkran .tvb-clock .d { white-space: nowrap; } .theme-songkran .tvb-head { gap: 18px; } .theme-songkran .sk-greet b { font-size: 30px; } .theme-songkran .sk-greet { margin-left: 8px; } .theme-songkran .bb-promo { min-width: 0; flex: 0 1 auto; }
+
+/* ---------- update 103: Songkran - people and an elephant playing water, moving background ---------- */
+.sk-scene, .sk-clouds { display: none; }
+.theme-songkran .bb-main { height: 690px; }
+.theme-songkran .bb-spark svg { height: 90px; } .theme-songkran .bb-card { padding-top: 34px; padding-bottom: 26px; }
+.theme-songkran .bb-prices { margin-top: 18px; } .theme-songkran .bb-art { width: 120px; height: 120px; flex-basis: 120px; } .theme-songkran .bb-name h2 { font-size: 64px; }
+.theme-songkran .bb-num { font-size: 120px; } .theme-songkran .rk-wrap { height: 690px; }
+.theme-songkran .bb-rows { gap: 4px; } .theme-songkran .bb-row { padding: 4px 14px; } .theme-songkran .bb-row .pv { font-size: 32px; } .theme-songkran .bb-row .nm { font-size: 23px; }
+.theme-songkran .sk-scene { display: block; position: absolute; left: 0; right: 0; bottom: 112px; width: 1920px; height: 180px; z-index: 2; pointer-events: none; }
+.theme-songkran .sk-sky { bottom: 260px; height: 260px; animation: sk-pan 40s ease-in-out infinite alternate; }
+@keyframes sk-pan { to { transform: translateX(-60px); } }
+.sk-sky .far { animation: sk-pan2 30s ease-in-out infinite alternate; } @keyframes sk-pan2 { to { transform: translateX(40px); } }
+.theme-songkran .sk-clouds { display: block; position: absolute; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+.sk-clouds i { position: absolute; height: 46px; border-radius: 40px; background: rgba(255,255,255,.75); filter: blur(1px); animation: sk-cloud linear infinite; }
+.sk-clouds i::before, .sk-clouds i::after { content: ""; position: absolute; background: inherit; border-radius: 50%; }
+.sk-clouds i::before { width: 60%; height: 150%; left: 15%; top: -60%; } .sk-clouds i::after { width: 40%; height: 120%; right: 12%; top: -40%; }
+.sk-clouds .c1 { width: 180px; top: 150px; animation-duration: 70s; } .sk-clouds .c2 { width: 120px; top: 250px; animation-duration: 95s; animation-delay: -40s; }
+.sk-clouds .c3 { width: 220px; top: 330px; animation-duration: 120s; animation-delay: -80s; opacity: .7; } .sk-clouds .c4 { width: 140px; top: 190px; animation-duration: 85s; animation-delay: -20s; }
+@keyframes sk-cloud { from { transform: translateX(-300px); } to { transform: translateX(2200px); } }
+.sk-scene .ground { fill: #0e7490; opacity: .55; } .sk-scene .puddle { fill: #67e8f9; opacity: .55; animation: sk-ripple 2.4s ease-in-out infinite; }
+@keyframes sk-ripple { 50% { transform: scaleX(1.08); opacity: .35; } } .sk-scene .puddle { transform-box: fill-box; transform-origin: center; }
+.sk-scene .shadow { fill: rgba(0,0,0,.25); }
+.sk-scene .leg { stroke-width: 9; stroke-linecap: round; fill: none; } .sk-scene .limb { stroke-width: 8; stroke-linecap: round; fill: none; }
+.sk-scene .smile { stroke: #7c2d12; stroke-width: 2; fill: none; } .sk-scene .mouth { fill: #7c2d12; }
+.sk-scene .bowl { fill: #e5e7eb; stroke: #9ca3af; stroke-width: 2; } .sk-scene .bucket { fill: #ef4444; }
+.sk-scene .water { fill: none; stroke: url(#skg); stroke-width: 7; stroke-linecap: round; stroke-dasharray: 260; stroke-dashoffset: 260; opacity: .9; }
+.sk-scene .w1, .sk-scene .w2 { animation: sk-throw 2.6s ease-out infinite; } .sk-scene .w2 { animation-delay: .15s; stroke-width: 4; }
+@keyframes sk-throw { 0%, 20% { stroke-dashoffset: 260; opacity: 0; } 30% { opacity: .95; } 60% { stroke-dashoffset: 0; opacity: .9; } 100% { stroke-dashoffset: -260; opacity: 0; } }
+.sk-scene .throw { transform-box: fill-box; transform-origin: 0% 100%; animation: sk-arm 2.6s ease-in-out infinite; }
+@keyframes sk-arm { 0%, 15% { transform: rotate(30deg); } 30% { transform: rotate(-35deg); } 60%, 100% { transform: rotate(10deg); } }
+.sk-scene .jump { animation: sk-jump 1.3s ease-in-out infinite; } @keyframes sk-jump { 50% { transform: translateY(-14px); } }
+.sk-scene .wave { animation: sk-wave .65s ease-in-out infinite alternate; transform-box: fill-box; transform-origin: 50% 100%; } @keyframes sk-wave { to { transform: rotate(10deg); } }
+.sk-scene .drip circle { fill: #e0f2fe; animation: sk-drip 1.3s ease-in infinite; } @keyframes sk-drip { to { transform: translateY(40px); opacity: 0; } }
+.sk-scene .jet { stroke: #bae6fd; stroke-width: 6; stroke-linecap: round; stroke-dasharray: 6 14; animation: sk-jet .35s linear infinite; fill: none; }
+@keyframes sk-jet { to { stroke-dashoffset: -40; } }
+.sk-scene .gun { animation: sk-recoil .35s ease-in-out infinite; } @keyframes sk-recoil { 50% { transform: translateX(-2px); } }
+.sk-scene .runner { animation: sk-run 16s linear infinite; } @keyframes sk-run { from { transform: translateX(-120px); } to { transform: translateX(2040px); } }
+.sk-scene .bob { animation: sk-bob .4s ease-in-out infinite alternate; } @keyframes sk-bob { to { transform: translateY(-5px); } }
+.sk-scene .run { animation: sk-legs .4s steps(2) infinite; } @keyframes sk-legs { 50% { transform: scaleX(-1); } } .sk-scene .run { transform-box: fill-box; transform-origin: center; }
+.sk-scene .eb { fill: #6b7280; } .sk-scene .ear { fill: #9ca3af; transform-box: fill-box; transform-origin: 0% 50%; animation: sk-ear 1.6s ease-in-out infinite alternate; }
+@keyframes sk-ear { to { transform: scaleX(.8) rotate(-6deg); } }
+.sk-scene .tr { fill: none; stroke: #6b7280; stroke-width: 16; stroke-linecap: round; }
+.sk-scene .trunk2 { transform-box: fill-box; transform-origin: 80% 100%; animation: sk-trunk 3s ease-in-out infinite; } @keyframes sk-trunk { 0%, 30% { transform: rotate(8deg); } 50%, 80% { transform: rotate(-4deg); } }
+.sk-scene .w3, .sk-scene .w4 { animation: sk-throw 3s ease-out infinite; animation-delay: .9s; } .sk-scene .w4 { animation-delay: 1.05s; stroke-width: 5; }
+.sk-scene .head { animation: sk-nod 3s ease-in-out infinite; transform-box: fill-box; transform-origin: 100% 50%; } @keyframes sk-nod { 50% { transform: rotate(-3deg); } }
+.sk-scene .wave2 { transform-box: fill-box; transform-origin: 0% 100%; animation: sk-wave .5s ease-in-out infinite alternate; }
+.sk-scene .hose { fill: none; stroke: #16a34a; stroke-width: 5; } .sk-scene .w5 { animation: sk-throw 2s ease-out infinite; animation-delay: .4s; }
+.sk-scene .sprays circle { fill: #e0f2fe; animation: sk-sparkle 1.2s ease-in-out infinite; } .sk-scene .sprays circle:nth-child(2n) { animation-delay: .6s; }
+@keyframes sk-sparkle { 50% { opacity: .1; transform: translateY(-8px); } }
+.sk-scene .string { fill: none; stroke: #0f172a; stroke-width: 2; opacity: .6; }
+.sk-scene .flags { animation: sk-flags 2.4s ease-in-out infinite alternate; transform-origin: 50% 0; } @keyframes sk-flags { to { transform: skewX(4deg); } }
+.sk-scene .f0 { fill: #ef4444; } .sk-scene .f1 { fill: #22c55e; } .sk-scene .f2 { fill: #3b82f6; } .sk-scene .f3 { fill: #facc15; } .sk-scene .f4 { fill: #ec4899; }
+.sk-scene .palm .trunk { fill: none; stroke: #92400e; stroke-width: 10; stroke-linecap: round; } .sk-scene .palm .leaves path { fill: #16a34a; }
+.sk-scene .palm .leaves { transform-box: fill-box; transform-origin: 50% 90%; animation: sk-palm 3.4s ease-in-out infinite alternate; } @keyframes sk-palm { to { transform: rotate(5deg); } }
+@media (prefers-reduced-motion: reduce) { .sk-scene *, .sk-clouds i, .sk-sky, .sk-sky .far { animation: none !important; } }
+/* update 103b (Tim's daytime references): bright blue sky, sun, golden chedi, giant swing; ticker kept at the bottom */
+html:has(body.theme-songkran), body.theme-songkran {
+  background: radial-gradient(260px 260px at 86% 22%, rgba(254,240,138,.95), rgba(253,224,71,.4) 45%, rgba(253,224,71,0) 70%),
+              linear-gradient(180deg, #38bdf8 0%, #7dd3fc 45%, #bae6fd 70%, #fde68a 86%, #fbbf24 100%) fixed, #7dd3fc; }
+.theme-songkran .sk-sun { right: 9%; top: 150px; bottom: auto; width: 180px; height: 180px; background: radial-gradient(circle, #fffbeb 0%, #fde047 45%, rgba(250,204,21,0) 72%); }
+.theme-songkran .sk-sky .far path { fill: #0ea5e9; opacity: .35; } .theme-songkran .sk-sky .near path { fill: #0284c7; opacity: .35; }
+.sk-land { display: none; }
+.theme-songkran .sk-land { display: block; position: absolute; left: 0; right: 0; bottom: 270px; width: 1920px; height: 420px; animation: sk-pan 50s ease-in-out infinite alternate; }
+.sk-land .sw-post, .sk-land .sw-top { fill: #dc2626; } .sk-land .sw-tip { stroke: #dc2626; stroke-width: 8; stroke-linecap: round; }
+.sk-land .gold path { fill: #f59e0b; } .sk-land .gold .rings rect { fill: #fde68a; }
+.sk-land .gold { filter: drop-shadow(0 0 30px rgba(253,224,71,.55)); animation: sk-shine 4s ease-in-out infinite alternate; } @keyframes sk-shine { to { filter: drop-shadow(0 0 8px rgba(253,224,71,.3)); } }
+.sk-land { opacity: .85; }
+.theme-songkran .bb-hero, .theme-songkran .bb-list { background: linear-gradient(170deg, rgba(7,58,110,.82), rgba(3,105,161,.72) 60%, rgba(194,65,12,.62)); }
+.theme-songkran .tvb-brand h1, .theme-songkran .tvb-clock .t { text-shadow: 0 3px 0 #0369a1, 0 0 16px rgba(3,105,161,.6); color: #fff; }
+.theme-songkran .tvb-brand p, .theme-songkran .tvb-clock .d { color: #0c4a6e; font-weight: 600; } .theme-songkran .tvb-live { color: #065f46; }
+.theme-songkran .sk-greet b { color: #fff; text-shadow: 0 3px 0 #ea580c, 0 0 18px #fde047; font-size: 36px; } .theme-songkran .sk-greet span { color: #0c4a6e; font-weight: 700; }
+.theme-songkran .bb-main { height: 640px; }
+.theme-songkran .bb-ticker { position: absolute; left: 48px; right: 48px; bottom: 12px; height: 96px; margin: 0; }
+.theme-songkran .sk-scene { bottom: 110px; }
+.theme-songkran .sk-scene .ground { fill: #fbbf24; opacity: .9; }
+.theme-songkran .sk-drops i { opacity: .55; }
+.theme-songkran .bb-card .bb-spark { display: none; }

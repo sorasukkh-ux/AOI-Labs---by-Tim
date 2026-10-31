@@ -8,7 +8,8 @@
   {{ branch_picker('finance.marketing', branch, branches, 'mk-branch-select') }}
   <p class="cap-note">{{ t('mkBranchNote') }}</p>
 </div>
-<a class="card cp-entry" id="cp-entry" href="{{ url_for('finance.campaign', branch=branch) }}">&#127876; <b>{{ t('mkCampaignOpen') }}</b> &rarr;</a>
+<div class="cp-entries"><a class="card cp-entry" id="cp-entry" href="{{ url_for('finance.campaign', branch=branch) }}">&#127876; <b>{{ t('mkCampaignOpen') }}</b> &rarr;</a>
+<a class="card cp-entry cp-entry-sk" id="cp-entry-songkran" href="{{ url_for('finance.campaign', branch=branch, new=1, theme='songkran') }}">&#128166; <b>{{ t('mkSongkranOpen') }}</b> &rarr;</a></div>
 <div class="card">
   <div class="card-head">
     <p class="card-title">{{ t('mkMillPromoTitle') }}</p>

@@ -9,24 +9,27 @@
 <div class="card branch-pick-card">
   {{ branch_picker('finance.campaign', branch, branches, 'cp-branch-select') }}
   <div class="cp-camps">
-    {% for c in camps %}<a class="chip{% if camp and c.CAMP_ID == camp.CAMP_ID %} active{% endif %}" href="{{ url_for('finance.campaign', branch=branch, id=c.CAMP_ID) }}">{{ c.CAMP_NAME }} <small>{{ t('cpState_' ~ state_of(c)) }}</small></a>{% endfor %}
-    {% if can_edit %}<a class="chip cp-new" href="{{ url_for('finance.campaign', branch=branch, new=1) }}">+ {{ t('cpNew') }}</a>{% endif %}
+    {% for c in camps %}<a class="chip{% if camp and c.CAMP_ID == camp.CAMP_ID %} active{% endif %}" href="{{ url_for('finance.campaign', branch=branch, id=c.CAMP_ID) }}">{{ theme_icon[c.THEME or 'xmas'] }} {{ c.CAMP_NAME }} <small>{{ t('cpState_' ~ state_of(c)) }}</small></a>{% endfor %}
+    {% if can_edit %}<a class="chip cp-new" href="{{ url_for('finance.campaign', branch=branch, new=1) }}">+ &#127876; {{ t('cpNewXmas') }}</a>
+    <a class="chip cp-new" id="cp-new-songkran" href="{{ url_for('finance.campaign', branch=branch, new=1, theme='songkran') }}">+ &#128166; {{ t('cpNewSongkran') }}</a>{% endif %}
   </div>
 </div>
 
-<form method="post" class="card cp-form" id="cp-form">
+<form method="post" class="card cp-form cp-th-{{ theme }}" id="cp-form">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <input type="hidden" name="branch" value="{{ branch }}">
   {% if camp %}<input type="hidden" name="id" value="{{ camp.CAMP_ID }}">{% endif %}
-  <div class="card-head"><p class="card-title">&#127876; {{ t('cpSetup') }}</p>
+  <div class="card-head"><p class="card-title">{{ theme_icon[theme] }} {{ t('cpSetup') }}</p>
     {% if camp %}<span class="badge {{ {'running': 'approved', 'inactive': 'manual', 'scheduled': 'pending', 'ended': 'blocked'}[state_of(camp)] }}">{{ t('cpState_' ~ state_of(camp)) }}</span>{% endif %}</div>
   <fieldset class="cp-fs" {% if not can_edit %}disabled{% endif %}>
   <div class="cp-grid4">
     <div class="cp-span2"><label class="field-label" for="cp-name">{{ t('cpName') }}</label><input type="text" id="cp-name" name="CAMP_NAME" value="{{ form.CAMP_NAME }}" maxlength="80" required></div>
     <div><label class="field-label" for="cp-from">{{ t('mkLblFrom') }}</label><input type="date" id="cp-from" name="DATE_FROM" value="{{ day(form.DATE_FROM) }}" required></div>
     <div><label class="field-label" for="cp-to">{{ t('mkLblTo') }}</label><input type="date" id="cp-to" name="DATE_TO" value="{{ day(form.DATE_TO) }}" required></div>
+    <div><label class="field-label" for="cp-theme">{{ t('cpTheme') }}</label>
+      <select id="cp-theme" name="THEME">{% for th_ in themes %}<option value="{{ th_ }}"{% if theme == th_ %} selected{% endif %}>{{ theme_icon[th_] }} {{ t('cpTheme_' ~ th_) }}</option>{% endfor %}</select></div>
     <div><label class="field-label" for="cp-kg">{{ t('cpKgPerPoint') }}</label><input type="number" id="cp-kg" name="KG_PER_POINT" value="{{ form.KG_PER_POINT }}" min="1" max="1000" step="1"></div>
-    <div class="cp-span3"><label class="field-label">{{ t('cpStatus') }}</label>
+    <div class="cp-span2"><label class="field-label">{{ t('cpStatus') }}</label>
       <label class="bb-switch"><input type="checkbox" name="STATUS" value="A" {% if form.STATUS == 'A' %}checked{% endif %}><i></i><span>{{ t('cpActive') }}</span></label></div>
   </div>
   <div class="cp-types">
@@ -54,6 +57,45 @@
   </fieldset>
   {% if can_edit %}<div class="bb-actions"><button class="action primary" type="submit" id="cp-save">{{ t('btnSave') }}</button></div>{% endif %}
 </form>
+
+{% if camp %}
+{# update 100: everyone who earns a gift (ranks 1-3 + the special gift of each type) and whether it was handed over #}
+{% set n_pending = winners|selectattr('status', 'equalto', 'pending')|list|length %}
+{% set n_given = winners|selectattr('status', 'equalto', 'given')|list|length %}
+<div class="card mt14" id="cp-winners">
+  <div class="card-head"><p class="card-title">&#127873; {{ t('cpWinners') }}</p>
+    <span class="cp-count"><b>{{ n_given }}</b> / {{ winners|length }} {{ t('cpGivenCount') }}</span></div>
+  <div class="chips">
+    {% for key, label, n in (('all', t('filterAll'), winners|length), ('pending', t('cpSt_pending'), n_pending), ('given', t('cpSt_given'), n_given)) %}
+    <a class="chip{% if gf == key %} active{% endif %}" href="{{ url_for('finance.campaign', branch=branch, id=camp.CAMP_ID, gf=key, _anchor='cp-winners') }}">{{ label }} <small>{{ n }}</small></a>{% endfor %}
+  </div>
+  {% if not is_final %}<p class="cp-provisional">&#9203; {{ t('cpProvisional', day=final_day) }}</p>{% endif %}
+  <div class="inv-table-wrap"><table class="tv-table cp-table cp-win-table">
+    <thead><tr><th>{{ t('cpWinType') }}</th><th>{{ t('cpPrize') }}</th><th>{{ t('colCustomer') }}</th><th>{{ t('cpGift') }}</th><th class="num">{{ t('cpPoints') }}</th><th>{{ t('cpnStatus') }}</th><th></th></tr></thead>
+    <tbody>
+    {% for w in winners if gf == 'all' or w.status == gf %}
+    <tr class="cpw-{{ w.status }}">
+      <td>{{ t(type_keys[w.kind]) }}</td>
+      <td>{% if w.level %}<span class="cp-medal m{{ w.level }}">{{ w.level }}</span> {{ t('cpRank', n=w.level) }}{% else %}&#127905; {{ t('cpSpecialShort') }}{% endif %}</td>
+      <td><b>{{ w.name }}</b><br><small class="cp-code">{{ w.cust }}{% if w.mobile %} &middot; {{ w.mobile }}{% endif %}{% if w.line %} &middot; LINE{% endif %}</small></td>
+      <td>{{ w.gift }}</td>
+      <td class="num">{{ w.points }}</td>
+      <td>{% if w.status == 'given' %}<span class="badge approved">&#10003; {{ t('cpSt_given') }}</span><br><small class="cp-code">{{ w.given_date }} &middot; {{ w.given_user }}</small>
+        {% elif w.status == 'pending' %}<span class="badge pending">{{ t('cpSt_pending') }}</span>
+        {% else %}<span class="badge manual">{{ t('cpSt_waiting') }}</span>{% endif %}</td>
+      <td class="cpn-acts">{% if can_edit and w.status != 'waiting' %}
+        <form method="post" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="branch" value="{{ branch }}">
+          <input type="hidden" name="id" value="{{ camp.CAMP_ID }}"><input type="hidden" name="kind" value="{{ w.kind }}"><input type="hidden" name="level" value="{{ w.level }}">
+          <input type="hidden" name="cust" value="{{ w.cust }}"><input type="hidden" name="gf" value="{{ gf }}"><input type="hidden" name="from" value="winners">
+          {% if w.status == 'pending' %}<button class="action small primary" type="submit" name="action" value="give" data-confirm="{{ t('cpConfirmGive', gift=w.gift, name=w.name) }}">&#127873; {{ t('cpGive') }}</button>
+          {% else %}<button class="action small" type="submit" name="action" value="ungive" data-confirm="{{ t('cpConfirmUngive', gift=w.gift, name=w.name) }}">{{ t('cpUngive') }}</button>{% endif %}
+        </form>{% endif %}</td>
+    </tr>
+    {% else %}<tr><td colspan="7" class="hint center">{{ t('cpNoWinners') }}</td></tr>{% endfor %}
+    </tbody>
+  </table></div>
+</div>
+{% endif %}
 
 {% if camp and data %}
 <div class="card mt14" id="cp-standings">
