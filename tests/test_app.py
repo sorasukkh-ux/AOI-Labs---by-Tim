@@ -4837,7 +4837,7 @@ class Update106(Base):
         self.client.get("/lang/en")
         self.upload(b"hello not audio", name="x.mp3")
         self.assertEqual(self.db("AOITS_BB_MUSIC"), [])
-        self.upload(self.MP3, theme="default")
+        self.upload(self.MP3, theme="nope")
         self.assertEqual(self.db("AOITS_BB_MUSIC"), [])
         r = self.upload(self.MP3)
         self.assertEqual(r.status_code, 302)
@@ -4873,3 +4873,27 @@ class Update106(Base):
         self.assertEqual(self.db("AOITS_BB_MUSIC"), [])
         self.logout()
         self.assertEqual(self.client.get(url).status_code, 404)
+
+
+class Update107(Base):
+    """A music file can be uploaded for every billboard theme; the button shows in the cards and ranking themes too."""
+
+    def test_all_themes(self):
+        import io
+        from app.models import tv
+        self.login("admin")
+        for theme in tv.BB_THEMES:
+            self.client.post("/admin/milling/maintenance?branch=factory2", data={
+                "csrf_token": self.token("/"), "branch": "factory2", "action": "bb_music", "BB_MUSIC_THEME": theme,
+                "BB_MUSIC_FILE": (io.BytesIO(Update106.MP3), theme + ".mp3")}, content_type="multipart/form-data")
+        self.assertEqual(sorted(d["THEME"] for d in self.db("AOITS_BB_MUSIC")), sorted(tv.BB_THEMES))
+        with self.app.app_context():
+            if not tv.key_of("factory2"):
+                tv.issue_key("factory2", "admin")
+            key = tv.key_of("factory2")
+        self.logout()
+        urls = self.client.get("/tv/factory2/prices/data?key=%s" % key).get_json()["music_urls"]
+        self.assertEqual(sorted(urls), sorted(tv.BB_THEMES))
+        self.assertEqual(self.client.get(urls["ranking"]).status_code, 200)
+        css = self.text("/static/css/tv.css")
+        self.assertNotIn(".theme-cards .xm-music, .theme-cards .bb-main { display: none", css)

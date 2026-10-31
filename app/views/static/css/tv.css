@@ -370,6 +370,10 @@ html:has(body.theme-christmas), body.theme-christmas {
 .xm-music.ask { animation: bb-promo 1.6s ease-in-out infinite; } .xm-music.on, .xm-music.off { font-size: 26px; padding: 6px 14px; }
 .xm-music.off { background: rgba(0,0,0,.35); opacity: .8; }
 .xm-music[hidden] { display: none; }
+/* update 107: the music button in every theme (the shop's own file) */
+.theme-default .xm-music { background: rgba(37,99,235,.55); box-shadow: 0 0 20px rgba(56,189,248,.35); }
+.theme-cards .xm-music, .theme-ranking .xm-music { color: #0f2a5c; background: #fff; border-color: #c7d7f0; box-shadow: 0 6px 18px rgba(15,42,92,.15); }
+.theme-cards .xm-music.off, .theme-ranking .xm-music.off { background: #e5e7eb; }
 
 /* ---------- update 89: "price cards" theme - white pricing cards with a starburst price badge (replaces poster) ---------- */
 .cd-wrap, .cd-dots, .cd-blob { display: none; }
@@ -377,7 +381,7 @@ body.theme-cards { --text: #374151; --sub: #6b7280; --dim: #9ca3af; --line: rgba
   --head: "Baloo 2", "Prompt", "IBM Plex Sans Thai", sans-serif; --body: "Prompt", "IBM Plex Sans Thai", sans-serif; }
 html:has(body.theme-cards), body.theme-cards { background: radial-gradient(1200px 800px at 50% 45%, #ffffff 0%, #f3f4f6 60%, #e5e7eb 100%) fixed, #f3f4f6; }
 .theme-cards .tvb-circuit, .theme-cards .bb-glow, .theme-cards .xm-deco, .theme-cards .xm-3d, .theme-cards .xm-bokeh, .theme-cards .xm-greet,
-.theme-cards .xm-music, .theme-cards .bb-main { display: none !important; }
+.theme-cards .bb-main { display: none !important; }
 .theme-cards .tvb-head { position: relative; z-index: 2; }
 .theme-cards .tvb-head img { box-shadow: 0 6px 18px rgba(0,0,0,.12); }
 .theme-cards .tvb-brand h1 { font-family: var(--head); font-weight: 800; color: #374151; letter-spacing: .01em; }
@@ -452,7 +456,7 @@ html:has(body.theme-cards), body.theme-cards { background: radial-gradient(1200p
 body.theme-ranking { --text: #0f2a5c; --sub: #3b5b8f; --dim: #6b84ab; --head: "Baloo 2", "Prompt", sans-serif; --body: "Prompt", "IBM Plex Sans Thai", sans-serif; }
 html:has(body.theme-ranking), body.theme-ranking { background: linear-gradient(180deg, #ffffff 0%, #eaf3ff 38%, #b9d4f5 70%, #6f95c8 100%) fixed, #eaf3ff; }
 .theme-ranking .tvb-circuit, .theme-ranking .bb-glow, .theme-ranking .xm-deco, .theme-ranking .xm-3d, .theme-ranking .xm-bokeh, .theme-ranking .xm-greet,
-.theme-ranking .xm-music, .theme-ranking .bb-main, .theme-ranking .cd-blob { display: none !important; }
+.theme-ranking .bb-main, .theme-ranking .cd-blob { display: none !important; }
 .theme-ranking .tvb-head { position: relative; z-index: 2; height: 110px; }
 .theme-ranking .tvb-brand h1 { color: #0f2a5c; font-family: var(--head); font-weight: 800; } .theme-ranking .tvb-brand p { color: #3b5b8f; }
 .theme-ranking .tvb-clock { border-left-color: rgba(15,42,92,.15); } .theme-ranking .tvb-clock .t { color: #0f2a5c; text-shadow: none; font-family: var(--head); font-weight: 800; }

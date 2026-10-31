@@ -192,12 +192,12 @@
       <tr id="bb-music-{{ th_ }}">
         <td class="bb-name">{{ t('bbTheme_' ~ th_) }}</td>
         <td>{% if f %}<b>{{ f.name }}</b><br><small class="cp-code">{{ '%.1f'|format((f.size or 0) / 1048576) }} MB &middot; {{ fmt_dt(f.date) }} &middot; {{ f.user }}</small>
-          {% else %}<span class="hint">{{ t('bbMusicBuiltin') }}</span>{% endif %}</td>
+          {% else %}<span class="hint">{{ t('bbMusicBuiltin') if th_ in ('christmas', 'songkran') else t('bbMusicNone') }}</span>{% endif %}</td>
         <td>{% if f and music_urls.get(th_) %}<audio controls preload="none" src="{{ music_urls[th_] }}" class="bb-audio"></audio>{% elif f %}<small class="hint">{{ t('bbMusicNeedKey') }}</small>{% endif %}</td>
         <td class="cpn-acts">{% if editable and f %}
           <form method="post" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="branch" value="{{ branch }}"><input type="hidden" name="action" value="bb_music_del"><input type="hidden" name="BB_MUSIC_THEME" value="{{ th_ }}">
-            <button class="action small" type="submit" data-confirm="{{ t('bbMusicConfirmDel', theme=t('bbTheme_' ~ th_)) }}">{{ t('bbMusicDel') }}</button></form>{% endif %}</td>
+            <button class="action small" type="submit" data-confirm="{{ t('bbMusicConfirmDel', theme=t('bbTheme_' ~ th_)) }}">{{ t('bbMusicDel') if th_ in ('christmas', 'songkran') else t('bbMusicDelOnly') }}</button></form>{% endif %}</td>
       </tr>
       {% endfor %}
       </tbody>

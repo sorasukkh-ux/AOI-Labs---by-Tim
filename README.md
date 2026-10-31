@@ -340,6 +340,10 @@ are kept in `AOITS_SYSLOG` (14 days), the checks in `AOITS_HEALTH` (7 days).
 customer's LINE when "Also send to the customer's LINE" is ticked (shown for customers linked to LINE); "Send to LINE
 only" sends without printing. The same public https address is needed as for the queue QR (update 47).
 
+## Music file for every billboard theme (update 107, DB 1.66)
+
+The own-music upload now works for all five billboard themes (default, Christmas, Songkran, price cards, ranking). Default, price cards and ranking have no built-in tune, so they play music only when a file is uploaded; the speaker button now also shows in the price cards and ranking themes.
+
 ## Your own billboard music (update 106, DB 1.65)
 
 Milling Maintenance > Price billboard > "เพลงของร้านเอง (ไฟล์เพลง)": upload an MP3 / M4A / OGG / WAV file (up to 10 MB) for the Christmas or Songkran theme. The billboard then loops that file instead of the built-in tune, with the same on / off switch, volume and speaker button; delete it to go back to the built-in tune. The file is kept in MongoDB (`AOITS_BB_MUSIC`) and streamed at `/tv/<branch>/music/<theme>.<ext>?key=...` with the display key. The shop must own the music and hold a licence to play it in public.

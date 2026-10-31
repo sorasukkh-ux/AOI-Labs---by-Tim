@@ -10,7 +10,7 @@ from .branch import Branch
 from ..timeutil import now_utc
 
 COL = "AOITS_BB_MUSIC"
-THEMES = ("christmas", "songkran")
+THEMES = ("default", "christmas", "songkran", "cards", "ranking")   # update 107: every billboard theme
 MAX_BYTES = 10 * 1024 * 1024
 MIMES = {"mp3": "audio/mpeg", "m4a": "audio/mp4", "ogg": "audio/ogg", "wav": "audio/wav"}
 
