@@ -33,3 +33,27 @@ def board(branch):
 def data(branch):
     _check(branch)
     return jsonify(tv.board(branch))
+
+
+# ---------- update 83: price billboard ----------
+BB_LABELS = ("tvbBuy", "tvbSell", "tvbUpdated", "tvbOffline", "tvbFull", "tvbFullExit", "bbTitle", "bbSub", "bbBuy", "bbSell",
+             "bbUnit", "bbUp", "bbDown", "bbSame", "bbSince", "bbNew", "bbDays", "bbDiscount", "bbAll", "bbNote")
+SHOW = ("both", "buy", "sell")
+
+
+@bp.route("/<branch>/prices")
+def prices(branch):
+    """The price billboard: the same display key as the TV; ?show=buy|sell|both (default both)."""
+    if not tv.allowed(branch, request.args.get("key")):
+        return render_template("tv/denied.html"), 403
+    show = request.args.get("show") if request.args.get("show") in SHOW else "both"
+    text = {k: {"th": t_in("th", k), "en": t_in("en", k)} for k in BB_LABELS}
+    text["days"], text["months"] = DAYS_TH, MONTHS_TH
+    return render_template("tv/prices.html", data=tv.billboard(branch), text=text, show=show,
+                           data_url=url_for("tv.prices_data", branch=branch, key=request.args.get("key")))
+
+
+@bp.route("/<branch>/prices/data")
+def prices_data(branch):
+    _check(branch)
+    return jsonify(tv.billboard(branch))

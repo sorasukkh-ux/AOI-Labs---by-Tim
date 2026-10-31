@@ -1474,3 +1474,4 @@ tr.price-changed .rate-input { border-color: #d97706; background: #fff7e6; font-
 .ma-var-cards { min-width: 0; flex-basis: 240px; }
 @media (max-width: 560px) { .ma-trend .ax { font-size: 20px; } .ma-hours .ax { font-size: 15px; } .ma-donut-box { margin: 0 auto; } }
 #ma-trend .dash-head { flex-wrap: wrap; } #ma-trend .dash-legend { flex-wrap: wrap; }
+.btn-row-inline { display: flex; flex-wrap: wrap; gap: 8px; } .btn-row-inline .action { width: auto; }

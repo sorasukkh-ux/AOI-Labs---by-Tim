@@ -107,7 +107,9 @@
   {% if tv_link %}
   <label class="field-label" for="tv-link">{{ t('tvLink', branch=branch_label(branch)) }}</label>
   <input type="text" id="tv-link" class="mono" readonly value="{{ tv_link }}" data-tv-path="{{ tv_path }}">
-  <p class="mt6"><a class="action" href="{{ tv_path }}" target="_blank" rel="noopener">{{ t('tvOpen') }} &rarr;</a></p>
+  <p class="mt6 btn-row-inline"><a class="action" href="{{ tv_path }}" target="_blank" rel="noopener">{{ t('tvOpen') }} &rarr;</a>
+    <a class="action" id="bb-open" href="{{ bb_path }}" target="_blank" rel="noopener">{{ t('tvBillboardOpen') }} &rarr;</a></p>
+  <p class="cap-note">{{ t('tvBillboardNote') }}</p>
   {% else %}<p class="hint">{{ t('tvNoKey') }}</p>{% endif %}
   {% if editable %}
   <form method="post" class="mt6"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

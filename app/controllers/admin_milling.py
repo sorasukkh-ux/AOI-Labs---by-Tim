@@ -99,8 +99,9 @@ def maintenance():
     key = tv.key_of(branch)
     tv_path = url_for("tv.board", branch=branch, key=key) if key else None
     tv_link = (request.url_root.rstrip("/") + tv_path) if key else None
+    bb_path = url_for("tv.prices", branch=branch, key=key) if key else None          # update 83: price billboard
     return render_template("admin/milling_maintenance.html", branch=branch, branches=maintainable_branches(), tv_link=tv_link,
-                           tv_path=tv_path, line=line_link.status(), line_events=line_link.recent(8),
+                           tv_path=tv_path, bb_path=bb_path, line=line_link.status(), line_events=line_link.recent(8),
                            webhook_path=url_for("line_api.webhook"),
                            values=values or saved, editable=can("AD_MILLTIME", "edit"), preview=_queue_preview(saved))
 

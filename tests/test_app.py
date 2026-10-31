@@ -4456,5 +4456,41 @@ class Update81(Base):
             self.assertEqual(ps.warnings(rows)[0][0], "psWarnExport")
 
 
+class Update83(Base):
+    """Price billboard in the TV theme: same display key, moving spotlight, ticker, 30-day trend."""
+
+    def test_billboard(self):
+        with self.app.app_context():
+            from app.models import tv
+            key = tv.issue_key("factory2", "admin")
+        self.assertEqual(self.client.get("/tv/factory2/prices").status_code, 403)
+        self.assertEqual(self.client.get("/tv/factory2/prices/data?key=wrong").status_code, 403)
+        page = self.text("/tv/factory2/prices?key=" + key)
+        for marker in ('id="bb-stage"', 'id="bb-rows"', 'id="bb-tape"', "billboard.js", "show-both"):
+            self.assertIn(marker, page)
+        self.assertIn("show-buy", self.text("/tv/factory2/prices?show=buy&key=" + key))
+        self.login("admin")
+        data = self.client.get("/tv/factory2/prices/data?key=" + key).get_json()
+        self.assertTrue(data["items"])
+        item = data["items"][0]
+        self.assertEqual(len(item["b"]["series"]), 30)
+        self.assertEqual(item["b"]["series"][-1], round(item["buy"], 2))
+        self.assertIn('id="bb-open"', self.text("/admin/milling/maintenance?branch=factory2"))
+
+    def test_last_change(self):
+        from datetime import timedelta
+        with self.app.app_context():
+            from app.models import tv
+            from app.timeutil import now_utc, today_local
+            now = now_utc()
+            steps = [(now - timedelta(days=5), 14.0, 16.0), (now - timedelta(days=1), 14.5, 16.0)]
+            b = tv._side(steps, 1, 14.5, today_local())
+            s = tv._side(steps, 2, 16.0, today_local())
+        self.assertEqual((b["prev"], b["change"], b["pct"]), (14.0, 0.5, 3.6))
+        self.assertEqual(s["change"], 0.0)
+        self.assertEqual(b["series"][-1], 14.5)
+        self.assertEqual(b["series"][0], 14.0)
+
+
 if __name__ == "__main__":
     unittest.main()

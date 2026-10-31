@@ -151,3 +151,76 @@ def board(branch_id):
             "branch_name_en": en_name if en_name != key else (branch.get("BRANCH_NAME") or branch_id),
             "now_ms": int(now.timestamp() * 1000), "tz_min": int(local_now.utcoffset().total_seconds() // 60), "ready": ready, "milling": milling,
             "queue": queue, "prices": prices, "updated": now_local().strftime("%H:%M:%S")}
+
+
+# ---------- update 83: price billboard (/tv/<branch>/prices?key=...) ----------
+BOARD_DAYS = 30
+
+
+def _price_steps(branch_id, code, since):
+    """[(utc datetime, buy, sell)] of the price changes from AOILOG_PRICE since `since`, with the value before it first."""
+    log = Price.LOG
+    q = {"BRANCH_ID": branch_id, "MAT_CODE": code}
+    before = col(log).find_one(dict(q, LOG_DATE={"$lt": since}), NO_ID, sort=[("LOG_DATE", -1)])
+    rows = list(col(log).find(dict(q, LOG_DATE={"$gte": since}), NO_ID).sort([("LOG_DATE", 1)]))
+    out = []
+    for r in ([before] if before else []) + rows:
+        out.append((r["LOG_DATE"], float(r.get("PRICE_BUY") or 0), float(r.get("PRICE_SELL") or 0)))
+    return out
+
+
+def _side(steps, idx, current, today, changed_at=None):
+    """Daily series (30 days) and the last change of one side (1 = buy, 2 = sell)."""
+    series, j, value = [], 0, None
+    days = [today - timedelta(days=BOARD_DAYS - 1 - i) for i in range(BOARD_DAYS)]
+    for d in days:
+        while j < len(steps) and to_local(steps[j][0]).date() <= d:
+            value = steps[j][idx]
+            j += 1
+        series.append(value)
+    series[-1] = current                                      # the price now
+    first = next((v for v in series if v), current)
+    series = [v if v else first for v in series]
+    prev, when = None, None                                   # the last different price
+    vals = [(s[0], s[idx]) for s in steps if s[idx]]
+    for k in range(len(vals) - 1, -1, -1):
+        if abs(vals[k][1] - current) > 1e-9:
+            prev, when = vals[k][1], (vals[k + 1][0] if k + 1 < len(vals) else None)
+            break
+    change = round_half_up(current - prev, 2) if prev else 0.0
+    return {"series": [round_half_up(v or 0, 2) for v in series], "prev": prev, "change": change,
+            "pct": round_half_up(change / prev * 100, 1) if prev else 0.0,
+            "since": to_local(when or changed_at).strftime("%d/%m") if (when or changed_at) else None}
+
+
+def billboard(branch_id):
+    """Everything the price billboard shows: per SKU the buying and selling price, the last change and 30 days."""
+    from ..i18n import t_in
+    from .price import Promotion
+    branch = Branch.get(branch_id) or {}
+    now = now_utc()
+    today = now_local().date()
+    since = now - timedelta(days=BOARD_DAYS + 1)
+    items = []
+    for code in PRICE_SKUS:
+        p = Price.get(branch_id, code) or {}
+        buy, sell = float(p.get("PRICE_BUY") or 0), float(p.get("PRICE_SELL") or 0)
+        if not (buy or sell):
+            continue
+        kind, variety = var.INFO.get(code, (None, None))
+        steps = _price_steps(branch_id, code, since)
+        en = t_in("en", var.KIND_KEYS[kind]) + ((" (%s)" % t_in("en", var.VAR_KEYS[variety])) if variety else "") if kind else code
+        items.append({"code": code, "name": _th_name(code), "name_en": en, "kind": kind, "variety": variety,
+                      "buy": buy, "sell": sell, "b": _side(steps, 1, buy, today, p.get("LAST_UPDATE")), "s": _side(steps, 2, sell, today, p.get("LAST_UPDATE")),
+                      "changed": to_local(p["LAST_UPDATE"]).strftime("%d/%m %H:%M") if p.get("LAST_UPDATE") else None})
+    key = "branch" + branch_id.capitalize()
+    th_name, en_name = t_in("th", key), t_in("en", key)
+    local_now = now_local()
+    try:
+        discount = Promotion.milling_discount_pct(branch_id, today)
+    except Exception:                                          # noqa: BLE001
+        discount = 0
+    return {"branch": branch_id, "branch_name": th_name if th_name != key else (branch.get("BRANCH_NAME") or branch_id),
+            "branch_name_en": en_name if en_name != key else (branch.get("BRANCH_NAME") or branch_id),
+            "now_ms": int(now.timestamp() * 1000), "tz_min": int(local_now.utcoffset().total_seconds() // 60),
+            "items": items, "discount": discount, "updated": local_now.strftime("%H:%M:%S")}

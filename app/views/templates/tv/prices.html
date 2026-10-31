@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>{{ text.bbTitle.th }} · {{ data.branch_name }} · AOI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&amp;family=IBM+Plex+Sans+Thai:wght@400;500;600;700&amp;display=swap">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/tv.css') }}">
+<link rel="icon" href="{{ url_for('static', filename='img/favicon.png') }}">
+</head>
+{# update 83 (Tim): price billboard in the TV theme - the SKU in the spotlight changes every 7 s with rolling digits,
+   the board on the right follows it, and a ticker runs along the bottom. Same display key as the TV. #}
+<body class="tvb bb show-{{ show }}">
+<svg class="tvb-circuit" aria-hidden="true" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice"><g fill="none" stroke="#1d4f9c" stroke-width="1.4">
+<path d="M0 170H140l36 36h130M0 760H110l36-36h110M1920 160H1780l-36 36h-90M1920 740H1800l-36 36h-90M60 0v70l36 36v60M1860 0v80l-36 36v60M260 1080v-50l36-36h100M1660 1080v-55l-36-36h-96"/></g>
+<g fill="#38bdf8"><circle cx="306" cy="206" r="4"/><circle cx="256" cy="724" r="4"/><circle cx="1654" cy="196" r="4"/><circle cx="1654" cy="776" r="4"/><circle cx="96" cy="166" r="4"/><circle cx="1824" cy="176" r="4"/><circle cx="396" cy="994" r="4"/><circle cx="1528" cy="989" r="4"/></g></svg>
+<div class="bb-glow" aria-hidden="true"><i></i><i></i><i></i></div>
+<div id="tvb" data-url="{{ data_url }}" data-board='{{ data|tojson }}' data-text='{{ text|tojson }}' data-show="{{ show }}">
+  <header class="tvb-head">
+    <img src="{{ url_for('static', filename='img/logo.png') }}" alt="AOI">
+    <div class="tvb-brand"><h1><span id="tvb-branch">{{ data.branch_name }}</span> · {{ text.bbTitle.th }}</h1>
+      <p>{{ data.branch_name_en }} · {{ text.bbTitle.en }} &nbsp;·&nbsp; {{ text.bbSub.th }}</p></div>
+    <button type="button" class="tvb-full" id="tvb-full" data-on="{{ text.tvbFull.th }} · {{ text.tvbFull.en }}" data-off="{{ text.tvbFullExit.th }} · {{ text.tvbFullExit.en }}"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg><span>{{ text.tvbFull.th }} · {{ text.tvbFull.en }}</span></button>
+    <div class="bb-promo" id="bb-promo" hidden></div>
+    <div class="tvb-live" id="tvb-live"><i></i>LIVE</div>
+    <div class="tvb-clock"><div class="t" id="tvb-time">--:--</div><div class="d" id="tvb-date"></div></div>
+  </header>
+  <main class="bb-main">
+    <section class="bb-hero" id="bb-hero">
+      <div class="bb-stage" id="bb-stage"></div>
+      <div class="bb-timer"><i id="bb-timer"></i></div>
+    </section>
+    <aside class="bb-list">
+      <h2><span>{{ text.bbAll.th }}</span><small>{{ text.bbAll.en }}</small>
+        <em class="bb-cols"><b class="cb">{{ text.bbBuy.th }}</b><b class="cs">{{ text.bbSell.th }}</b></em></h2>
+      <div class="bb-rows" id="bb-rows"></div>
+      <p class="bb-note">{{ text.bbNote.th }} · {{ text.bbUnit.th }}</p>
+    </aside>
+  </main>
+  <footer class="bb-ticker"><div class="bb-tape" id="bb-tape"></div></footer>
+  <div class="tvb-offline" id="tvb-offline" hidden>{{ text.tvbOffline.th }}</div>
+</div>
+<script src="{{ url_for('static', filename='js/billboard.js') }}" defer></script>
+</body>
+</html>

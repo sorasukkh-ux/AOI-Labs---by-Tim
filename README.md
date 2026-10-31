@@ -340,6 +340,14 @@ are kept in `AOITS_SYSLOG` (14 days), the checks in `AOITS_HEALTH` (7 days).
 customer's LINE when "Also send to the customer's LINE" is ticked (shown for customers linked to LINE); "Send to LINE
 only" sends without printing. The same public https address is needed as for the queue QR (update 47).
 
+## Price billboard - moving prices in the TV theme (update 83)
+
+- New page /tv/<branch>/prices?key=<TV key> (no sign-in, the same display key as the TV). Open it from Administration > Milling Maintenance > TV display > "Open the price billboard".
+- Spotlight: one SKU every 7 seconds slides in with its picture, buying and selling price in rolling digits, the change from the previous price (up / down, %), and the 30-day trend drawn in. A timer bar shows when the next SKU comes.
+- Right: all prices, the spotlight row highlighted. Bottom: a ticker that scrolls all prices. The milling promotion (take-home discount) shows at the top when one is running.
+- Refreshes every 15 seconds; a price changed on Pricing Maintenance flashes on the board and takes the spotlight with a "New price" badge.
+- &show=buy or &show=sell shows only the buying (ราคารับซื้อ) or selling price; default both. Full screen: button, double-click or F; arrow keys move the spotlight. History from AOILOG_PRICE (no DB change).
+
 ## Buy / Sell table column order (update 82)
 
 - Customer Service > Buy / Sell: columns are now Product, Price, Quantity (kg), Sub-total. Tapping a quantity of 0 selects it, so typing 30 gives 30 (not 030).
