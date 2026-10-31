@@ -221,3 +221,146 @@ body.tvb.awake .tvb-full { opacity: 1; pointer-events: auto; }
 .bb-promo { max-width: 760px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 @media (prefers-reduced-motion: reduce) { .bb-note-ribbon { animation: none; } }
 .bb-prices.one .bb-price .val { flex-direction: row; align-items: baseline; gap: 18px; } .bb-prices.one .bb-num { font-size: 180px; }
+
+/* ---------- update 85: Christmas theme of the price billboard (original drawings) ---------- */
+.xm-deco, .bb .xm-frame { display: none; }
+body.theme-christmas { --line: rgba(255,244,220,.35); --sub: #f3dcb8; --dim: #cdb08a; --sell: #a7f3d0; --mill: #fcd34d; --text: #fffaf0;
+  --xm-red: #e11d48; --xm-green: #15803d; --xm-gold: #fbbf24; --xm-cream: #fff4dc; --head: "Mali", "Chakra Petch", "IBM Plex Sans Thai", sans-serif; }
+html:has(body.theme-christmas), body.theme-christmas { background: radial-gradient(1400px 820px at 50% 35%, #1f5133 0%, #123b26 40%, #3a0d14 100%) fixed, #12301f; }
+.theme-christmas .tvb-circuit, .theme-christmas .bb-glow { display: none; }
+.theme-christmas .xm-deco { display: block; position: fixed; inset: 0; pointer-events: none; z-index: 3; }
+.theme-christmas .xm-frame { display: block; position: absolute; inset: 6px; width: calc(100% - 12px); height: calc(100% - 12px); pointer-events: none; z-index: 2; }
+.xm-frame path { fill: none; stroke: var(--xm-cream); stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke;
+  stroke-dasharray: 5200; stroke-dashoffset: 5200; animation: xm-draw 3s ease-out forwards; opacity: .9; }
+.xm-frame .f2 { stroke: var(--xm-red); stroke-width: 2.5; opacity: .75; animation-delay: .6s; }
+@keyframes xm-draw { to { stroke-dashoffset: 0; } }
+.theme-christmas .bb-hero, .theme-christmas .bb-list { background: linear-gradient(170deg, rgba(14,58,34,.82), rgba(40,10,16,.82)); border-color: transparent; border-radius: 34px;
+  box-shadow: 0 0 60px rgba(251,191,36,.12), inset 0 0 0 1px rgba(255,244,220,.08); }
+.theme-christmas .bb-price, .theme-christmas .bb-row { background: rgba(255,244,220,.07); border-color: rgba(255,244,220,.18); }
+.theme-christmas .bb-row.on { background: rgba(225,29,72,.28); border-color: var(--xm-gold); box-shadow: 0 0 26px rgba(251,191,36,.35); }
+.theme-christmas .bb-price.b::before { background: #4ade80; box-shadow: 0 0 18px #4ade80; } .theme-christmas .bb-price.s::before { background: var(--xm-gold); box-shadow: 0 0 18px var(--xm-gold); }
+.theme-christmas .bb-num { text-shadow: 0 0 30px rgba(251,191,36,.35); }
+.theme-christmas .bb-name h2, .theme-christmas .tvb-brand h1, .theme-christmas .bb-list h2 span { font-family: var(--head); text-shadow: 0 3px 0 rgba(0,0,0,.25), 0 0 26px rgba(251,191,36,.3); }
+.theme-christmas .bb-art { background: radial-gradient(circle at 35% 30%, rgba(255,244,220,.25), rgba(225,29,72,.15)); border: 2px dashed rgba(255,244,220,.6); }
+.theme-christmas .bb-ticker { background: linear-gradient(90deg, #7f1d1d, #14532d, #7f1d1d); border: 2px dashed rgba(255,244,220,.5); }
+.theme-christmas .bb-ticker::before { background: linear-gradient(90deg, #7f1d1d, transparent); } .theme-christmas .bb-ticker::after { background: linear-gradient(270deg, #7f1d1d, transparent); }
+.theme-christmas .bb-timer i { background: repeating-linear-gradient(45deg, #e11d48 0 18px, #fff4dc 18px 36px); box-shadow: 0 0 14px rgba(225,29,72,.6); }
+.theme-christmas .bb-promo { color: #fff; background: rgba(225,29,72,.45); border-color: var(--xm-gold); }
+.theme-christmas .bb-note-ribbon { background: linear-gradient(90deg, #e11d48, #be123c); color: #fff; border: 2px dashed rgba(255,244,220,.8); }
+.theme-christmas .tvb-head img { box-shadow: 0 0 28px rgba(251,191,36,.45); }
+.theme-christmas .tvb-clock .t { text-shadow: 0 0 22px rgba(251,191,36,.5); }
+/* snow */
+.xm-snow { position: absolute; inset: 0; overflow: hidden; }
+.xm-snow i { position: absolute; top: -20px; border-radius: 50%; background: #fff; opacity: .85; animation: xm-fall linear infinite; }
+@keyframes xm-fall { to { transform: translate3d(var(--dx, 40px), 110vh, 0); } }
+/* string lights */
+.xm-lights { position: absolute; left: 0; top: 0; width: 100%; height: 56px; }
+.xm-lights .wire { fill: none; stroke: #2f3b2f; stroke-width: 3; } .xm-lights .cap { fill: #6b7280; }
+.xm-lights .b { animation: xm-blink 1.6s ease-in-out infinite; } .xm-lights .b0 { fill: #ef4444; } .xm-lights .b1 { fill: #fbbf24; animation-delay: .4s; }
+.xm-lights .b2 { fill: #22c55e; animation-delay: .8s; } .xm-lights .b3 { fill: #60a5fa; animation-delay: 1.2s; }
+@keyframes xm-blink { 50% { opacity: .35; filter: none; } 0%, 100% { opacity: 1; filter: drop-shadow(0 0 6px currentColor); } }
+/* holly, tree, greeting */
+.xm-holly { position: absolute; width: 130px; height: 130px; } .xm-holly .leaf { fill: #15803d; stroke: #0b3d1e; stroke-width: 2; } .xm-holly .berry { fill: #e11d48; stroke: #7f1d1d; stroke-width: 1.5; }
+.xm-tl { left: 4px; top: 118px; transform: rotate(-20deg); } .xm-br { right: 6px; bottom: 112px; transform: rotate(160deg); }
+.xm-tree { position: absolute; left: 22px; bottom: 120px; width: 96px; height: 128px; animation: xm-sway 4s ease-in-out infinite; transform-origin: 50% 100%; }
+.xm-tree .tr { fill: #166534; stroke: #fff4dc; stroke-width: 2.5; stroke-dasharray: 6 5; } .xm-tree .trunk { fill: #78350f; } .xm-tree .star { fill: #fbbf24; animation: xm-blink 1.2s infinite; }
+.xm-tree .o1 { fill: #ef4444; } .xm-tree .o2 { fill: #fbbf24; } .xm-tree .o3 { fill: #60a5fa; }
+@keyframes xm-sway { 50% { transform: rotate(3deg); } }
+.xm-greet { position: absolute; left: 50%; top: 118px; transform: translateX(-50%) rotate(-2deg); text-align: center; white-space: nowrap; }
+.xm-greet b { display: block; font-family: "Mali", cursive; font-size: 30px; color: var(--xm-gold, #fbbf24); text-shadow: 0 0 16px rgba(251,191,36,.5); }
+.xm-greet span { font-family: "Mali", sans-serif; font-size: 18px; color: #fff4dc; }
+@media (prefers-reduced-motion: reduce) { .xm-snow, .xm-tree, .xm-lights .b { animation: none; display: none; } .xm-frame path { animation: none; stroke-dashoffset: 0; } }
+.bb-list { position: relative; }
+.theme-christmas .xm-deco { position: absolute; inset: 0; z-index: 3; }
+.theme-christmas .tvb-head { padding-top: 30px; height: 140px; } .theme-christmas .bb-main { height: 820px; }
+.xm-lights { height: 46px; }
+.bb .xm-greet { display: none; }
+.theme-christmas .xm-greet { display: block; position: static; transform: rotate(-3deg); margin-left: 24px; text-align: center; white-space: nowrap; }
+.theme-christmas .xm-greet b { font-size: 40px; } .theme-christmas .xm-greet span { font-size: 19px; }
+.theme-christmas .xm-greet + .tvb-full { margin-left: auto; }
+.xm-tl { top: 136px; }
+
+/* ---------- update 86: brighter, more colourful Christmas + 3D gifts / trees in the background ---------- */
+body.theme-christmas { --sub: #fff1d6; --dim: #ffe2b0; --sell: #bbf7d0; --mill: #fde047; }
+html:has(body.theme-christmas), body.theme-christmas {
+  background: radial-gradient(900px 600px at 50% 18%, rgba(255,214,102,.55), transparent 70%),
+              radial-gradient(1100px 700px at 0% 100%, #16a34a 0%, transparent 65%),
+              radial-gradient(1100px 700px at 100% 100%, #dc2626 0%, transparent 65%),
+              linear-gradient(160deg, #b91c1c 0%, #be185d 30%, #15803d 70%, #0f766e 100%) fixed, #b91c1c; }
+.theme-christmas .bb-hero, .theme-christmas .bb-list {
+  background: linear-gradient(160deg, rgba(21,128,61,.78) 0%, rgba(13,80,48,.8) 45%, rgba(159,18,57,.78) 100%);
+  box-shadow: 0 10px 50px rgba(0,0,0,.25), 0 0 0 3px rgba(255,255,255,.18), 0 0 60px rgba(253,224,71,.35); }
+.theme-christmas .bb-price, .theme-christmas .bb-row { background: rgba(255,255,255,.14); border-color: rgba(255,255,255,.35); }
+.theme-christmas .bb-row.on { background: linear-gradient(90deg, rgba(239,68,68,.65), rgba(234,88,12,.55)); border-color: #fde047; box-shadow: 0 0 30px rgba(253,224,71,.6); }
+.theme-christmas .bb-row .vd.v-HM { background: #fde047; } .theme-christmas .bb-row .vd.v-WH { background: #fff; } .theme-christmas .bb-row .vd.v-GL { background: #4ade80; }
+.theme-christmas .bb-price.b .bb-num { color: #bbf7d0; text-shadow: 0 0 22px rgba(74,222,128,.8), 0 4px 0 rgba(0,0,0,.2); }
+.theme-christmas .bb-price.s .bb-num { color: #fde047; text-shadow: 0 0 22px rgba(250,204,21,.85), 0 4px 0 rgba(0,0,0,.2); }
+.theme-christmas .bb-row .pv.b { color: #bbf7d0; } .theme-christmas .bb-row .pv.s { color: #fde047; }
+.theme-christmas .bb-cols .cb { color: #bbf7d0; } .theme-christmas .bb-cols .cs { color: #fde047; }
+.theme-christmas .bb-name h2 { color: #fff; text-shadow: 0 4px 0 #9f1239, 0 0 30px rgba(253,224,71,.7); }
+.theme-christmas .bb-art { background: radial-gradient(circle at 35% 30%, #fff7cc, #f59e0b 60%, #b45309); border: 3px dashed #fff; }
+.theme-christmas .bb-ticker { background: linear-gradient(90deg, #dc2626, #16a34a, #f59e0b, #db2777, #dc2626); background-size: 300% 100%; animation: xm-tick 14s linear infinite; border: 3px dashed #fff; }
+@keyframes xm-tick { to { background-position: 300% 0; } }
+.theme-christmas .bb-ticker::before { background: linear-gradient(90deg, rgba(220,38,38,.9), transparent); } .theme-christmas .bb-ticker::after { background: linear-gradient(270deg, rgba(22,163,74,.9), transparent); }
+.theme-christmas .bb-tape .it .b { color: #fff; } .theme-christmas .bb-tape .it .s { color: #fef08a; } .theme-christmas .bb-tape .it { border-right-color: rgba(255,255,255,.5); }
+.theme-christmas .bb-promo { background: linear-gradient(90deg, #f59e0b, #ef4444); color: #fff; border: 2px solid #fff; }
+.theme-christmas .xm-frame path { stroke: #fff; stroke-width: 4.5; } .theme-christmas .xm-frame .f2 { stroke: #fde047; }
+.theme-christmas .xm-lights .b { rx: 11; ry: 16; } .theme-christmas .xm-lights .wire { stroke: #14532d; stroke-width: 4; }
+.xm-lights .b4 { fill: #ec4899; }
+.theme-christmas .xm-greet b { color: #fff; text-shadow: 0 3px 0 #b91c1c, 0 0 18px #fde047; }
+.theme-christmas .xm-greet span { color: #fef3c7; }
+.theme-christmas .tvb-head, .theme-christmas .bb-main, .theme-christmas .bb-ticker { position: relative; z-index: 1; }
+.theme-christmas .bb-hero, .theme-christmas .bb-list { overflow: hidden; }
+/* bokeh lights */
+.xm-bokeh, .xm-3d { display: none; }
+.theme-christmas .xm-bokeh { display: block; position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+.xm-bokeh i { position: absolute; width: 140px; height: 140px; border-radius: 50%; filter: blur(18px); opacity: .55; animation: xm-twinkle 5s ease-in-out infinite; }
+.xm-bokeh .k0 { background: #fde047; } .xm-bokeh .k1 { background: #f472b6; } .xm-bokeh .k2 { background: #60a5fa; } .xm-bokeh .k3 { background: #4ade80; }
+.xm-bokeh .k4 { background: #fb923c; } .xm-bokeh .k5 { background: #f87171; } .xm-bokeh .k6 { background: #c084fc; }
+.xm-bokeh i:nth-child(1) { left: 2%; top: 8%; } .xm-bokeh i:nth-child(2) { left: 18%; top: 82%; animation-delay: -1s; } .xm-bokeh i:nth-child(3) { left: 33%; top: 4%; animation-delay: -2s; }
+.xm-bokeh i:nth-child(4) { left: 48%; top: 88%; animation-delay: -3s; } .xm-bokeh i:nth-child(5) { left: 62%; top: 6%; animation-delay: -.5s; } .xm-bokeh i:nth-child(6) { left: 77%; top: 84%; animation-delay: -1.5s; }
+.xm-bokeh i:nth-child(7) { left: 92%; top: 10%; animation-delay: -2.5s; } .xm-bokeh i:nth-child(8) { left: 8%; top: 45%; animation-delay: -3.5s; } .xm-bokeh i:nth-child(9) { left: 58%; top: 40%; animation-delay: -4s; }
+.xm-bokeh i:nth-child(10) { left: 96%; top: 50%; animation-delay: -1.2s; } .xm-bokeh i:nth-child(11) { left: 25%; top: 30%; animation-delay: -2.2s; } .xm-bokeh i:nth-child(12) { left: 70%; top: 60%; animation-delay: -3.2s; }
+.xm-bokeh i:nth-child(13) { left: 40%; top: 60%; animation-delay: -4.2s; } .xm-bokeh i:nth-child(14) { left: 85%; top: 30%; animation-delay: -0.8s; }
+@keyframes xm-twinkle { 50% { opacity: .15; transform: scale(.7); } }
+/* 3D objects: an outer element drifts through the room (depth included), an inner one spins */
+.theme-christmas .xm-3d { display: block; position: absolute; inset: 0; z-index: 0; overflow: hidden; perspective: 1100px; perspective-origin: 50% 40%; pointer-events: none; }
+.o3 { position: absolute; left: 0; top: 0; transform-style: preserve-3d; will-change: transform; animation: xm-drift linear infinite; }
+@keyframes xm-drift {
+  0% { transform: translate3d(var(--x0), var(--y0), var(--z0)); opacity: 0; }
+  8% { opacity: 1; } 92% { opacity: 1; }
+  100% { transform: translate3d(var(--x1), var(--y1), var(--z1)); opacity: 0; } }
+.s3 { transform-style: preserve-3d; animation: xm-spin linear infinite; }
+@keyframes xm-spin { from { transform: rotateX(var(--tilt, 14deg)) rotateY(0deg); } to { transform: rotateX(var(--tilt, 14deg)) rotateY(360deg); } }
+/* gift box: 6 faces */
+.g3 { position: relative; width: var(--s); height: var(--s); transform-style: preserve-3d; }
+.g3 .f { position: absolute; inset: 0; backface-visibility: visible; border: 2px solid rgba(255,255,255,.35);
+  background: linear-gradient(90deg, transparent 42%, var(--rb) 42%, var(--rb) 58%, transparent 58%), var(--bx); box-shadow: inset 0 0 30px rgba(0,0,0,.25); }
+.g3 .f.tp, .g3 .f.bt { background: linear-gradient(90deg, transparent 42%, var(--rb) 42%, var(--rb) 58%, transparent 58%),
+  linear-gradient(0deg, transparent 42%, var(--rb) 42%, var(--rb) 58%, transparent 58%), var(--bx); }
+.g3 .fr { transform: translateZ(calc(var(--s) / 2)); } .g3 .bk { transform: rotateY(180deg) translateZ(calc(var(--s) / 2)); }
+.g3 .lf { transform: rotateY(-90deg) translateZ(calc(var(--s) / 2)); } .g3 .rt { transform: rotateY(90deg) translateZ(calc(var(--s) / 2)); }
+.g3 .tp { transform: rotateX(90deg) translateZ(calc(var(--s) / 2)); } .g3 .bt { transform: rotateX(-90deg) translateZ(calc(var(--s) / 2)); }
+.g3 .bow { position: absolute; left: 50%; top: 0; width: calc(var(--s) * .9); height: calc(var(--s) * .5); margin-left: calc(var(--s) * -.45);
+  transform: translateY(-80%) rotateY(0deg); }
+.g3 .bow2 { transform: translateY(-80%) rotateY(90deg); }
+.gc0 { --bx: #ef4444; --rb: #fde047; } .gc1 { --bx: #22c55e; --rb: #fff; } .gc2 { --bx: #3b82f6; --rb: #f472b6; }
+.gc3 { --bx: #f59e0b; --rb: #dc2626; } .gc4 { --bx: #a855f7; --rb: #fde047; } .gc5 { --bx: #ec4899; --rb: #fff; }
+/* tree: two crossed planes */
+.t3 { position: relative; width: var(--s); height: calc(var(--s) * 1.35); transform-style: preserve-3d; }
+.t3 svg { position: absolute; inset: 0; width: 100%; height: 100%; } .t3 svg + svg { transform: rotateY(90deg); }
+.t3 .tr { fill: #16a34a; stroke: #fff; stroke-width: 2; } .t3 .tr2 { fill: #22c55e; } .t3 .trunk { fill: #92400e; } .t3 .star { fill: #fde047; }
+.t3 .o1 { fill: #ef4444; } .t3 .o2 { fill: #fde047; } .t3 .o3 { fill: #3b82f6; } .t3 .o4 { fill: #f472b6; }
+/* bauble: a shiny ball */
+.b3 { width: var(--s); height: var(--s); border-radius: 50%; position: relative; background: radial-gradient(circle at 32% 30%, #fff 0 8%, var(--bx) 30%, rgba(0,0,0,.35) 100%);
+  box-shadow: 0 0 30px var(--bx); }
+.b3::before { content: ""; position: absolute; left: 40%; top: -12%; width: 20%; height: 16%; background: #fbbf24; border-radius: 4px; }
+@media (prefers-reduced-motion: reduce) { .o3, .s3, .xm-bokeh i, .theme-christmas .bb-ticker { animation: none; } .xm-3d { display: none !important; } }
+.theme-christmas .tvb-brand { flex: 0 0 auto; } .theme-christmas .tvb-brand h1, .theme-christmas .tvb-brand p, .theme-christmas .tvb-clock .d { white-space: nowrap; }
+.theme-christmas .tvb-brand h1 { font-size: 42px; } .theme-christmas .tvb-brand p { font-size: 20px; }
+.theme-christmas .xm-greet { flex: 0 1 auto; min-width: 0; margin-left: 16px; } .theme-christmas .xm-greet b { font-size: 34px; } .theme-christmas .xm-greet span { font-size: 16px; }
+.theme-christmas .bb-promo { max-width: 470px; font-size: 22px; padding: 8px 18px; }
+.theme-christmas .tvb-head { gap: 18px; }
+.theme-christmas .bb-hero, .theme-christmas .bb-list {
+  background: linear-gradient(160deg, rgba(21,128,61,.62) 0%, rgba(13,80,48,.6) 45%, rgba(159,18,57,.62) 100%); }
+.theme-christmas .bb-price { background: rgba(12,60,36,.55); } .theme-christmas .bb-row { background: rgba(12,60,36,.42); }

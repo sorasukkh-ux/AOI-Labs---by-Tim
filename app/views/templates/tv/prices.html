@@ -6,22 +6,35 @@
 <meta name="robots" content="noindex">
 <title>{{ text.bbTitle.th }} · {{ data.branch_name }} · AOI</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&amp;family=IBM+Plex+Sans+Thai:wght@400;500;600;700&amp;display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&amp;family=Mali:wght@600;700&amp;family=IBM+Plex+Sans+Thai:wght@400;500;600;700&amp;display=swap">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/tv.css') }}">
 <link rel="icon" href="{{ url_for('static', filename='img/favicon.png') }}">
 </head>
 {# update 83 (Tim): price billboard in the TV theme - the SKU in the spotlight changes every 7 s with rolling digits,
    the board on the right follows it, and a ticker runs along the bottom. Same display key as the TV. #}
-<body class="tvb bb show-{{ show }}">
+<body class="tvb bb show-{{ show }} theme-{{ theme }}">
 <svg class="tvb-circuit" aria-hidden="true" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice"><g fill="none" stroke="#1d4f9c" stroke-width="1.4">
 <path d="M0 170H140l36 36h130M0 760H110l36-36h110M1920 160H1780l-36 36h-90M1920 740H1800l-36 36h-90M60 0v70l36 36v60M1860 0v80l-36 36v60M260 1080v-50l36-36h100M1660 1080v-55l-36-36h-96"/></g>
 <g fill="#38bdf8"><circle cx="306" cy="206" r="4"/><circle cx="256" cy="724" r="4"/><circle cx="1654" cy="196" r="4"/><circle cx="1654" cy="776" r="4"/><circle cx="96" cy="166" r="4"/><circle cx="1824" cy="176" r="4"/><circle cx="396" cy="994" r="4"/><circle cx="1528" cy="989" r="4"/></g></svg>
 <div class="bb-glow" aria-hidden="true"><i></i><i></i><i></i></div>
-<div id="tvb" data-url="{{ data_url }}" data-board='{{ data|tojson }}' data-text='{{ text|tojson }}' data-show="{{ show }}">
+{# update 85 (Tim): Christmas theme - an original hand-drawn look: scribble frames, falling snow, string lights, holly #}
+
+<div id="tvb" data-url="{{ data_url }}" data-board='{{ data|tojson }}' data-text='{{ text|tojson }}' data-show="{{ show }}" data-theme="{{ fixed_theme or '' }}">
+  <div class="xm-3d" id="xm-3d" aria-hidden="true"></div>{# update 86: gifts, trees and baubles floating in 3D behind the board #}
+  <div class="xm-bokeh" aria-hidden="true">{% for i in range(14) %}<i class="k{{ i % 7 }}"></i>{% endfor %}</div>
+  <div class="xm-deco" aria-hidden="true">
+    <div class="xm-snow" id="xm-snow"></div>
+    <svg class="xm-lights" viewBox="0 0 1920 70" preserveAspectRatio="none"><path class="wire" d="M0 14 Q120 54 240 18 T480 18 T720 18 T960 18 T1200 18 T1440 18 T1680 18 T1920 14"/>
+      <g class="bulbs">{% for i in range(24) %}{% set x = 40 + i * 80 %}<g transform="translate({{ x }} {{ 30 + (8 if i % 2 else 18) }})"><rect x="-4" y="-12" width="8" height="8" rx="2" class="cap"/><ellipse class="b b{{ i % 4 }}" cx="0" cy="6" rx="9" ry="13"/></g>{% endfor %}</g></svg>
+    <svg class="xm-holly xm-tl" viewBox="0 0 120 120"><path class="leaf" d="M20 70c10-25 30-30 50-40-5 12 4 16-4 26 10 0 8 10 18 8-14 16-40 20-64 6z"/><path class="leaf" d="M100 74c-26-6-42 6-56 24 12-2 12 8 24 6-4 8 6 12 2 20 16-8 30-26 30-50z"/><circle class="berry" cx="50" cy="70" r="9"/><circle class="berry" cx="64" cy="78" r="9"/><circle class="berry" cx="54" cy="86" r="9"/></svg>
+    <svg class="xm-holly xm-br" viewBox="0 0 120 120"><path class="leaf" d="M20 70c10-25 30-30 50-40-5 12 4 16-4 26 10 0 8 10 18 8-14 16-40 20-64 6z"/><path class="leaf" d="M100 74c-26-6-42 6-56 24 12-2 12 8 24 6-4 8 6 12 2 20 16-8 30-26 30-50z"/><circle class="berry" cx="50" cy="70" r="9"/><circle class="berry" cx="64" cy="78" r="9"/><circle class="berry" cx="54" cy="86" r="9"/></svg>
+    <svg class="xm-tree" viewBox="0 0 120 160"><path class="tr" d="M60 10 L28 60 H44 L18 100 H40 L10 140 H110 L80 100 H102 L76 60 H92 Z"/><rect class="trunk" x="52" y="140" width="16" height="16" rx="3"/><path class="star" d="M60 0l5 11 12 1-9 8 3 12-11-6-11 6 3-12-9-8 12-1z"/><circle class="o o1" cx="46" cy="84" r="5"/><circle class="o o2" cx="74" cy="76" r="5"/><circle class="o o3" cx="58" cy="116" r="5"/><circle class="o o1" cx="84" cy="124" r="5"/><circle class="o o2" cx="34" cy="126" r="5"/></svg>
+  </div>
   <header class="tvb-head">
     <img src="{{ url_for('static', filename='img/logo.png') }}" alt="AOI">
     <div class="tvb-brand"><h1><span id="tvb-branch">{{ data.branch_name }}</span> · {{ text.bbTitle.th }}</h1>
       <p>{{ data.branch_name_en }} · {{ text.bbTitle.en }} &nbsp;·&nbsp; {{ text.bbSub.th }}</p></div>
+    <div class="xm-greet"><b>Merry Christmas</b><span>{{ text.bbXmas.th }}</span></div>
     <button type="button" class="tvb-full" id="tvb-full" data-on="{{ text.tvbFull.th }} · {{ text.tvbFull.en }}" data-off="{{ text.tvbFullExit.th }} · {{ text.tvbFullExit.en }}"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg><span>{{ text.tvbFull.th }} · {{ text.tvbFull.en }}</span></button>
     <div class="bb-promo" id="bb-promo" hidden></div>
     <div class="tvb-live" id="tvb-live"><i></i>LIVE</div>
@@ -29,10 +42,12 @@
   </header>
   <main class="bb-main">
     <section class="bb-hero" id="bb-hero">
+      <svg class="xm-frame" viewBox="0 0 1000 700" preserveAspectRatio="none" aria-hidden="true"><path d="M14 22 C220 8 520 18 986 12 C994 220 990 470 988 688 C700 694 330 682 12 690 C8 470 16 240 14 22 Z"/><path class="f2" d="M22 14 C300 22 640 6 980 20 C984 300 996 520 980 680 C640 690 300 698 20 682 C14 420 24 200 22 14 Z"/></svg>
       <div class="bb-stage" id="bb-stage"></div>
       <div class="bb-timer"><i id="bb-timer"></i></div>
     </section>
     <aside class="bb-list">
+      <svg class="xm-frame" viewBox="0 0 600 700" preserveAspectRatio="none" aria-hidden="true"><path d="M12 20 C200 10 400 16 588 12 C594 240 590 480 588 688 C400 694 200 684 12 690 C8 470 16 240 12 20 Z"/><path class="f2" d="M20 12 C220 22 420 8 580 20 C584 300 594 520 580 680 C400 690 200 698 18 682 C12 420 22 200 20 12 Z"/></svg>
       <h2><span>{{ text.bbAll.th }}</span><small>{{ text.bbAll.en }}</small>
         <em class="bb-cols"><b class="cb">{{ text.bbBuy.th }}</b><b class="cs">{{ text.bbSell.th }}</b></em></h2>
       <div class="bb-rows" id="bb-rows"></div>

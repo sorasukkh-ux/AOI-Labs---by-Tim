@@ -4529,5 +4529,30 @@ class Update84(Base):
         self.assertEqual(self.client.get("/tv/factory2/prices/data?key=" + key).get_json()["seconds"], 9)
 
 
+class Update85(Base):
+    """Christmas theme of the price billboard: chosen in the settings, or tried with ?theme=."""
+
+    def test_theme(self):
+        with self.app.app_context():
+            from app.models import tv
+            key = tv.issue_key("factory2", "admin")
+        page = self.text("/tv/factory2/prices?key=" + key)
+        self.assertIn("theme-default", page)
+        self.assertIn('id="xm-snow"', page)
+        self.assertIn("theme-christmas", self.text("/tv/factory2/prices?theme=christmas&key=" + key))
+        self.assertIn("theme-default", self.text("/tv/factory2/prices?theme=nope&key=" + key))
+        self.login("admin")
+        form = {"branch": "factory2", "action": "billboard", "BB_SECONDS": "7", "BB_PROMO": "1", "BB_THEME": "christmas"}
+        for c in ("PADDY_HM", "RICE_HM", "PADDY", "RICE_W5", "PADDY_GL", "RICE_GL", "BRAN", "BROKEN"):
+            form.update({"BB_SHOW_" + c: "1", "BB_BUY_" + c: "1", "BB_SELL_" + c: "1"})
+        self.post("/admin/milling/maintenance?branch=factory2", form, "/admin/milling/maintenance?branch=factory2")
+        self.assertEqual(self.client.get("/tv/factory2/prices/data?key=" + key).get_json()["theme"], "christmas")
+        self.assertIn("theme-christmas", self.text("/tv/factory2/prices?key=" + key))
+        self.assertIn('value="christmas" selected', self.text("/admin/milling/maintenance?branch=factory2"))
+        page = self.text("/tv/factory2/prices?key=" + key)                 # update 86: 3D room and lights
+        self.assertIn('id="xm-3d"', page)
+        self.assertIn('class="xm-bokeh"', page)
+
+
 if __name__ == "__main__":
     unittest.main()

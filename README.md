@@ -340,6 +340,18 @@ are kept in `AOITS_SYSLOG` (14 days), the checks in `AOITS_HEALTH` (7 days).
 customer's LINE when "Also send to the customer's LINE" is ticked (shown for customers linked to LINE); "Send to LINE
 only" sends without printing. The same public https address is needed as for the queue QR (update 47).
 
+## Brighter Christmas theme with 3D gifts and trees (update 86)
+
+- Brighter, more colourful: red / pink / green / teal background with a warm glow, coloured bokeh lights twinkling, white and gold scribble frames, glowing mint and gold prices, a rainbow ticker, an orange-red spotlight row.
+- 3D in the background (CSS 3D, no library): 12 gift boxes (6 faces with ribbons and a bow), Christmas trees (two crossed planes) and shiny baubles drift through the room at different depths while they spin; they show through the panels.
+- Same switch as before (Billboard theme = Christmas, or &theme=christmas). Turned off on screens set to reduce motion.
+
+## Christmas theme for the price billboard (update 85, DB 1.58)
+
+- Milling Maintenance > Price billboard settings > "Billboard theme": Standard (like the TV) or Christmas. The billboard changes within 15 seconds.
+- Christmas: dark green / red night, hand-drawn scribble frames around the panels (drawn in when the page opens), falling snow, blinking string lights, holly, a little tree, a "Merry Christmas" greeting, candy-stripe timer and Mali handwriting font. Original drawings (not the Adobe Stock template, which is licensed artwork).
+- Try it without saving: add &theme=christmas to the link. Saved in SYSP_BB.THEME.
+
 ## Price billboard settings (update 84, DB 1.57)
 
 - Administration > Milling Maintenance > "Price billboard settings" (needs Edit on Milling Maintenance), per factory:

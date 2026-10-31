@@ -244,7 +244,7 @@
     req.open("GET", url, true);
     req.timeout = 10000;
     req.onload = function () {
-      if (req.status === 200) { try { data = JSON.parse(req.responseText); SPOT_MS = (data.seconds || 7) * 1000; syncClock(); draw(false); lost(false); return; } catch (e) { /* keep */ } }
+      if (req.status === 200) { try { data = JSON.parse(req.responseText); SPOT_MS = (data.seconds || 7) * 1000; syncClock(); theme(); draw(false); lost(false); return; } catch (e) { /* keep */ } }
       lost(true);
     };
     req.onerror = req.ontimeout = function () { lost(true); };
@@ -282,8 +282,72 @@
   document.addEventListener("fullscreenchange", function () { fullLabel(); fit(); });
   document.addEventListener("webkitfullscreenchange", function () { fullLabel(); fit(); });
 
+  // update 85: themes. The settings choose it (live); ?theme= on the link fixes it.
+  var fixedTheme = root.getAttribute("data-theme");
+  function theme() {
+    var name = fixedTheme || data.theme || "default";
+    document.body.className = document.body.className.replace(/\s*theme-[a-z]+/g, "") + " theme-" + name;
+  }
+  (function snow() {
+    var host = document.getElementById("xm-snow");
+    if (!host) return;
+    for (var i = 0; i < 70; i++) {
+      var f = document.createElement("i"), size = 3 + Math.random() * 7;
+      f.style.left = (Math.random() * 100) + "%";
+      f.style.width = f.style.height = size + "px";
+      f.style.opacity = (0.4 + Math.random() * 0.6).toFixed(2);
+      f.style.animationDuration = (8 + Math.random() * 12).toFixed(1) + "s";
+      f.style.animationDelay = (-Math.random() * 20).toFixed(1) + "s";
+      f.style.setProperty("--dx", (Math.random() * 160 - 80).toFixed(0) + "px");
+      host.appendChild(f);
+    }
+  })();
+
+  // update 86: gifts, trees and baubles drifting through a 3D room behind the board (CSS 3D, no library)
+  (function room() {
+    var host = document.getElementById("xm-3d");
+    if (!host) return;
+    var TREE = '<svg viewBox="0 0 100 135"><path class="tr" d="M50 8 L22 52 H36 L14 88 H32 L8 122 H92 L68 88 H86 L64 52 H78 Z"/>' +
+      '<path class="tr2" d="M50 8 L36 30 L64 30 Z"/><rect class="trunk" x="43" y="122" width="14" height="12" rx="2"/>' +
+      '<path class="star" d="M50 0l4 8 9 1-7 6 2 9-8-5-8 5 2-9-7-6 9-1z"/>' +
+      '<circle class="o1" cx="40" cy="70" r="5"/><circle class="o2" cx="62" cy="62" r="5"/><circle class="o3" cx="50" cy="98" r="5"/>' +
+      '<circle class="o4" cx="72" cy="106" r="5"/><circle class="o2" cx="28" cy="108" r="5"/><circle class="o1" cx="56" cy="40" r="4"/></svg>';
+    var BOW = '<svg viewBox="0 0 100 50"><path d="M50 46 C30 10 4 8 8 30 C10 44 36 46 50 46 Z M50 46 C70 10 96 8 92 30 C90 44 64 46 50 46 Z" fill="var(--rb)" stroke="rgba(0,0,0,.2)" stroke-width="2"/><circle cx="50" cy="44" r="7" fill="var(--rb)"/></svg>';
+    var BAUBLE = ["#ef4444", "#fde047", "#3b82f6", "#22c55e", "#ec4899", "#a855f7"];
+    function rnd(a, b) { return a + Math.random() * (b - a); }
+    function make(i) {
+      var o = el("div", "o3"), sp = el("div", "s3"), kind = i % 3, size;
+      if (kind === 0) {                                  // gift box
+        size = rnd(70, 130);
+        var g = el("div", "g3 gc" + Math.floor(rnd(0, 6)));
+        ["fr", "bk", "lf", "rt", "tp", "bt"].forEach(function (f) { g.appendChild(el("div", "f " + f)); });
+        var bow = el("div", "bow"), bow2 = el("div", "bow bow2"); bow.innerHTML = BOW; bow2.innerHTML = BOW;
+        g.appendChild(bow); g.appendChild(bow2);
+        g.style.setProperty("--s", size + "px"); sp.appendChild(g);
+      } else if (kind === 1) {                           // tree
+        size = rnd(110, 190);
+        var t = el("div", "t3"); t.innerHTML = TREE + TREE; t.style.setProperty("--s", size + "px"); sp.appendChild(t);
+      } else {                                           // bauble
+        size = rnd(50, 90);
+        var b = el("div", "b3"); b.style.setProperty("--s", size + "px"); b.style.setProperty("--bx", BAUBLE[Math.floor(rnd(0, BAUBLE.length))]);
+        sp.appendChild(b);
+      }
+      var fromLeft = Math.random() < 0.5, y0 = rnd(80, 900), drift = rnd(-260, 260);
+      o.style.setProperty("--x0", (fromLeft ? -300 : 2100) + "px"); o.style.setProperty("--x1", (fromLeft ? 2100 : -300) + "px");
+      o.style.setProperty("--y0", y0 + "px"); o.style.setProperty("--y1", Math.max(40, Math.min(980, y0 + drift)) + "px");
+      o.style.setProperty("--z0", rnd(-900, 150) + "px"); o.style.setProperty("--z1", rnd(-900, 150) + "px");
+      var dur = rnd(22, 40);
+      o.style.animationDuration = dur.toFixed(1) + "s"; o.style.animationDelay = (-rnd(0, dur)).toFixed(1) + "s";
+      sp.style.animationDuration = rnd(6, 14).toFixed(1) + "s";
+      if (Math.random() < 0.5) sp.style.animationDirection = "reverse";
+      sp.style.setProperty("--tilt", rnd(-20, 25).toFixed(0) + "deg");
+      o.appendChild(sp); host.appendChild(o);
+    }
+    for (var i = 0; i < 12; i++) make(i);
+  })();
+
   window.addEventListener("resize", fit);
-  fit(); syncClock(); clock(); draw(true);
+  fit(); syncClock(); clock(); theme(); draw(true);
   setInterval(clock, 1000);
   setInterval(function () { promoAt++; promo(); }, 6000);
   setInterval(refresh, 15000);

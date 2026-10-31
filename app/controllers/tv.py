@@ -37,7 +37,7 @@ def data(branch):
 
 # ---------- update 83: price billboard ----------
 BB_LABELS = ("tvbBuy", "tvbSell", "tvbUpdated", "tvbOffline", "tvbFull", "tvbFullExit", "bbTitle", "bbSub", "bbBuy", "bbSell",
-             "bbUnit", "bbUp", "bbDown", "bbSame", "bbSince", "bbNew", "bbDays", "bbDiscount", "bbAll", "bbNote")
+             "bbUnit", "bbUp", "bbDown", "bbSame", "bbSince", "bbNew", "bbDays", "bbDiscount", "bbAll", "bbNote", "bbXmas", "bbXmasEn")
 SHOW = ("both", "buy", "sell")
 
 
@@ -47,9 +47,11 @@ def prices(branch):
     if not tv.allowed(branch, request.args.get("key")):
         return render_template("tv/denied.html"), 403
     show = request.args.get("show") if request.args.get("show") in SHOW else "both"
+    theme = request.args.get("theme") if request.args.get("theme") in tv.BB_THEMES else None     # update 85: ?theme= tries a theme
     text = {k: {"th": t_in("th", k), "en": t_in("en", k)} for k in BB_LABELS}
     text["days"], text["months"] = DAYS_TH, MONTHS_TH
-    return render_template("tv/prices.html", data=tv.billboard(branch), text=text, show=show,
+    data = tv.billboard(branch)
+    return render_template("tv/prices.html", data=data, text=text, show=show, theme=theme or data["theme"], fixed_theme=theme,
                            data_url=url_for("tv.prices_data", branch=branch, key=request.args.get("key")))
 
 
