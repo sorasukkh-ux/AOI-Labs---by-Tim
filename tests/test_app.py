@@ -4592,62 +4592,73 @@ class Update87(Base):
 
 
 class Update93(Base):
-    """Christmas / New Year campaign: points add up per customer and type, 3 gift levels, the special lucky draw."""
+    """Christmas / New Year campaign (update 95: levels are ranks, one customer each): points add up per customer
+    and type, rank 1-3 gifts after the last day, the special lucky draw among the other qualified customers."""
 
     def form(self, **extra):
         from app.timeutil import today_local
         from datetime import timedelta
         with self.app.app_context():
             d = today_local()
-        f = {"branch": "factory2", "CAMP_NAME": "Xmas", "DATE_FROM": (d - timedelta(days=3)).isoformat(),
+        f = {"branch": "factory2", "CAMP_NAME": "Xmas", "DATE_FROM": (d - timedelta(days=5)).isoformat(),
              "DATE_TO": (d + timedelta(days=30)).isoformat(), "KG_PER_POINT": "10", "STATUS": "A"}
-        for tp, pts in (("ML", (5, 10, 20)), ("BY", (2, 4, 6)), ("SL", (1, 2, 3))):
-            for n, p in enumerate(pts, 1):
-                f["PTS_%s_%d" % (tp, n)] = str(p); f["GIFT_%s_%d" % (tp, n)] = "%s gift %d" % (tp, n)
+        for tp in ("ML", "BY", "SL"):
+            f["MIN_" + tp] = "5"
+            for n in (1, 2, 3):
+                f["GIFT_%s_%d" % (tp, n)] = "%s gift %d" % (tp, n)
             f["SPECIAL_" + tp] = "%s gold" % tp
         f.update(extra)
         return f
 
+    def milled(self, cust, kg):
+        o = self.new_order(CUST_CODE=cust, REGIST_PADDY=str(kg))["ORD_ID"]
+        self.set_status(o, "I", ACT_PADDY=str(kg))
+        self.set_status(o, "F", INV_QTY=str(kg // 2))
+        return o
+
     def test_campaign(self):
+        from datetime import timedelta
         self.login("admin")
         self.client.get("/lang/en")
         self.assertIn('id="cp-entry"', self.text("/finance/marketing?branch=factory2"))
         empty = self.text("/finance/campaign?branch=factory2")                   # update 94: before the first save
         self.assertIn('id="cp-standings"', empty)
         self.assertIn('class="cp-empty"', empty)
-        bad = self.form(PTS_ML_2="3")                             # level 2 below level 1
-        self.post("/finance/campaign", bad, "/finance/campaign?branch=factory2")
+        self.post("/finance/campaign", self.form(MIN_ML="0"), "/finance/campaign?branch=factory2")   # minimum below 1
         self.assertEqual(self.db("AOIMS_CAMPAIGN"), [])
         self.post("/finance/campaign", self.form(), "/finance/campaign?branch=factory2")
         camp = self.db("AOIMS_CAMPAIGN")[0]
-        a = self.new_order(REGIST_PADDY="120")["ORD_ID"]            # 120 kg -> 12 points, level 2
-        self.set_status(a, "I", ACT_PADDY="118")
-        self.set_status(a, "F", INV_QTY="60")
-        b = self.new_order(CUST_CODE="C261001002", REGIST_PADDY="55")["ORD_ID"]   # still in queue: no points
-        page = self.text("/finance/campaign?branch=factory2&id=%s&kind=ML" % camp["CAMP_ID"])
-        self.assertIn("ML gift 2", page)
+        for cust, kg in (("C261001002", 80), ("C261001001", 120), ("C261001003", 60), ("C261001004", 55), ("C261001005", 30)):
+            self.milled(cust, kg)
         with self.app.app_context():
             from app.models import campaign as cp
             rows = cp.standings(cp.get(camp["CAMP_ID"]), "ML")
-        self.assertEqual([(r["cust"], r["points"], r["level"]) for r in rows], [("C261001001", 11, 2)])
-        self.post("/finance/campaign", {"branch": "factory2", "id": camp["CAMP_ID"], "action": "give", "kind": "ML",
-                                        "cust": "C261001001", "level": "2"}, "/finance/campaign?branch=factory2")
-        self.post("/finance/campaign", {"branch": "factory2", "id": camp["CAMP_ID"], "action": "give", "kind": "ML",
-                                        "cust": "C261001001", "level": "3"}, "/finance/campaign?branch=factory2")   # not reached
-        gifts = self.db("AOITS_CAMPGIFT")
-        self.assertEqual([(g["LEVEL"], g["GIFT"]) for g in gifts], [(2, "ML gift 2")])
+        self.assertEqual([(r["cust"], r["points"], r["rank"], (r["prize"] or {}).get("gift")) for r in rows],
+                         [("C261001001", 12, 1, "ML gift 1"), ("C261001002", 8, 2, "ML gift 2"), ("C261001003", 6, 3, "ML gift 3"),
+                          ("C261001004", 5, 4, None), ("C261001005", 3, None, None)])
+        page = self.text("/finance/campaign?branch=factory2&id=%s&kind=ML" % camp["CAMP_ID"])
+        self.assertIn("rank so far", page)
+        give = {"branch": "factory2", "id": camp["CAMP_ID"], "action": "give", "kind": "ML", "cust": "C261001001", "level": "1"}
+        self.post("/finance/campaign", give, "/finance/campaign?branch=factory2")              # not ended: refused
+        self.assertEqual(self.db("AOITS_CAMPGIFT"), [])
+        with self.app.app_context():                                        # the campaign has ended
+            col("AOIMS_CAMPAIGN").update_one({}, {"$set": {"DATE_FROM": camp["DATE_FROM"] - timedelta(days=10),
+                                                           "DATE_TO": camp["DATE_FROM"] + timedelta(days=4)}})
+            col("AOITS_ORDMILLING").update_many({}, {"$set": {"REGIST_DATE": camp["DATE_FROM"] + timedelta(days=2)}})
+        self.post("/finance/campaign", give, "/finance/campaign?branch=factory2")
+        self.post("/finance/campaign", dict(give, level="2"), "/finance/campaign?branch=factory2")      # not his rank
+        self.post("/finance/campaign", dict(give, cust="C261001002", level="1"), "/finance/campaign?branch=factory2")
+        self.assertEqual([(g["CUST_CODE"], g["LEVEL"], g["GIFT"]) for g in self.db("AOITS_CAMPGIFT")], [("C261001001", 1, "ML gift 1")])
         draw_page = self.text("/finance/campaign/%s/draw/ML" % camp["CAMP_ID"])
         self.assertIn('id="cp-wheel"', draw_page)
         token = re.search(r'data-csrf="([^"]+)"', draw_page).group(1)
-        r = self.client.post("/finance/campaign/%s/draw/ML" % camp["CAMP_ID"], headers={"X-CSRF-Token": token, "Accept": "application/json"})
-        body = r.get_json()
+        hdr = {"X-CSRF-Token": token, "Accept": "application/json"}
+        body = self.client.post("/finance/campaign/%s/draw/ML" % camp["CAMP_ID"], headers=hdr).get_json()
         self.assertTrue(body["ok"], body)
-        self.assertEqual((body["winner"], body["gift"]), ("C261001001", "ML gold"))
-        again = self.client.post("/finance/campaign/%s/draw/ML" % camp["CAMP_ID"], headers={"X-CSRF-Token": token, "Accept": "application/json"}).get_json()
-        self.assertEqual(again["winner"], body["winner"])
+        self.assertEqual((body["winner"], body["gift"]), ("C261001004", "ML gold"))       # the only one not ranked 1-3
+        self.assertEqual(self.client.post("/finance/campaign/%s/draw/ML" % camp["CAMP_ID"], headers=hdr).get_json()["winner"], "C261001004")
         self.assertEqual(len(self.db("AOITS_CAMPDRAW")), 1)
-        none = self.client.post("/finance/campaign/%s/draw/SL" % camp["CAMP_ID"], headers={"X-CSRF-Token": token, "Accept": "application/json"})
-        self.assertEqual(none.status_code, 422)
+        self.assertEqual(self.client.post("/finance/campaign/%s/draw/SL" % camp["CAMP_ID"], headers=hdr).status_code, 422)
         self.assertIn("Winner", self.text("/finance/campaign?branch=factory2&id=%s&kind=ML" % camp["CAMP_ID"]))
         self.assertIn("No customer has points", self.text("/finance/campaign?branch=factory2&id=%s&kind=BY" % camp["CAMP_ID"]))
 

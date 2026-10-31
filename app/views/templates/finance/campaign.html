@@ -33,13 +33,15 @@
     {% for tp in types %}{% set cfg = form.TYPES[tp] %}
     <section class="cp-type cp-{{ tp }}">
       <h3>{{ t(type_keys[tp]) }}</h3>
+      {# update 95: level = rank, one customer each (most points = level 1) #}
+      <label class="cp-min">{{ t('cpMinPoints') }}
+        <span><input type="number" name="MIN_{{ tp }}" value="{{ cfg.MIN_POINTS or 1 }}" min="1" step="1"> {{ t('cpPts') }}</span></label>
       <div class="cp-levels">
         {% for lv in cfg.LEVELS %}
         <div class="cp-level">
           <span class="cp-medal m{{ loop.index }}">{{ loop.index }}</span>
-          <input type="number" name="PTS_{{ tp }}_{{ loop.index }}" value="{{ lv.POINTS }}" min="0" step="1" aria-label="{{ t('cpPoints') }} {{ loop.index }}">
-          <small>{{ t('cpPts') }}</small>
-          <input type="text" name="GIFT_{{ tp }}_{{ loop.index }}" value="{{ lv.GIFT }}" maxlength="80" placeholder="{{ t('cpGiftPh') }}" aria-label="{{ t('cpGift') }} {{ loop.index }}">
+          <span class="cp-rank">{{ t('cpRank', n=loop.index) }}</span>
+          <input type="text" name="GIFT_{{ tp }}_{{ loop.index }}" value="{{ lv.GIFT }}" maxlength="80" placeholder="{{ t('cpGiftPh') }}" aria-label="{{ t('cpRank', n=loop.index) }}">
         </div>
         {% endfor %}
       </div>
@@ -60,29 +62,29 @@
     {% for tp in types %}<a class="chip{% if tp == kind %} active{% endif %}" href="{{ url_for('finance.campaign', branch=branch, id=camp.CAMP_ID, kind=tp, _anchor='cp-standings') }}">{{ t(type_keys[tp]) }} <small>{{ data[tp].rows|length }}</small></a>{% endfor %}
   </div>
   {% set d = data[kind] %}{% set cfg = camp.TYPES[kind] %}
+  {% if not is_final %}<p class="cp-provisional">&#9203; {{ t('cpProvisional', day=final_day) }}</p>{% endif %}
   <div class="cp-draw-box">
     <div><b>&#127873; {{ t('cpSpecial') }}:</b> {{ cfg.SPECIAL or '-' }}
       {% if d.draw %}<p class="cp-won">&#127881; {{ t('cpWonBy', name=d.draw.WINNER_NAME, code=d.draw.WINNER_CUST) }}</p>{% endif %}</div>
-    {% if cfg.SPECIAL %}<a class="action primary cp-draw-btn" href="{{ url_for('finance.campaign_draw', camp_id=camp.CAMP_ID, kind=kind) }}">&#127905; {{ t('cpOpenWheel') if not d.draw else t('cpSeeWheel') }}</a>{% endif %}
+    {% if cfg.SPECIAL and (is_final or d.draw) %}<a class="action primary cp-draw-btn" href="{{ url_for('finance.campaign_draw', camp_id=camp.CAMP_ID, kind=kind) }}">&#127905; {{ t('cpOpenWheel') if not d.draw else t('cpSeeWheel') }}</a>{% endif %}
   </div>
   <div class="inv-table-wrap"><table class="tv-table cp-table">
-    <thead><tr><th>#</th><th>{{ t('colCustomer') }}</th><th class="num">{{ t('cpOrders') }}</th><th class="num">kg</th><th class="num">{{ t('cpPoints') }}</th><th>{{ t('cpLevel') }}</th><th>{{ t('cpGifts') }}</th></tr></thead>
+    <thead><tr><th>#</th><th>{{ t('colCustomer') }}</th><th class="num">{{ t('cpOrders') }}</th><th class="num">kg</th><th class="num">{{ t('cpPoints') }}</th><th>{{ t('cpLevel') }}</th><th>{{ t('cpGift') }}</th></tr></thead>
     <tbody>
     {% for r in d.rows %}
-    <tr>
-      <td>{{ loop.index }}</td>
+    <tr class="{% if r.prize %}cp-top{% elif not r.qualified %}cp-out{% endif %}">
+      <td>{% if r.prize %}<span class="cp-medal m{{ r.prize.level }}">{{ r.prize.level }}</span>{% else %}{{ r.rank or '-' }}{% endif %}</td>
       <td><b>{{ r.name }}</b><br><small class="cp-code">{{ r.cust }}</small></td>
       <td class="num">{{ r.orders }}</td><td class="num">{{ r.kg|num(0) }}</td><td class="num"><b>{{ r.points }}</b></td>
-      <td>{% for n in range(1, 4) %}<span class="cp-medal sm m{{ n }}{% if r.level < n %} off{% endif %}">{{ n }}</span>{% endfor %}
-        {% if r.next %}<br><small class="cp-code">{{ t('cpToNext', n=r.to_next) }}</small>{% endif %}</td>
-      <td>{% for g in r.gifts %}
+      <td>{% if r.prize %}{{ t('cpRank', n=r.prize.level) }}{% elif r.qualified %}{{ t('cpInDraw') if cfg.SPECIAL else '-' }}{% else %}<small class="cp-code">{{ t('cpToMin', n=r.to_min) }}</small>{% endif %}</td>
+      <td>{% if r.prize %}{% set g = r.prize %}
         {% if g.given %}<span class="cp-gift done">&#10003; {{ g.gift }} <small>{{ g.given_date }}</small></span>
-        {% elif can_edit %}<form method="post" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        {% elif can_edit and is_final %}<form method="post" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="branch" value="{{ branch }}"><input type="hidden" name="id" value="{{ camp.CAMP_ID }}"><input type="hidden" name="action" value="give">
           <input type="hidden" name="kind" value="{{ kind }}"><input type="hidden" name="cust" value="{{ r.cust }}"><input type="hidden" name="level" value="{{ g.level }}">
           <button class="cp-gift" type="submit" data-confirm="{{ t('cpConfirmGive', gift=g.gift, name=r.name) }}">&#127873; {{ g.gift }} · {{ t('cpGive') }}</button></form>
-        {% else %}<span class="cp-gift">&#127873; {{ g.gift }}</span>{% endif %}
-      {% else %}-{% endfor %}</td>
+        {% else %}<span class="cp-gift">&#127873; {{ g.gift }}{% if not is_final %} <small>{{ t('cpSoFar') }}</small>{% endif %}</span>{% endif %}
+      {% else %}-{% endif %}</td>
     </tr>
     {% else %}<tr><td colspan="7" class="hint center">{{ t('cpNoPoints') }}{% if state_of(camp) != 'running' %}<br>{{ t('cpNotRunning_' ~ state_of(camp)) }}{% endif %}</td></tr>{% endfor %}
     </tbody>

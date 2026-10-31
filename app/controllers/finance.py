@@ -391,7 +391,8 @@ def campaign():
         return to_local(value).date().isoformat() if value else ""
     return render_template("finance/campaign.html", branch=branch, branches=maintainable_branches(), camps=camps, camp=camp,
                            form=form, data=data, kind=kind, types=cp.TYPES, type_keys=CP_TYPE_KEYS, day=day,
-                           state_of=cp.state, can_edit=can(MARKETING, "edit"))
+                           state_of=cp.state, can_edit=can(MARKETING, "edit"),
+                           is_final=bool(camp) and cp.final(camp), final_day=to_local(camp["DATE_TO"]).strftime("%d/%m/%Y") if camp else "")
 
 
 @bp.route("/campaign/<camp_id>/draw/<kind>", methods=["GET", "POST"])

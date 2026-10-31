@@ -1585,3 +1585,10 @@ table.bb-set-table { min-width: 600px; }
 .cp-level { grid-template-columns: 28px 64px auto minmax(0, 1fr); }
 #tab-campaign, #cp-draw-page { max-width: 1180px; margin: 0 auto; }
 .cp-empty { margin-top: 12px; padding: 22px; border: 2px dashed var(--border-strong); border-radius: 14px; text-align: center; color: var(--text-secondary); font-size: 15px; }
+/* update 95: ranks */
+.cp-min { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12.5px; color: var(--text-secondary); margin-bottom: 10px; }
+.cp-min span { display: inline-flex; align-items: center; gap: 4px; } .cp-min input { width: 70px; padding: 5px 8px; }
+.cp-level { grid-template-columns: 28px 64px minmax(0, 1fr); } .cp-rank { font-size: 13px; font-weight: 700; color: var(--text-secondary); }
+.cp-table tr.cp-top td { background: #fffbeb; } .cp-table tr.cp-out td { color: var(--text-muted); }
+.cp-provisional { margin: 10px 0 0; padding: 8px 12px; border-radius: 10px; background: var(--warn-bg); color: var(--warn-text); font-size: 13px; }
+.cp-medal.m1 { background: linear-gradient(180deg, #fde047, #ca8a04); color: #fff; } .cp-medal.m3 { background: linear-gradient(180deg, #d6a06b, #a0643a); }

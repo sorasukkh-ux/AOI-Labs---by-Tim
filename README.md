@@ -340,6 +340,12 @@ are kept in `AOITS_SYSLOG` (14 days), the checks in `AOITS_HEALTH` (7 days).
 customer's LINE when "Also send to the customer's LINE" is ticked (shown for customers linked to LINE); "Send to LINE
 only" sends without printing. The same public https address is needed as for the queue QR (update 47).
 
+## Campaign levels are ranks (update 95, DB 1.62)
+
+- Level 1 / 2 / 3 = rank 1 / 2 / 3, ONE customer each: the customer with the most points per order type gets the level 1 gift, the next one level 2, then level 3 (ties: more kg, then who got there first).
+- Per type: "minimum points" to be ranked or enter the draw (instead of points per level), and the 3 rank gifts.
+- During the campaign the table shows the rank so far; after the last day the ranking is final, gifts can be marked as given (one per rank) and the special gift drawn. The rank 1-3 winners are not in the special draw.
+
 ## Campaign points table before the first save (update 94)
 
 - The customers' points card now shows before the campaign is saved, with what to do (fill the gifts, switch the campaign on, Save). An empty table also says why: campaign off, not started yet (points count from the start date) or ended.
