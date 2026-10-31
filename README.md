@@ -340,6 +340,18 @@ are kept in `AOITS_SYSLOG` (14 days), the checks in `AOITS_HEALTH` (7 days).
 customer's LINE when "Also send to the customer's LINE" is ticked (shown for customers linked to LINE); "Send to LINE
 only" sends without printing. The same public https address is needed as for the queue QR (update 47).
 
+## Billboard themes: price cards and ranking (updates 89-90, DB 1.60)
+
+- The Poster wall theme is removed (a saved "poster" shows as Price cards).
+- Price cards (theme cards): light background with colourful wavy corner shapes and white dots / + / x / zigzag, three white cards at a time, each with a spinning starburst badge with the price, the product name, buying / selling rows with tick icons, the change and the note, a 30-day line and a round product button. Cards bounce in and the page turns with the spotlight time; dots show the page.
+- Price ranking (theme ranking): "Today's price ranking - Top N" list sorted by the selling price (or buying when only buying is shown), bars growing to the price, the highlight walking down the list, tilted signs with the product names on the left, a bright hall with a moving floor grid and light beams. Original designs, no brand logos.
+- Choose in Milling Maintenance > Price billboard settings > Billboard theme, or try &theme=cards / &theme=ranking.
+
+## Christmas music (update 87, DB 1.59)
+
+- Price billboard settings: "Christmas music" on / off and volume (0-100). With the Christmas theme the billboard plays soft music-box carols made in the browser (no audio files): Jingle Bells, Silent Night, We Wish You a Merry Christmas, Deck the Halls (public domain).
+- Browsers allow sound only after one tap / click / remote key on the TV: the "Tap for music" button blinks until then. The speaker button mutes / unmutes that TV (remembered on it). For a kiosk without anyone to tap, start Chrome with --autoplay-policy=no-user-gesture-required.
+
 ## Brighter Christmas theme with 3D gifts and trees (update 86)
 
 - Brighter, more colourful: red / pink / green / teal background with a warm glow, coloured bokeh lights twinkling, white and gold scribble frames, glowing mint and gold prices, a rainbow ticker, an orange-red spotlight row.

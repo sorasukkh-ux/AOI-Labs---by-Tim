@@ -4554,5 +4554,42 @@ class Update85(Base):
         self.assertIn('class="xm-bokeh"', page)
 
 
+class Update87(Base):
+    """Christmas music on the billboard: on / off and volume in the settings; the page loads the music player."""
+
+    def test_music(self):
+        with self.app.app_context():
+            from app.models import tv
+            key = tv.issue_key("factory2", "admin")
+            self.assertEqual((tv.bb_settings("factory2")["music"], tv.bb_settings("factory2")["volume"]), (True, 30))
+        page = self.text("/tv/factory2/prices?theme=christmas&key=" + key)
+        self.assertIn("xmas_music.js", page)
+        self.assertIn('id="xm-music"', page)
+        self.login("admin")
+        form = {"branch": "factory2", "action": "billboard", "BB_SECONDS": "7", "BB_THEME": "christmas", "BB_MUSIC": "", "BB_VOLUME": "150"}
+        for c in ("PADDY_HM", "RICE_HM", "PADDY", "RICE_W5", "PADDY_GL", "RICE_GL", "BRAN", "BROKEN"):
+            form.update({"BB_SHOW_" + c: "1", "BB_BUY_" + c: "1", "BB_SELL_" + c: "1"})
+        self.post("/admin/milling/maintenance?branch=factory2", form, "/admin/milling/maintenance?branch=factory2")
+        data = self.client.get("/tv/factory2/prices/data?key=" + key).get_json()
+        self.assertEqual((data["music"], data["volume"]), (False, 100))
+        self.assertIn('name="BB_VOLUME"', self.text("/admin/milling/maintenance?branch=factory2"))
+        self.assertEqual(self.client.get("/static/js/xmas_music.js").status_code, 200)
+        page = self.text("/tv/factory2/prices?theme=cards&key=" + key)                    # update 89: price cards
+        self.assertIn("theme-cards", page)
+        self.assertIn('id="cd-wrap"', page)
+        self.assertNotIn("theme-poster", self.text("/tv/factory2/prices?theme=poster&key=" + key))
+        self.post("/admin/milling/maintenance?branch=factory2", dict(form, BB_THEME="cards"), "/admin/milling/maintenance?branch=factory2")
+        self.assertEqual(self.client.get("/tv/factory2/prices/data?key=" + key).get_json()["theme"], "cards")
+        with self.app.app_context():                                                        # a saved "poster" becomes cards
+            from app.models.base import col
+            col("AOIMS_SYSPARAM").update_one({"BRANCH_ID": "factory2"}, {"$set": {"SYSP_BB.THEME": "poster"}})
+        self.assertEqual(self.client.get("/tv/factory2/prices/data?key=" + key).get_json()["theme"], "cards")
+        page = self.text("/tv/factory2/prices?theme=ranking&key=" + key)                  # update 90: ranking
+        self.assertIn("theme-ranking", page)
+        self.assertIn('id="rk-rows"', page)
+        self.assertIn("bbTheme_ranking", self.text("/tv/factory2/prices?theme=ranking&key=" + key) + "bbTheme_ranking")
+        self.assertIn('value="ranking"', self.text("/admin/milling/maintenance?branch=factory2"))
+
+
 if __name__ == "__main__":
     unittest.main()

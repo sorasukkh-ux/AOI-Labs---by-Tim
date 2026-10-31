@@ -109,8 +109,128 @@
     host.appendChild(s);
   }
 
+  // ----- update 89: "price cards" theme - three cards at a time, the page turns with the spotlight timer -----
+  var cdPage = 0, cdTimer = null, CD_PER = 3;
+  function star(id, c1, c2) {                          // starburst badge: 16 points, gradient top light -> bottom dark
+    var pts = [], n = 32;
+    for (var i = 0; i < n; i++) {
+      var r = i % 2 ? 86 : 100, a = Math.PI * 2 * i / n - Math.PI / 2;
+      pts.push((100 + r * Math.cos(a)).toFixed(1) + "," + (100 + r * Math.sin(a)).toFixed(1));
+    }
+    var s = svg("svg", { viewBox: "0 0 200 200" }), d = svg("defs", {}), g = svg("linearGradient", { id: id, x1: "0", y1: "0", x2: "0", y2: "1" });
+    g.appendChild(svg("stop", { offset: "0", "stop-color": c1 })); g.appendChild(svg("stop", { offset: ".5", "stop-color": c1 }));
+    g.appendChild(svg("stop", { offset: ".5", "stop-color": c2 })); g.appendChild(svg("stop", { offset: "1", "stop-color": c2 }));
+    d.appendChild(g); s.appendChild(d);
+    s.appendChild(svg("polygon", { points: pts.join(" "), fill: "url(#" + id + ")", stroke: "rgba(255,255,255,.7)", "stroke-width": "3" }));
+    return s;
+  }
+  var CD_COL = [["#f472b6", "#ec4899"], ["#38bdf8", "#3b82f6"], ["#c084fc", "#9333ea"], ["#fdba74", "#f97316"], ["#4ade80", "#16a34a"]];
+  function cdRow(ok, iconText, label, value, unit) {
+    var r = el("div", "cd-row"), ic = el("i", "ic " + ok, iconText);
+    r.appendChild(ic); r.appendChild(el("span", "", label));
+    if (value !== undefined) { var b = el("b", "", value); if (unit) b.appendChild(el("small", "", unit)); r.appendChild(b); }
+    return r;
+  }
+  function cdCard(item, k, changed) {
+    var col = k % CD_COL.length, c = el("div", "cd-card cd-c" + col + (changed ? " flash" : "")), badge = el("div", "cd-badge");
+    var main = priceOf(item, "s") > 0 && sides().indexOf("s") >= 0 ? "s" : "b";
+    badge.appendChild(star("cdb" + k, CD_COL[col][0], CD_COL[col][1]));
+    var bt = el("b", "", money(priceOf(item, main))); bt.appendChild(el("small", "", (main === "b" ? th("bbBuy") : th("bbSell")) + " · " + th("bbUnit")));
+    badge.appendChild(bt); c.appendChild(badge);
+    c.appendChild(el("h3", "", item.name)); c.appendChild(el("div", "en", item.name_en));
+    var rows = el("div", "cd-rows");
+    ["b", "s"].forEach(function (sd) {
+      if (sides().indexOf(sd) < 0) return;
+      var v = priceOf(item, sd), lbl = sd === "b" ? th("bbBuy") : th("bbSell");
+      rows.appendChild(v > 0 ? cdRow("", "✓", lbl, money(v), th("bbUnit")) : cdRow("no", "✕", lbl, "-"));
+    });
+    var side = item[main], ch = changeText(side);
+    rows.appendChild(cdRow(ch.cls === "down" ? "dn" : "", ch.arrow || "=", ch.txt + (ch.since ? " · " + ch.since : "")));
+    if (item.note) rows.appendChild(cdRow("nt", "★", item.note));
+    var stagger = rows.children;
+    for (var i = 0; i < stagger.length; i++) stagger[i].style.transitionDelay = (0.25 + i * 0.12) + "s";
+    c.appendChild(rows);
+    var ser = side.series || [], sp = el("div", "cd-spark");
+    if (ser.length > 1) {
+      var lo = Math.min.apply(null, ser), hi = Math.max.apply(null, ser); if (hi - lo < 0.5) { lo -= 0.5; hi += 0.5; }
+      var pts = ser.map(function (v, j) { return [j / (ser.length - 1) * 400, 62 - (v - lo) / (hi - lo) * 54]; });
+      var d = pts.map(function (p, j) { return (j ? "L" : "M") + p[0].toFixed(1) + " " + p[1].toFixed(1); }).join(" ");
+      var s2 = svg("svg", { viewBox: "0 0 400 70", preserveAspectRatio: "none" });
+      s2.appendChild(svg("path", { "class": "ar", d: d + " L400 70 L0 70 Z" })); s2.appendChild(svg("path", { "class": "ln", d: d }));
+      sp.appendChild(s2);
+    }
+    c.appendChild(sp);
+    var btn = el("div", "cd-btn"); btn.innerHTML = ART[item.kind] || ART.rice; c.appendChild(btn);
+    return c;
+  }
+  function cardsPage(changed, keep) {
+    var host = document.getElementById("cd-wrap"), dots = document.getElementById("cd-dots"), list = items();
+    if (!host) return;
+    var pages = Math.max(1, Math.ceil(list.length / CD_PER));
+    if (cdPage >= pages) cdPage = 0;
+    var old = host.querySelectorAll(".cd-card");
+    var put = function () {
+      host.innerHTML = "";
+      list.slice(cdPage * CD_PER, cdPage * CD_PER + CD_PER).forEach(function (item, k) {
+        var c = cdCard(item, cdPage * CD_PER + k, changed && changed[item.code]);
+        host.appendChild(c);
+        setTimeout(function () { c.className += " in"; }, 60 + k * 160);
+      });
+      dots.innerHTML = "";
+      if (pages > 1) for (var p = 0; p < pages; p++) dots.appendChild(el("i", p === cdPage ? "on" : ""));
+    };
+    if (old.length && !keep) { for (var i = 0; i < old.length; i++) old[i].className += " out"; setTimeout(put, 450); } else put();
+    clearTimeout(cdTimer);
+    cdTimer = setTimeout(function () { cdPage++; cardsPage(); }, Math.max(SPOT_MS, 6000) + 1500);
+  }
+
+  // ----- update 90: "ranking" theme - SKUs ranked by price with growing bars; the highlight walks down the list -----
+  var rkOn = 0, rkTimer = null, RK_COL = ["#1d4ed8", "#0ea5e9", "#16a34a", "#f59e0b", "#e11d48", "#7c3aed", "#0891b2", "#ea580c"];
+  function rkSide() { return sides().indexOf("s") >= 0 && items().some(function (i) { return i.sell > 0; }) ? "s" : "b"; }
+  function ranking(changed) {
+    var rows = document.getElementById("rk-rows"), signs = document.getElementById("rk-signs");
+    if (!rows) return;
+    var sd = rkSide(), other = sd === "s" ? "b" : "s", list = items().filter(function (i) { return priceOf(i, sd) > 0; })
+      .sort(function (a, b) { return priceOf(b, sd) - priceOf(a, sd); }).slice(0, 10);
+    var max = list.length ? priceOf(list[0], sd) : 1, sideName = sd === "b" ? th("bbBuy") : th("bbSell");
+    document.getElementById("rk-title").textContent = th("rkTitle") + " · Top " + list.length;
+    document.getElementById("rk-sub").textContent = th("rkSub").replace("{side}", sideName);
+    rows.innerHTML = ""; signs.innerHTML = "";
+    list.forEach(function (item, k) {
+      var r = el("div", "rk-row" + (changed && changed[item.code] ? " flash" : ""));
+      r.appendChild(el("div", "no", String(k + 1)));
+      var nm = el("div", "nm", item.name); nm.appendChild(el("small", "", item.name_en)); r.appendChild(nm);
+      var bar = el("div", "rk-bar"), fill = el("i"); bar.appendChild(fill); r.appendChild(bar);
+      var ch = changeText(item[sd]), val = el("div", "val", money(priceOf(item, sd)));
+      var sub = priceOf(item, other) > 0 && sides().indexOf(other) >= 0
+        ? th("rkOther").replace("{side}", other === "b" ? th("bbBuy") : th("bbSell")).replace("{v}", money(priceOf(item, other))) : (ch.arrow ? ch.arrow + " " + money(Math.abs(item[sd].change)) : "");
+      val.appendChild(el("small", ch.cls, sub)); r.appendChild(val);
+      rows.appendChild(r);
+      setTimeout(function () { r.className += " in"; fill.style.width = Math.max(6, priceOf(item, sd) / max * 100).toFixed(1) + "%"; }, 120 + k * 110);
+      var sg = el("div", "rk-sign", item.name), mark = el("i");
+      mark.style.background = RK_COL[k % RK_COL.length]; sg.insertBefore(mark, sg.firstChild);
+      sg.style.top = (k * (760 / Math.max(list.length, 1)) + 4).toFixed(0) + "px";
+      sg.style.animationDelay = (k * 0.12) + "s, " + (-k * 0.7) + "s";
+      sg.style.zIndex = 20 - k;
+      signs.appendChild(sg);
+    });
+    rkMark();
+  }
+  function rkMark() {
+    var rows = document.querySelectorAll("#rk-rows .rk-row"), signs = document.querySelectorAll("#rk-signs .rk-sign");
+    if (!rows.length) return;
+    rkOn = rkOn % rows.length;
+    for (var i = 0; i < rows.length; i++) {
+      rows[i].className = rows[i].className.replace(/\s*on\b/g, "") + (i === rkOn ? " on" : "");
+      if (signs[i]) signs[i].className = signs[i].className.replace(/\s*on\b/g, "") + (i === rkOn ? " on" : "");
+    }
+    clearTimeout(rkTimer);
+    rkTimer = setTimeout(function () { rkOn++; rkMark(); }, Math.max(3000, SPOT_MS / 2));
+  }
+
+  var pcIndex = 0;
   function card(item, isNew) {
-    var c = el("div", "bb-card enter"), top = el("div", "bb-top"), art = el("div", "bb-art");
+    var c = el("div", "bb-card enter pc" + (pcIndex++ % 6)), top = el("div", "bb-top"), art = el("div", "bb-art");   // update 88: poster colour
     art.innerHTML = ART[item.kind] || ART.rice;
     var name = el("div", "bb-name");
     if (isNew) name.appendChild(el("div", "bb-new", th("bbNew") + " · " + en("bbNew")));
@@ -146,10 +266,10 @@
     if (!list.length) { stage.innerHTML = ""; stage.appendChild(el("div", "bb-empty", "-")); return; }
     idx = (i + list.length) % list.length;
     var old = stage.querySelector(".bb-card:not(.leave)");
-    if (old) { old.className = "bb-card leave"; setTimeout(function () { if (old.parentNode) old.parentNode.removeChild(old); }, 950); }
+    if (old) { old.className = old.className.replace(" enter", "") + " leave"; setTimeout(function () { if (old.parentNode) old.parentNode.removeChild(old); }, 950); }
     var c = card(list[idx], isNew);
     stage.appendChild(c);
-    setTimeout(function () { c.className = "bb-card"; }, 30);
+    setTimeout(function () { c.className = c.className.replace(" enter", ""); }, 30);
     var rows = document.querySelectorAll("#bb-rows .bb-row");
     for (var r = 0; r < rows.length; r++) rows[r].className = rows[r].className.replace(/\s*on\b/g, "") + (r === idx ? " on" : "");
     var bar = document.getElementById("bb-timer");
@@ -225,6 +345,13 @@
     if (!first) for (var k in now) if (last[k] !== undefined && last[k] !== now[k]) { changed[k] = true; if (firstChanged === null) firstChanged = k; }
     last = now;
     board(changed); ticker(); promo();
+    ranking(changed);                                  // update 90
+    if (first) cardsPage(changed, true);
+    else if (firstChanged !== null) {                  // a new price: turn to the page with it
+      var all = items();
+      for (var q = 0; q < all.length; q++) if (all[q].code === firstChanged) cdPage = Math.floor(q / CD_PER);
+      cardsPage(changed);
+    }
     var list = items(), at = -1;
     for (var i = 0; i < list.length; i++) if (list[i].code === firstChanged) at = i;
     if (first) spotlight(0);
@@ -287,7 +414,36 @@
   function theme() {
     var name = fixedTheme || data.theme || "default";
     document.body.className = document.body.className.replace(/\s*theme-[a-z]+/g, "") + " theme-" + name;
+    music();
   }
+
+  // update 87: soft Christmas music with the Christmas theme (settings: on / off, volume). The browser needs one tap
+  // or key press first; the speaker button starts it, or mutes it on this TV (remembered on this TV).
+  var musicBtn = document.getElementById("xm-music"), M = window.AOIXmasMusic;
+  function muted() { try { return window.localStorage.getItem("aoi-bb-mute") === "1"; } catch (e) { return false; } }
+  function wanted() { return !!M && (fixedTheme || data.theme) === "christmas" && data.music !== false && (data.volume || 0) > 0; }
+  function music() {
+    if (!musicBtn) return;
+    musicBtn.hidden = !wanted();
+    if (!wanted()) { if (M) M.stop(); return; }
+    M.setVolume(data.volume);
+    if (muted()) { M.stop(); musicBtn.innerHTML = musicBtn.getAttribute("data-mute"); musicBtn.className = "xm-music off"; return; }
+    if (M.running()) { musicBtn.innerHTML = musicBtn.getAttribute("data-play"); musicBtn.className = "xm-music on"; }
+    else { musicBtn.innerHTML = musicBtn.getAttribute("data-on"); musicBtn.className = "xm-music ask"; }
+  }
+  function userStart() {                               // the first tap / key: the browser now allows sound
+    if (wanted() && !muted()) { M.start(); setTimeout(music, 300); }
+  }
+  if (musicBtn) musicBtn.onclick = function (e) {
+    e.stopPropagation();
+    var nowMuted = M.running();
+    try { window.localStorage.setItem("aoi-bb-mute", nowMuted ? "1" : "0"); } catch (err) { /* private mode */ }
+    if (nowMuted) M.stop(); else M.start();
+    setTimeout(music, 300);
+  };
+  document.addEventListener("click", userStart);
+  document.addEventListener("touchend", userStart);
+  document.addEventListener("keydown", userStart);
   (function snow() {
     var host = document.getElementById("xm-snow");
     if (!host) return;

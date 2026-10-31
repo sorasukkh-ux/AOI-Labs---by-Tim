@@ -149,7 +149,14 @@
         <label class="bb-side"><input type="checkbox" name="BB_PROMO" value="1" {% if bb.promo %}checked{% endif %}> {{ t('bbPromoShow') }}</label></div>
     </div>
     <div class="field-row"><label class="field-label" for="bb-theme">{{ t('bbTheme') }}</label>
-      <select id="bb-theme" name="BB_THEME">{% for th_ in ('default', 'christmas') %}<option value="{{ th_ }}"{% if bb.theme == th_ %} selected{% endif %}>{{ t('bbTheme_' ~ th_) }}</option>{% endfor %}</select></div>
+      <select id="bb-theme" name="BB_THEME">{% for th_ in ('default', 'christmas', 'cards', 'ranking') %}<option value="{{ th_ }}"{% if bb.theme == th_ %} selected{% endif %}>{{ t('bbTheme_' ~ th_) }}</option>{% endfor %}</select></div>
+    <div class="two-col field-row">
+      <div><label class="field-label">{{ t('bbMusic') }}</label>
+        <label class="bb-side"><input type="checkbox" name="BB_MUSIC" value="1" {% if bb.music %}checked{% endif %}> {{ t('bbMusicOn') }}</label></div>
+      <div><label class="field-label" for="bb-volume">{{ t('bbVolume') }} (<span id="bb-volume-v">{{ bb.volume }}</span>%)</label>
+        <input type="range" id="bb-volume" name="BB_VOLUME" min="0" max="100" step="5" value="{{ bb.volume }}"></div>
+    </div>
+    <p class="cap-note">{{ t('bbMusicNote') }}</p>
     {% for n in range(1, 4) %}
     <div class="field-row"><label class="field-label" for="bb-msg-{{ n }}">{{ t('bbMsg', n=n) }}</label>
       <input type="text" id="bb-msg-{{ n }}" name="BB_MSG_{{ n }}" value="{{ bb.messages[n - 1] if bb.messages|length >= n else '' }}" maxlength="120" placeholder="{{ t('bbMsgPh') }}"></div>

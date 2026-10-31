@@ -196,7 +196,7 @@ def _side(steps, idx, current, today, changed_at=None):
 # ---------- update 84: what the billboard shows, per branch (AOIMS_SYSPARAM.SYSP_BB) ----------
 BB_SECONDS = (4, 30)
 BB_NOTE_MAX, BB_MSG_MAX, BB_MSGS = 80, 120, 3
-BB_THEMES = ("default", "christmas")                         # update 85: board themes
+BB_THEMES = ("default", "christmas", "cards", "ranking")     # update 85: board themes; 89: price cards (replaces poster); 90: ranking
 
 
 def bb_settings(branch_id):
@@ -213,7 +213,8 @@ def bb_settings(branch_id):
                      "sell": r.get("SELL", True) if r else True, "note": (r or {}).get("NOTE") or ""})
     return {"skus": skus, "seconds": int(saved.get("SECONDS") or 7), "promo": saved.get("PROMO_MILL", True),
             "messages": [m for m in saved.get("MESSAGES") or [] if m],
-            "theme": saved.get("THEME") if saved.get("THEME") in BB_THEMES else "default"}
+            "theme": "cards" if saved.get("THEME") == "poster" else (saved.get("THEME") if saved.get("THEME") in BB_THEMES else "default"),
+            "music": saved.get("MUSIC", True), "volume": int(saved.get("VOLUME", 30))}
 
 
 def save_bb_settings(branch_id, form, ope_user):
@@ -243,9 +244,15 @@ def save_bb_settings(branch_id, form, ope_user):
     if not (BB_SECONDS[0] <= seconds <= BB_SECONDS[1]):
         raise ValidationError("bbErrSeconds", lo=BB_SECONDS[0], hi=BB_SECONDS[1])
     messages = [clean_text(form.get("BB_MSG_%d" % n), BB_MSG_MAX) for n in range(1, BB_MSGS + 1)]
+    try:                                                         # update 87: music volume 0-100
+        volume = int(float(form.get("BB_VOLUME") or 30))
+    except ValueError:
+        raise ValidationError("errNumber")
+    volume = max(0, min(100, volume))
     values = {"SYSP_BB": {"SKUS": [r[2] for r in sorted(rows, key=lambda x: (x[0], x[1]))], "SECONDS": seconds,
                           "PROMO_MILL": form.get("BB_PROMO") == "1", "MESSAGES": [m for m in messages if m],
-                          "THEME": form.get("BB_THEME") if form.get("BB_THEME") in BB_THEMES else "default"}}
+                          "THEME": form.get("BB_THEME") if form.get("BB_THEME") in BB_THEMES else "default",
+                          "MUSIC": form.get("BB_MUSIC") == "1", "VOLUME": volume}}
     values.update(audit_update(ope_user))
     col(Branch.COL).update_one({"BRANCH_ID": branch_id}, {"$set": values})
     return bb_settings(branch_id)
@@ -288,4 +295,5 @@ def billboard(branch_id):
             "branch_name_en": en_name if en_name != key else (branch.get("BRANCH_NAME") or branch_id),
             "now_ms": int(now.timestamp() * 1000), "tz_min": int(local_now.utcoffset().total_seconds() // 60),
             "items": items, "discount": discount, "messages": cfg["messages"], "seconds": cfg["seconds"], "theme": cfg["theme"],
+            "music": cfg["music"], "volume": cfg["volume"],
             "updated": local_now.strftime("%H:%M:%S")}
