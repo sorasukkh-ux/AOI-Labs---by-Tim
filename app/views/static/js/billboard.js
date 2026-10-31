@@ -186,16 +186,27 @@
 
   // ----- update 90: "ranking" theme - SKUs ranked by price with growing bars; the highlight walks down the list -----
   var rkOn = 0, rkTimer = null, RK_COL = ["#1d4ed8", "#0ea5e9", "#16a34a", "#f59e0b", "#e11d48", "#7c3aed", "#0891b2", "#ea580c"];
-  function rkSide() { return sides().indexOf("s") >= 0 && items().some(function (i) { return i.sell > 0; }) ? "s" : "b"; }
+  // update 92 (Tim): buying AND selling - the ranking takes turns (selling list, then buying list, ...)
+  var rkCur = null;
+  function rkSides() {
+    return ["s", "b"].filter(function (sd) { return sides().indexOf(sd) >= 0 && items().some(function (i) { return priceOf(i, sd) > 0; }); });
+  }
+  function rkSide() {
+    var avail = rkSides();
+    if (avail.indexOf(rkCur) < 0) rkCur = avail[0] || "s";
+    return rkCur;
+  }
   function ranking(changed) {
     var rows = document.getElementById("rk-rows"), signs = document.getElementById("rk-signs");
     if (!rows) return;
     var sd = rkSide(), other = sd === "s" ? "b" : "s", list = items().filter(function (i) { return priceOf(i, sd) > 0; })
       .sort(function (a, b) { return priceOf(b, sd) - priceOf(a, sd); }).slice(0, 10);
     var max = list.length ? priceOf(list[0], sd) : 1, sideName = sd === "b" ? th("bbBuy") : th("bbSell");
-    document.getElementById("rk-title").textContent = th("rkTitle") + " · Top " + list.length;
-    document.getElementById("rk-sub").textContent = th("rkSub").replace("{side}", sideName);
+    document.getElementById("rk-title").textContent = th("rkTitle").replace("{side}", sideName) + " · Top " + list.length;
+    document.getElementById("rk-sub").textContent = rkSides().length > 1 ? th("rkSub") : th("rkSub").split(" · ").slice(0, 2).join(" · ");
+    document.getElementById("rk-wrap").className = "rk-wrap side-" + sd;
     rows.innerHTML = ""; signs.innerHTML = "";
+    rows.className = "rk-rows" + (list.length <= 5 ? " few" : "");      // few rows: bigger rows
     list.forEach(function (item, k) {
       var r = el("div", "rk-row" + (changed && changed[item.code] ? " flash" : ""));
       r.appendChild(el("div", "no", String(k + 1)));
@@ -219,7 +230,11 @@
   function rkMark() {
     var rows = document.querySelectorAll("#rk-rows .rk-row"), signs = document.querySelectorAll("#rk-signs .rk-sign");
     if (!rows.length) return;
-    rkOn = rkOn % rows.length;
+    if (rkOn >= rows.length) {                          // the list is done: the other side's ranking, if there is one
+      rkOn = 0;
+      var avail = rkSides();
+      if (avail.length > 1) { rkCur = avail[(avail.indexOf(rkCur) + 1) % avail.length]; ranking(); return; }
+    }
     for (var i = 0; i < rows.length; i++) {
       rows[i].className = rows[i].className.replace(/\s*on\b/g, "") + (i === rkOn ? " on" : "");
       if (signs[i]) signs[i].className = signs[i].className.replace(/\s*on\b/g, "") + (i === rkOn ? " on" : "");

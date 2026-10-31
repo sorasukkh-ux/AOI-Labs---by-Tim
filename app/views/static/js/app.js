@@ -573,3 +573,12 @@
     targets.forEach(function (tg) { observer.observe(tg.node); });
   }
 })();
+
+/* update 91: a range slider shows its value in the element named by data-out (billboard music volume) */
+(function () {
+  "use strict";
+  document.querySelectorAll('input[type="range"][data-out]').forEach(function (r) {
+    var out = document.getElementById(r.getAttribute("data-out"));
+    if (out) r.addEventListener("input", function () { out.textContent = r.value; });
+  });
+})();

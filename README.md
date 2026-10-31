@@ -340,6 +340,14 @@ are kept in `AOITS_SYSLOG` (14 days), the checks in `AOITS_HEALTH` (7 days).
 customer's LINE when "Also send to the customer's LINE" is ticked (shown for customers linked to LINE); "Send to LINE
 only" sends without printing. The same public https address is needed as for the queue QR (update 47).
 
+## Ranking: buying and selling take turns (update 92)
+
+- The ranking theme now shows both lists: the selling-price ranking (blue), then the buying-price ranking (green), switching after the highlight has walked through the list. Only one list when only one side has prices. Five rows or fewer are drawn bigger.
+
+## Billboard settings layout (update 91)
+
+- Milling Maintenance > Price billboard settings is tidied into 4 numbered sections: 1 products and prices (compact table; the buying / selling price is a green pill when shown, struck through when hidden), 2 display (theme, seconds, promotion switch), 3 Christmas music (switch, volume with live %), 4 running messages; Open billboard and Save sit together at the bottom. No change to what is saved.
+
 ## Billboard themes: price cards and ranking (updates 89-90, DB 1.60)
 
 - The Poster wall theme is removed (a saved "poster" shows as Price cards).

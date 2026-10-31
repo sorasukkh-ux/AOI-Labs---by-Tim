@@ -509,3 +509,16 @@ html:has(body.theme-ranking), body.theme-ranking { background: linear-gradient(1
 .theme-ranking .bb-tape .it { color: #e0f2fe; } .theme-ranking .bb-tape .it .b { color: #86efac; } .theme-ranking .bb-tape .it .s { color: #7dd3fc; }
 @media (prefers-reduced-motion: reduce) { .rk-floor, .rk-beam, .rk-sign, .rk-logo { animation: none; opacity: 1; } }
 .rk-sign { font-size: 36px; }
+/* update 92: buying ranking in green, selling in blue; header subtitle on one line */
+.theme-ranking .tvb-brand p { white-space: nowrap; }
+.rk-wrap.side-b .rk-bar i { background: linear-gradient(90deg, #15803d, #4ade80); }
+.rk-wrap.side-b .rk-row.on { background: linear-gradient(90deg, #14532d, #166534); box-shadow: 0 0 0 3px #4ade80, 0 0 36px rgba(74,222,128,.6); }
+.rk-wrap.side-b .rk-row.on .no { background: #16a34a; } .rk-wrap.side-b .rk-row .no { background: #dcfce7; }
+.rk-wrap.side-b .rk-row.on .rk-bar i { background: linear-gradient(90deg, #4ade80, #bbf7d0); box-shadow: 0 0 16px #4ade80; }
+.rk-wrap.side-b .rk-head h2 { color: #14532d; } .rk-wrap.side-b .rk-head p { color: #15803d; }
+.rk-wrap.side-b .rk-logo .p1 { fill: #16a34a; } .rk-wrap.side-b .rk-logo .p2 { fill: #86efac; } .rk-wrap.side-b .rk-logo .p3 { fill: #14532d; }
+.rk-wrap.side-b .rk-sign.on { background: #14532d; box-shadow: 0 0 34px rgba(74,222,128,.7), 10px 14px 24px rgba(15,42,92,.3); }
+.rk-head h2 { font-size: 66px; }
+.rk-rows.few { gap: 16px; } .rk-rows.few .rk-row { height: 104px; grid-template-columns: 96px minmax(0, 1.1fr) 1fr 220px; }
+.rk-rows.few .rk-row .no { font-size: 52px; } .rk-rows.few .rk-row .nm { font-size: 42px; } .rk-rows.few .rk-row .nm small { font-size: 17px; }
+.rk-rows.few .rk-row .val { font-size: 56px; } .rk-rows.few .rk-bar { height: 28px; }
