@@ -5,8 +5,9 @@ from ..i18n import t
 from ..models.base import ValidationError
 from ..models.customer import Customer
 from ..models.milling_order import MillingOrder
-from ..security import can, current_user, operating_branch, require, safe_next
+from ..security import can, current_user, maintainable_branches, operating_branch, require, safe_next
 from .common import flash_error, flash_ok
+from ..timeutil import fmt_date, to_local
 from .service_milling import STATUS_KEYS
 
 bp = Blueprint("admin_customers", __name__, url_prefix="/admin/customers")
@@ -150,3 +151,50 @@ def customer_view(code):
         return _after_save(customer)
     editing = request.args.get("edit") == "1" and can(MENU, "edit")
     return _page("edit" if editing else "view", customer)
+
+
+def _leaf_branch():
+    from ..security import pick_maintenance_branch
+    requested = request.values.get("branch")
+    branch = pick_maintenance_branch(requested)
+    if not branch or (requested and requested != branch):
+        abort(403)
+    return branch
+
+
+# ---------- update 108: LINE member leaflet; update 110 (Tim): part of Customer Registration (AD_CUSTOMER) ----------
+@bp.route("/leaflet", methods=["GET", "POST"])
+@require(MENU)
+def leaflet():
+    from ..models import member_reg, line_link, notify
+    branch = _leaf_branch()
+    if request.method == "POST":
+        if not can(MENU, "edit"):
+            abort(403)
+        action = request.form.get("action")
+        if action in ("off", "on"):
+            run, ok = (lambda: member_reg.set_status(request.form.get("id"), branch, action == "on", current_user()["USER_ID"])), "lfMsgStatus"
+        else:
+            run, ok = (lambda: member_reg.create(branch, request.form, current_user()["USER_ID"])), "lfMsgCreated"
+        try:
+            run()
+        except ValidationError as error:
+            flash_error(error)
+        else:
+            flash_ok(ok)
+        return redirect(url_for("admin_customers.leaflet", branch=branch))
+    return render_template("admin/leaflet.html", branch=branch, branches=maintainable_branches(), rows=member_reg.batches(branch),
+                           members=member_reg.recent([branch]), oa=line_link.oa_id(), has_public=bool(notify.public_base(None)),
+                           origin=request.host_url.rstrip("/"), can_edit=can(MENU, "edit"), fmt_date=fmt_date, to_local=to_local)
+
+
+@bp.route("/leaflet/print")
+@require(MENU)
+def leaflet_print():
+    from ..models import member_reg, line_link
+    branch = _leaf_branch()
+    leaf = member_reg.get(request.args.get("id"))
+    if request.args.get("id") and (not leaf or leaf["BRANCH_ID"] != branch):
+        abort(404)
+    return render_template("admin/leaflet_print.html", leaf=leaf, qr=member_reg.qr_url(leaf["LEAF_ID"] if leaf else None),
+                           oa=line_link.oa_id(), copies=2)

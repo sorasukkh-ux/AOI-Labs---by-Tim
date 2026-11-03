@@ -340,6 +340,12 @@ are kept in `AOITS_SYSLOG` (14 days), the checks in `AOITS_HEALTH` (7 days).
 customer's LINE when "Also send to the customer's LINE" is ticked (shown for customers linked to LINE); "Send to LINE
 only" sends without printing. The same public https address is needed as for the queue QR (update 47).
 
+## Menu moves (update 110)
+
+- Competitor analysis is now part of AI: Automation > AI shows a competitor card (counts and the biggest gaps) with "เปิดวิเคราะห์คู่แข่ง"; the page is `/automation/ai/competitor`, rights AT_AI (view / edit). It left Marketing.
+- The LINE member leaflet is now part of Customer Registration (Administration > Customer Registration, link at the top); the page is `/admin/customers/leaflet`, rights AD_CUSTOMER. It left Marketing.
+The old `/finance/competitor` and `/finance/leaflet` links redirect to the new pages. No DB change.
+
 ## Competitor analysis (update 109, DB 1.68)
 
 Marketing > "วิเคราะห์คู่แข่ง": add the competing mills / buyers of the branch, then record the prices staff saw or heard (date, source, any of: paddy buying price, rice / bran / broken selling price, milling fee per kg paddy). The page shows:

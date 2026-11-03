@@ -4909,11 +4909,13 @@ class Update108(Base):
         try:
             self.login("admin")
             self.client.get("/lang/en")
-            self.assertIn("lf-entry", self.text("/finance/marketing?branch=factory2"))
-            self.post("/finance/leaflet?branch=factory2", {"branch": "factory2", "LEAF_NAME": "Market day"}, "/finance/leaflet?branch=factory2")
+            self.assertIn("lf-entry", self.text("/admin/customers/"))                          # update 110: in Customer Registration
+            self.assertNotIn("lf-entry", self.text("/finance/marketing?branch=factory2"))
+            self.assertIn("/admin/customers/leaflet", self.client.get("/finance/leaflet?branch=factory2").headers["Location"])
+            self.post("/admin/customers/leaflet?branch=factory2", {"branch": "factory2", "LEAF_NAME": "Market day"}, "/admin/customers/leaflet?branch=factory2")
             leaf = self.db("AOIMS_LEAFLET")[0]
             self.assertEqual((leaf["LEAF_ID"], leaf["BRANCH_ID"]), ("L0001", "factory2"))
-            page = self.text("/finance/leaflet/print?branch=factory2&id=L0001")
+            page = self.text("/admin/customers/leaflet/print?branch=factory2&id=L0001")
             self.assertIn("REG-L0001", page)
             self.assertLessEqual(len(__import__("html").unescape(_re.search(r'data-qr="([^"]+)"', page).group(1))), 106)
             self.assertIn("oaMessage/%40aoitest", page)
@@ -4955,7 +4957,7 @@ class Update108(Base):
             # counts on the leaflet page
             self.login("admin")
             self.client.get("/lang/en")
-            page = self.text("/finance/leaflet?branch=factory2")
+            page = self.text("/admin/customers/leaflet?branch=factory2")
             self.assertIn("Somsak Newmember", page)
             self.assertIn("Market day", page)
         finally:
@@ -4970,8 +4972,10 @@ class Update109(Base):
         from unittest import mock
         self.login("admin")
         self.client.get("/lang/en")
-        self.assertIn("co-entry-link", self.text("/finance/marketing?branch=factory2"))
-        url = "/finance/competitor?branch=factory2"
+        self.assertIn("ai-competitor", self.text("/automation/ai"))                         # update 110: under AI
+        self.assertNotIn("co-entry-link", self.text("/finance/marketing?branch=factory2"))
+        self.assertIn("/automation/ai/competitor", self.client.get("/finance/competitor?branch=factory2").headers["Location"])
+        url = "/automation/ai/competitor?branch=factory2"
         self.post(url, {"branch": "factory2", "action": "comp", "COMP_NAME": "Mill A", "DISTANCE_KM": "5"}, url)
         self.post(url, {"branch": "factory2", "action": "comp", "COMP_NAME": "mill a"}, url)            # duplicate name
         self.post(url, {"branch": "factory2", "action": "comp", "COMP_NAME": "Buyer B"}, url)

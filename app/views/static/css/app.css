@@ -1727,3 +1727,7 @@ body.leaflet-page { background: #e5e7eb; font-family: "Prompt", "IBM Plex Sans T
 .co-comp-form { display: grid; grid-template-columns: 1.4fr 1.4fr .6fr 1.4fr .8fr auto; gap: 10px; align-items: end; margin-bottom: 12px; }
 @media (max-width: 900px) { .co-comp-form { grid-template-columns: 1fr 1fr; } }
 .co-ai-text { white-space: pre-wrap; line-height: 1.6; background: var(--surface-2, #f8fafc); border-radius: 10px; padding: 12px 14px; }
+
+/* update 110: competitor card on the AI screen */
+.co-stats-mini { margin-top: 8px; } .co-stats-mini .co-stat { background: var(--surface-2, #f8fafc); border-radius: 10px; padding: 10px 12px; } .co-stats-mini .co-stat b { font-size: 20px; }
+.co-risk-list { margin: 10px 0 0; padding-left: 18px; line-height: 1.7; }

@@ -9,7 +9,7 @@ from ..models.automation import scada as scada_data, SHIFTS
 from ..models.automation import (COMMANDS, MACHINE_STATUSES, MACHINE_TYPES, RUNNING, SOURCE_USER, Machine, MachineCommand,
                                  Meter, elec_rate, paddy_milled, period_bounds, post_month_to_account, set_elec_rate)
 from ..models.base import ValidationError
-from ..security import can, current_user, operating_branch, require
+from ..security import can, current_user, maintainable_branches, operating_branch, pick_maintenance_branch, require
 from ..timeutil import fmt_datetime, local_tz, now_local, now_utc, parse_local_datetime, to_local
 from .common import flash_error, flash_ok
 from ..models.variety import mat_name
@@ -355,7 +355,11 @@ def ai_screen():
     counts = {"buy": sum(1 for o in signals if o["label"] in ("buy", "strong_buy")),
               "sell": sum(1 for o in signals if o["label"] in ("sell", "strong_sell")),
               "hold": sum(1 for o in signals if o["label"] == "hold")}
-    return render_template("automation/ai.html", mill=mres["total"], mill_varieties=mill_by_variety, mill_pct=ma.pct,
+    from ..models import competitor as co                     # update 110: competitor analysis is part of AI
+    co_comps, co_rows = co.compare(branch)
+    co_risk = sorted((r for r in co_rows if r["risk"]), key=lambda r: -abs((r["best_gap"] or 0) / (r["ours"] or 1)))[:4]
+    return render_template("automation/ai.html", co_stats=dict(co.summary(co_rows), comps=len(co_comps)), co_risk=co_risk,
+                           co_ai_time=fmt_datetime((co.last_ai(branch) or {}).get("REGIST_DATE")), mill=mres["total"], mill_varieties=mill_by_variety, mill_pct=ma.pct,
                            can_mill=can("AD_MILLANALYSIS"), signals=signals, sig_counts=counts, health_hist=health_hist,
                            api_hourly=monitor.api_hourly(24), fc_total=round(sum(f["kg"] for f in fc)), health=hl, health_logs=hl_logs, health_time=to_local(hl["CHECK_DATE"]).strftime("%d/%m/%Y %H:%M:%S"),
                            live_time=to_local(now_utc()).strftime("%H:%M:%S"),
@@ -459,3 +463,51 @@ def ai_prices():
                            last_fetch=fmt_datetime(last_fetch["FETCH_DATE"]) if last_fetch else None, entry=entry,
                            export_url=current_app.config["EXPORT_URL"], answer=answer,
                            configured=ai.ai_configured(), can_fetch=can(AI_MENU, "create"), can_edit=can(AI_MENU, "edit"))
+
+
+# ---------- update 109: competitor analysis; update 110 (Tim): under AI, rights AT_AI ----------
+@bp.route("/ai/competitor", methods=["GET", "POST"])
+@require(AI_MENU)
+def ai_competitor():
+    from ..models import competitor as co
+    from ..i18n import get_lang
+    requested = request.values.get("branch")
+    branch = pick_maintenance_branch(requested)
+    if not branch or (requested and requested != branch):
+        abort(403)
+    if request.method == "POST":
+        if not can(AI_MENU, "edit"):
+            abort(403)
+        action = request.form.get("action")
+        acts = {"comp": (lambda: co.save_competitor(branch, request.form, current_user()["USER_ID"]), "coMsgComp", "co-comps"),
+                "del": (lambda: co.delete_price(branch, request.form.get("id")), "coMsgDeleted", "co-recent"),
+                "ai": (lambda: co.ai_summary(branch, current_user()["USER_ID"], get_lang()), "coMsgAi", "co-ai")}
+        if action in acts:
+            run, ok, anchor = acts[action]
+            try:
+                run()
+            except ValidationError as error:
+                flash_error(error)
+            else:
+                flash_ok(ok)
+            return redirect(url_for("automation.ai_competitor", branch=branch, _anchor=anchor))
+        try:
+            n = co.save_prices(branch, request.form, current_user()["USER_ID"])
+        except ValidationError as error:
+            flash_error(error)
+        else:
+            flash_ok("coMsgPrices", n=n)
+        return redirect(url_for("automation.ai_competitor", branch=branch, _anchor="co-compare"))
+    comps, rows = co.compare(branch)
+    key = request.args.get("item") if request.args.get("item") in co.ITEM_KEYS else co.ITEM_KEYS[0]
+    try:
+        days = int(request.args.get("days") or 90)
+    except ValueError:
+        days = 90
+    days = days if days in co.PERIODS else 90
+    return render_template("automation/competitor.html", branch=branch, branches=maintainable_branches(), comps=comps, rows=rows,
+                           stats=co.summary(rows), all_comps=co.competitors(branch), items=co.items(), item_name=co.item_name,
+                           sources=co.SOURCES, recent=co.recent(branch), chart=co.series(branch, key, days), item=key, days=days,
+                           periods=co.PERIODS, ai=co.last_ai(branch), ai_ready=co.ai_ready(), fresh=co.FRESH_DAYS,
+                           today=now_local().date().isoformat(), can_edit=can(AI_MENU, "edit"), to_local=to_local,
+                           edit=co.get(request.args.get("edit")))

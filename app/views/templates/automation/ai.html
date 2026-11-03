@@ -216,6 +216,21 @@
   {% else %}<p class="hint">{{ t('psNoData') }} {{ t('psNoDataTodo') }}</p>{% endif %}
 </section>
 
+{# update 110 (Tim): competitor analysis lives in the AI feature #}
+<section class="card dash-card" id="ai-competitor">
+  <div class="dash-head"><p class="card-title sub">&#9878; {{ t('coTitle') }}</p><a class="action small" href="{{ url_for('automation.ai_competitor') }}" id="co-open">{{ t('coOpen') }} &rarr;</a></div>
+  <div class="co-stats co-stats-mini">
+    <div class="co-stat"><small>{{ t('coStatComps') }}</small><b>{{ co_stats.comps }}</b></div>
+    <div class="co-stat"><small>{{ t('coStatSeen') }}</small><b>{{ co_stats['seen'] }} / {{ co_stats['items'] }}</b></div>
+    <div class="co-stat bad"><small>{{ t('coStatRisk') }}</small><b>{{ co_stats.risk }}</b></div>
+    <div class="co-stat good"><small>{{ t('coStatOk') }}</small><b>{{ co_stats.ok }}</b></div>
+  </div>
+  {% if co_risk %}<ul class="co-risk-list">{% for r in co_risk %}
+    <li><b>{{ r.name }}</b> <small class="co-side s{{ r.side }}">{{ t('coSide_' ~ r.side) }}</small> &middot; {{ t('coOurs') }} {{ '%.2f'|format(r.ours) }} &middot; <span class="co-gap bad">{{ '%+.2f'|format(r.best_gap) }}</span></li>{% endfor %}</ul>
+  {% elif not co_stats.comps %}<p class="hint">{{ t('coNoComps') }}</p>{% endif %}
+  {% if co_ai_time %}<p class="cap-note">&#129302; {{ t('coAiLast') }} {{ co_ai_time }}</p>{% endif %}
+</section>
+
 <div class="dash-grid mt14">
 <section class="card dash-card span2" id="ai-price" data-live>
   <div class="dash-head"><p class="card-title sub">{{ t('aiPrice') }}</p>{% if can('FN_PRICING') %}<a class="action small" href="{{ url_for('finance.pricing') }}">{{ t('tabPricing') }} &rarr;</a>{% endif %}</div>

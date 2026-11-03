@@ -9,9 +9,7 @@
   <p class="cap-note">{{ t('mkBranchNote') }}</p>
 </div>
 <div class="cp-entries"><a class="card cp-entry" id="cp-entry" href="{{ url_for('finance.campaign', branch=branch) }}">&#127876; <b>{{ t('mkCampaignOpen') }}</b> &rarr;</a>
-<a class="card cp-entry cp-entry-sk" id="cp-entry-songkran" href="{{ url_for('finance.campaign', branch=branch, new=1, theme='songkran') }}">&#128166; <b>{{ t('mkSongkranOpen') }}</b> &rarr;</a>
-<a class="card cp-entry cp-entry-lf" id="lf-entry" href="{{ url_for('finance.leaflet', branch=branch) }}">&#128196; <b>{{ t('mkLeafletOpen') }}</b> &rarr;</a>
-<a class="card cp-entry cp-entry-co" id="co-entry-link" href="{{ url_for('finance.competitor', branch=branch) }}">&#9878; <b>{{ t('mkCompetitorOpen') }}</b> &rarr;</a></div>
+<a class="card cp-entry cp-entry-sk" id="cp-entry-songkran" href="{{ url_for('finance.campaign', branch=branch, new=1, theme='songkran') }}">&#128166; <b>{{ t('mkSongkranOpen') }}</b> &rarr;</a></div>
 <div class="card">
   <div class="card-head">
     <p class="card-title">{{ t('mkMillPromoTitle') }}</p>

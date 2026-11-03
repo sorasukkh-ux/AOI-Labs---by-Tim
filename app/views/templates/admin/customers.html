@@ -3,6 +3,8 @@
 {% block content %}
 <div id="tab-customer">
 {{ page_head(None, next_url or url_for('home.index', g='AD')) }}
+{# update 110 (Tim): the LINE member leaflet is part of Customer Registration #}
+<a class="card cp-entry cp-entry-lf mb14" id="lf-entry" href="{{ url_for('admin_customers.leaflet') }}">&#128196; <b>{{ t('mkLeafletOpen') }}</b> &rarr;</a>
 <div class="card mb14">
   <form method="get" action="{{ url_for('admin_customers.customer_list') }}" id="cust-search-form">
     <div class="row-inline">
