@@ -5128,3 +5128,22 @@ class Update114(Base):
         self.assertEqual(reply["_model"], "gemini-3.6-flash")
         self.assertEqual(sum("gemini-3.8-flash:" in u for u in urls), 3)
         ai_price._GEMINI_LIST.update(at=0, names=[])
+
+
+class Update115(Base):
+    """The AI summary keeps only the answer: no Gemini "thought" parts, no plan before ===ANSWER===, shown as safe HTML."""
+
+    def test_answer_only(self):
+        from app.models import ai_price, competitor as co
+        reply = {"candidates": [{"finishReason": "STOP", "content": {"parts": [
+            {"text": "6. **Refine & Check Rules**: All Thai? Yes.", "thought": True},
+            {"text": "Plan: list gaps\n===ANSWER===\n## 1) จุดที่เสียเปรียบ\n* **ข้าวสาร** แพงกว่า <script>x</script>"}]}}]}
+        text, cut = ai_price.gemini_text(reply)
+        self.assertNotIn("Refine", text)
+        self.assertFalse(cut)
+        answer = co.clean_answer(text)
+        self.assertTrue(answer.startswith("## 1)"))
+        html = str(co.light_md(answer))
+        self.assertIn("<h4>1) จุดที่เสียเปรียบ</h4>", html)
+        self.assertIn("<li><b>ข้าวสาร</b> แพงกว่า &lt;script&gt;", html)
+        self.assertTrue(ai_price.gemini_text({"candidates": [{"finishReason": "MAX_TOKENS", "content": {"parts": [{"text": "a"}]}}]})[1])

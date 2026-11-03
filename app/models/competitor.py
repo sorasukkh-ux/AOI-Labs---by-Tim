@@ -242,8 +242,8 @@ def ai_ready():
     return provider()[0] is not None
 
 
-def _ai_text(prompt, max_tokens=2000):
-    from .ai_price import provider, _post, _gemini_post
+def _ai_text(prompt, max_tokens=8000):
+    from .ai_price import provider, _post, _gemini_post, gemini_text
     name, model = provider()
     if name == "gemini":
         gen = {"temperature": 0.3, "maxOutputTokens": max_tokens}
@@ -251,14 +251,51 @@ def _ai_text(prompt, max_tokens=2000):
             gen["thinkingConfig"] = {"thinkingBudget": 0}
         reply = _gemini_post(model, {"contents": [{"role": "user", "parts": [{"text": prompt}]}], "generationConfig": gen},
                       {"x-goog-api-key": os.environ["AOI_GEMINI_API_KEY"].strip()})
-        cand = (reply.get("candidates") or [{}])[0]
-        return "".join(p.get("text", "") for p in (cand.get("content") or {}).get("parts", [])).strip(), reply.get("_model") or model
+        text, cut = gemini_text(reply)                      # update 115: no working notes, and say when it was cut
+        return clean_answer(text) + ("\n\n(…)" if cut and text else ""), reply.get("_model") or model
     if name == "claude":
         cfg = current_app.config
         reply = _post(cfg["AI_API_URL"], {"model": model, "max_tokens": max_tokens, "messages": [{"role": "user", "content": prompt}]},
                       {"x-api-key": cfg["AI_API_KEY"], "anthropic-version": "2023-06-01"})
-        return "".join(p.get("text", "") for p in reply.get("content", []) if p.get("type") == "text").strip(), model
+        return clean_answer("".join(p.get("text", "") for p in reply.get("content", []) if p.get("type") == "text")), model
     raise ValidationError("coErrAiOff")
+
+
+def clean_answer(text):
+    """Update 115: the model is asked to start its answer with ===ANSWER===; anything before the last marker (a plan or
+    notes some models still write) is dropped."""
+    text = (text or "").strip()
+    marker = text.rfind("===ANSWER===")
+    return text[marker + len("===ANSWER==="):].strip() if marker >= 0 else text
+
+
+def light_md(text):
+    """Update 115: the AI summary as safe HTML - **bold**, lines starting with "* " / "- " as bullets, headings."""
+    import re
+    from markupsafe import Markup, escape
+    out, in_list = [], False
+    for line in (text or "").split("\n"):
+        raw = line.rstrip()
+        bullet = re.match(r"^\s*[*\-•]\s+(.*)$", raw)
+        head = re.match(r"^\s*#{1,4}\s+(.*)$", raw)
+        body = escape((bullet or head).group(1) if (bullet or head) else raw)
+        body = Markup(re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", str(body)))
+        if bullet:
+            if not in_list:
+                out.append("<ul>")
+                in_list = True
+            out.append("<li>%s</li>" % body)
+            continue
+        if in_list:
+            out.append("</ul>")
+            in_list = False
+        if head:
+            out.append("<h4>%s</h4>" % body)
+        elif raw.strip():
+            out.append("<p>%s</p>" % body)
+    if in_list:
+        out.append("</ul>")
+    return Markup("".join(out))
 
 
 def ai_input(branch_id):
@@ -296,7 +333,8 @@ def ai_summary(branch_id, user_id, lang):
               "Sections: 1) Where we are behind (biggest gaps first, name the competitor), 2) Where we are ahead, "
               "3) Trends, 4) 3-5 suggested actions (price, promotion, service) with expected effect, 5) Data gaps to fill "
               "(items or competitors without recent prices). Say that prices come from staff reports and may be incomplete. "
-              "Never invent numbers.\n\nData (JSON):\n%s" % ("Thai" if lang == "th" else "English", json.dumps(data, ensure_ascii=False, default=str)))
+              "Never invent numbers. Write only the final answer for the staff: no plan, draft, checklist or notes about these rules. "
+              "Start the answer with the line ===ANSWER===.\n\nData (JSON):\n%s" % ("Thai" if lang == "th" else "English", json.dumps(data, ensure_ascii=False, default=str)))
     text, model = _ai_text(prompt)
     if not text:
         raise ValidationError("coErrAiService")

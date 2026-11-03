@@ -340,6 +340,10 @@ are kept in `AOITS_SYSLOG` (14 days), the checks in `AOITS_HEALTH` (7 days).
 customer's LINE when "Also send to the customer's LINE" is ticked (shown for customers linked to LINE); "Send to LINE
 only" sends without printing. The same public https address is needed as for the queue QR (update 47).
 
+## AI summary shows only the answer (update 115)
+
+Gemini 3 models send their working notes ("Refine & Check Rules ...") as separate "thought" parts; these are now dropped, the model is asked to start the answer with ===ANSWER=== (anything before it is cut), the answer may use up to 8,000 tokens (a cut answer ends with "(…)"), and the summary is shown formatted (headings, bold, bullets). No DB change.
+
 ## AI busy: automatic fallback model (update 114)
 
 When the main Gemini model stays busy (503 "high demand") and `AOI_GEMINI_FALLBACK_MODEL` is not set, the system reads the key's own model list from Google (kept 6 hours) and tries up to two other Flash models (newest full Flash first, then Flash-Lite, previews last). The AI summary shows which model answered. No DB change.

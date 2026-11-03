@@ -1731,3 +1731,7 @@ body.leaflet-page { background: #e5e7eb; font-family: "Prompt", "IBM Plex Sans T
 /* update 110: competitor card on the AI screen */
 .co-stats-mini { margin-top: 8px; } .co-stats-mini .co-stat { background: var(--surface-2, #f8fafc); border-radius: 10px; padding: 10px 12px; } .co-stats-mini .co-stat b { font-size: 20px; }
 .co-risk-list { margin: 10px 0 0; padding-left: 18px; line-height: 1.7; }
+
+/* update 115: AI summary as formatted text */
+.co-ai-text { white-space: normal; } .co-ai-text p { margin: 0 0 8px; } .co-ai-text h4 { margin: 12px 0 6px; font-size: 15px; }
+.co-ai-text ul { margin: 0 0 8px; padding-left: 20px; } .co-ai-text li { margin-bottom: 4px; }

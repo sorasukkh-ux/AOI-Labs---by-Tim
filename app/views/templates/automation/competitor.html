@@ -84,7 +84,7 @@
       <button class="action small primary" type="submit" name="action" value="ai" id="co-ai-btn">&#10024; {{ t('coAiRun') }}</button></form>{% endif %}</div>
   {% if not ai_ready %}<p class="hint">{{ t('coAiOff') }}</p>{% endif %}
   {% if ai %}<p class="cap-note tight">{{ to_local(ai.REGIST_DATE).strftime('%d/%m/%Y %H:%M') }} &middot; {{ ai.REGIST_USER }} &middot; {{ ai.MODEL }}</p>
-  <div class="co-ai-text" id="co-ai-text">{{ ai.SUMMARY }}</div>
+  <div class="co-ai-text" id="co-ai-text">{{ ai_md(ai.SUMMARY) }}</div>
   <p class="cap-note">{{ t('coAiNote') }}</p>
   {% elif ai_ready %}<p class="hint">{{ t('coAiNone') }}</p>{% endif %}
 </div>

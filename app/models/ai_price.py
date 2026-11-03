@@ -167,6 +167,15 @@ def _gemini_post(model, body, headers):
     raise last
 
 
+def gemini_text(reply):
+    """Update 115: the answer text of a Gemini reply without its "thought" parts (Gemini 3 models send their working
+    notes as parts marked thought=true). (text, cut) - cut is True when the answer hit the token limit."""
+    cand = (reply.get("candidates") or [{}])[0]
+    parts = (cand.get("content") or {}).get("parts", [])
+    text = "".join(p.get("text", "") for p in parts if not p.get("thought"))
+    return text.strip(), cand.get("finishReason") == "MAX_TOKENS"
+
+
 def _ask(prompt, max_tokens):
     """(text of the answer, [source links found by the search])."""
     name, model = provider()
@@ -176,7 +185,7 @@ def _ask(prompt, max_tokens):
                                            "generationConfig": {"temperature": 0.1, "maxOutputTokens": max_tokens}},
                       {"x-goog-api-key": os.environ["AOI_GEMINI_API_KEY"].strip()})
         cand = (reply.get("candidates") or [{}])[0]
-        text = "".join(p.get("text", "") for p in (cand.get("content") or {}).get("parts", []))
+        text = gemini_text(reply)[0]
         links = [c.get("web", {}).get("uri") for c in (cand.get("groundingMetadata") or {}).get("groundingChunks", []) if c.get("web")]
         return text, [u for u in links if u]
     if name == "claude":

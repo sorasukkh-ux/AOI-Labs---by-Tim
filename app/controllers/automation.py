@@ -508,6 +508,6 @@ def ai_competitor():
     return render_template("automation/competitor.html", branch=branch, branches=maintainable_branches(), comps=comps, rows=rows,
                            stats=co.summary(rows), all_comps=co.competitors(branch), items=co.items(), item_name=co.item_name,
                            sources=co.SOURCES, recent=co.recent(branch), chart=co.series(branch, key, days), item=key, days=days,
-                           periods=co.PERIODS, ai=co.last_ai(branch), ai_ready=co.ai_ready(), fresh=co.FRESH_DAYS,
+                           periods=co.PERIODS, ai=co.last_ai(branch), ai_md=co.light_md, ai_ready=co.ai_ready(), fresh=co.FRESH_DAYS,
                            today=now_local().date().isoformat(), can_edit=can(AI_MENU, "edit"), to_local=to_local,
                            edit=co.get(request.args.get("edit")))
