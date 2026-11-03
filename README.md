@@ -340,6 +340,10 @@ are kept in `AOITS_SYSLOG` (14 days), the checks in `AOITS_HEALTH` (7 days).
 customer's LINE when "Also send to the customer's LINE" is ticked (shown for customers linked to LINE); "Send to LINE
 only" sends without printing. The same public https address is needed as for the queue QR (update 47).
 
+## AI busy: automatic fallback model (update 114)
+
+When the main Gemini model stays busy (503 "high demand") and `AOI_GEMINI_FALLBACK_MODEL` is not set, the system reads the key's own model list from Google (kept 6 hours) and tries up to two other Flash models (newest full Flash first, then Flash-Lite, previews last). The AI summary shows which model answered. No DB change.
+
 ## AI busy: try again + fallback model (update 113)
 
 HTTP 503 ("the model is overloaded") is Google's / Anthropic's server being busy, not a setting problem. The system now tries again by itself twice (after 2 and 6 seconds). With `AOI_GEMINI_FALLBACK_MODEL=<another model>` in `.env`, Gemini calls switch to that model when the main one stays busy. No DB change.

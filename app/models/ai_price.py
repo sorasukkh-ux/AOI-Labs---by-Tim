@@ -105,16 +105,66 @@ def _post_once(url, body, headers, timeout=90):
         raise ValidationError("apErrNetwork", detail=str(getattr(error, "reason", error))[:120])
 
 
-def _gemini_post(model, body, headers):
-    """Gemini call with the fallback model when the main model stays busy (update 113)."""
-    models = gemini_models(model)
-    for i, m in enumerate(models):
+GEMINI_LIST_URL = "https://generativelanguage.googleapis.com/v1beta/models?pageSize=200"
+_GEMINI_LIST = {"at": 0, "names": []}
+SKIP_WORDS = ("image", "tts", "audio", "live", "embedding", "vision", "robotics", "computer-use", "thinking", "exp", "aqa", "gemma")
+
+
+def _version(name):
+    nums = re.findall(r"\d+(?:\.\d+)?", name)
+    return float(nums[0]) if nums else 0.0
+
+
+def gemini_auto_fallbacks(model, headers, limit=2):
+    """Update 114: other Flash models this key can use (Google's model list, kept 6 hours), newest first, the full
+    Flash before Flash-Lite, previews last. Used when the main model stays busy and AOI_GEMINI_FALLBACK_MODEL is not set."""
+    import time
+    if time.time() - _GEMINI_LIST["at"] > 6 * 3600:
+        names = []
         try:
-            return _post(GEMINI_URL % m, body, headers)
+            req = urllib.request.Request(GEMINI_LIST_URL, headers=dict(headers), method="GET")
+            with urllib.request.urlopen(req, timeout=20) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+            for m in data.get("models") or []:
+                if "generateContent" in (m.get("supportedGenerationMethods") or []):
+                    names.append(str(m.get("name", "")).replace("models/", ""))
+        except (urllib.error.URLError, TimeoutError, ValueError) as error:
+            current_app.logger.warning("AI: Gemini model list failed: %s", error)
+        _GEMINI_LIST.update(at=time.time() if names else 0, names=names)
+    picks = [n for n in _GEMINI_LIST["names"] if "flash" in n and n != model and not any(w in n for w in SKIP_WORDS)]
+    picks.sort(key=lambda n: ("preview" in n, "lite" in n, -_version(n), "latest" in n, n))
+    return picks[:limit]
+
+
+def _gemini_post(model, body, headers):
+    """Gemini call: the main model (tried 3 times when busy), then AOI_GEMINI_FALLBACK_MODEL, else (update 114) up to two
+    other Flash models found in the key's model list. Returns the reply; the model that answered is in reply['_model']."""
+    tried = []
+    for m in gemini_models(model):
+        tried.append(m)
+        try:
+            reply = _post(GEMINI_URL % m, body, headers) if len(tried) == 1 else _post_once(GEMINI_URL % m, body, headers)
+            reply["_model"] = m
+            return reply
         except ValidationError as error:
-            if error.key != "apErrBusy" or i == len(models) - 1:
+            if error.key not in ("apErrBusy", "apErrQuota"):
                 raise
-            current_app.logger.warning("AI: %s busy, using the fallback model %s", m, models[i + 1])
+            last = error
+            current_app.logger.warning("AI: %s busy (%s)", m, error.params.get("code"))
+    for m in gemini_auto_fallbacks(model, headers):
+        if m in tried:
+            continue
+        tried.append(m)
+        try:
+            reply = _post_once(GEMINI_URL % m, body, headers)
+            current_app.logger.warning("AI: answered by the fallback model %s", m)
+            reply["_model"] = m
+            return reply
+        except ValidationError as error:
+            if error.key not in ("apErrBusy", "apErrQuota", "apErrModel"):
+                raise
+            current_app.logger.warning("AI: fallback %s failed (%s)", m, error.params.get("code"))
+    raise last
 
 
 def _ask(prompt, max_tokens):

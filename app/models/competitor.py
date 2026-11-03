@@ -252,7 +252,7 @@ def _ai_text(prompt, max_tokens=2000):
         reply = _gemini_post(model, {"contents": [{"role": "user", "parts": [{"text": prompt}]}], "generationConfig": gen},
                       {"x-goog-api-key": os.environ["AOI_GEMINI_API_KEY"].strip()})
         cand = (reply.get("candidates") or [{}])[0]
-        return "".join(p.get("text", "") for p in (cand.get("content") or {}).get("parts", [])).strip(), model
+        return "".join(p.get("text", "") for p in (cand.get("content") or {}).get("parts", [])).strip(), reply.get("_model") or model
     if name == "claude":
         cfg = current_app.config
         reply = _post(cfg["AI_API_URL"], {"model": model, "max_tokens": max_tokens, "messages": [{"role": "user", "content": prompt}]},

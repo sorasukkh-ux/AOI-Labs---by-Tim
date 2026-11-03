@@ -5086,8 +5086,45 @@ class Update113(Base):
                     raise busy()
                 return Resp(_json.dumps({"ok": 2}).encode())
             with self.app.app_context(), mock.patch("time.sleep"), mock.patch("urllib.request.urlopen", side_effect=fake):
-                self.assertEqual(ai_price._gemini_post("gemini-main", {}, {}), {"ok": 2})
+                self.assertEqual(ai_price._gemini_post("gemini-main", {}, {}), {"ok": 2, "_model": "gemini-backup"})
             self.assertEqual(sum("gemini-main" in u for u in urls), 3)
             self.assertIn("gemini-backup", urls[-1])
         finally:
             os.environ.pop("AOI_GEMINI_FALLBACK_MODEL", None)
+
+
+class Update114(Base):
+    """Without AOI_GEMINI_FALLBACK_MODEL, a busy Gemini model falls back to another Flash model from the key's model list."""
+
+    def test_auto_fallback(self):
+        import io, json as _json, urllib.error
+        from unittest import mock
+        from app.models import ai_price
+
+        class Resp(io.BytesIO):
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+        listing = {"models": [{"name": "models/gemini-3.8-flash", "supportedGenerationMethods": ["generateContent"]},
+                              {"name": "models/gemini-3.8-flash-lite", "supportedGenerationMethods": ["generateContent"]},
+                              {"name": "models/gemini-3.6-flash", "supportedGenerationMethods": ["generateContent"]},
+                              {"name": "models/gemini-3.8-flash-image", "supportedGenerationMethods": ["generateContent"]},
+                              {"name": "models/text-embedding-9", "supportedGenerationMethods": ["embedContent"]}]}
+        urls = []
+
+        def fake(req, timeout=None):
+            urls.append(req.full_url)
+            if "?pageSize" in req.full_url:
+                return Resp(_json.dumps(listing).encode())
+            if "gemini-3.8-flash:" in req.full_url:
+                raise urllib.error.HTTPError(req.full_url, 503, "busy", {}, io.BytesIO(b'{"error": {"message": "high demand"}}'))
+            return Resp(_json.dumps({"candidates": [{"content": {"parts": [{"text": "hello"}]}}]}).encode())
+        ai_price._GEMINI_LIST.update(at=0, names=[])
+        with self.app.app_context(), mock.patch("time.sleep"), mock.patch("urllib.request.urlopen", side_effect=fake):
+            self.assertEqual(ai_price.gemini_auto_fallbacks("gemini-3.8-flash", {}), ["gemini-3.6-flash", "gemini-3.8-flash-lite"])
+            reply = ai_price._gemini_post("gemini-3.8-flash", {}, {})
+        self.assertEqual(reply["_model"], "gemini-3.6-flash")
+        self.assertEqual(sum("gemini-3.8-flash:" in u for u in urls), 3)
+        ai_price._GEMINI_LIST.update(at=0, names=[])
