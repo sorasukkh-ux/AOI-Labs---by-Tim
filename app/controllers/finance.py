@@ -471,3 +471,73 @@ def campaign_draw(camp_id, kind):
                            can_edit=can(MARKETING, "edit"), to_local=to_local,
                            back=url_for("finance.campaign", branch=camp["BRANCH_ID"], id=camp_id, kind=kind),
                            js_text=texts("cpSpin", "cpSpinning", "cpWinner", "cpReplay", "errServer", "cpTickets", "cpRound"))
+
+
+# ---------- update 108: LINE member leaflet (paper, A5) ----------
+@bp.route("/leaflet", methods=["GET", "POST"])
+@require(MARKETING)
+def leaflet():
+    from ..models import member_reg, line_link, notify
+    branch = _branch_or_403()
+    if request.method == "POST":
+        if not can(MARKETING, "edit"):
+            abort(403)
+        action = request.form.get("action")
+        if action in ("off", "on"):
+            return _run(lambda: member_reg.set_status(request.form.get("id"), branch, action == "on", _user_id()),
+                        "lfMsgStatus", "finance.leaflet", branch=branch)
+        return _run(lambda: member_reg.create(branch, request.form, _user_id()), "lfMsgCreated", "finance.leaflet", branch=branch)
+    return render_template("finance/leaflet.html", branch=branch, branches=maintainable_branches(), rows=member_reg.batches(branch),
+                           members=member_reg.recent([branch]), oa=line_link.oa_id(), has_public=bool(notify.public_base(None)),
+                           origin=request.host_url.rstrip("/"), can_edit=can(MARKETING, "edit"), fmt_date=fmt_date, to_local=to_local)
+
+
+@bp.route("/leaflet/print")
+@require(MARKETING)
+def leaflet_print():
+    from ..models import member_reg, line_link
+    branch = _branch_or_403()
+    leaf = member_reg.get(request.args.get("id"))
+    if request.args.get("id") and (not leaf or leaf["BRANCH_ID"] != branch):
+        abort(404)
+    return render_template("finance/leaflet_print.html", leaf=leaf, qr=member_reg.qr_url(leaf["LEAF_ID"] if leaf else None),
+                           oa=line_link.oa_id(), copies=2)
+
+
+# ---------- update 109: competitor analysis (Marketing) ----------
+@bp.route("/competitor", methods=["GET", "POST"])
+@require(MARKETING)
+def competitor():
+    from ..models import competitor as co
+    from ..i18n import get_lang
+    branch = _branch_or_403()
+    if request.method == "POST":
+        if not can(MARKETING, "edit"):
+            abort(403)
+        action = request.form.get("action")
+        if action == "comp":
+            return _run(lambda: co.save_competitor(branch, request.form, _user_id()), "coMsgComp", "finance.competitor", branch=branch, _anchor="co-comps")
+        if action == "del":
+            return _run(lambda: co.delete_price(branch, request.form.get("id")), "coMsgDeleted", "finance.competitor", branch=branch, _anchor="co-recent")
+        if action == "ai":
+            return _run(lambda: co.ai_summary(branch, _user_id(), get_lang()), "coMsgAi", "finance.competitor", branch=branch, _anchor="co-ai")
+        try:
+            n = co.save_prices(branch, request.form, _user_id())
+        except ValidationError as error:
+            flash_error(error)
+        else:
+            flash_ok("coMsgPrices", n=n)
+        return redirect(url_for("finance.competitor", branch=branch, _anchor="co-compare"))
+    comps, rows = co.compare(branch)
+    key = request.args.get("item") if request.args.get("item") in co.ITEM_KEYS else co.ITEM_KEYS[0]
+    try:
+        days = int(request.args.get("days") or 90)
+    except ValueError:
+        days = 90
+    days = days if days in co.PERIODS else 90
+    return render_template("finance/competitor.html", branch=branch, branches=maintainable_branches(), comps=comps, rows=rows,
+                           stats=co.summary(rows), all_comps=co.competitors(branch), items=co.items(), item_name=co.item_name,
+                           sources=co.SOURCES, recent=co.recent(branch), chart=co.series(branch, key, days), item=key, days=days,
+                           periods=co.PERIODS, ai=co.last_ai(branch), ai_ready=co.ai_ready(), fresh=co.FRESH_DAYS,
+                           today=today_local().isoformat(), can_edit=can(MARKETING, "edit"), to_local=to_local,
+                           edit=co.get(request.args.get("edit")))

@@ -31,11 +31,14 @@ MESSAGES = (
     ("LN_PHONE_TAKEN", "lmName_LN_PHONE_TAKEN", "lnrPhoneTaken", ()),
     ("LN_HELP", "lmName_LN_HELP", "lnrHelp", ()),
     ("LN_HELP_LINKED", "lmName_LN_HELP_LINKED", "lnrHelpLinked", ("name",)),
+    ("LN_REG_INVITE", "lmName_LN_REG_INVITE", "lnrRegInvite", ("url",)),         # update 108: member form link
+    ("LN_REG_COUNTER", "lmName_LN_REG_COUNTER", "lnrRegCounter", ()),
+    ("LN_REG_DONE", "lmName_LN_REG_DONE", "lnrRegDone", ("name", "code")),
 )
 INFO = {m[0]: m for m in MESSAGES}
 SAMPLE = {"no": "0031", "name": "สมชาย ก.", "day": "พรุ่งนี้", "time": "14:30", "date": "13/10/2026", "rice_kg": "51.52", "pay": "120.00",
           "branch": "โรงงาน 2", "address": "45 หมู่ 2 ต.บ้านเป็ด อ.เมือง จ.ขอนแก่น", "n": "1", "code": "C261001001",
-          "type": "ลูกค้าขาย", "total": "1,250.00"}
+          "type": "ลูกค้าขาย", "total": "1,250.00", "url": "https://aoi.example/line/register/..."}
 
 
 # update 54: the defaults before {day}; a saved text still equal to one of them is moved to the new default (seed)

@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="th"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex">
+<title>AOI leaflet {{ leaf.LEAF_ID if leaf else '' }}</title><link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}"></head>
+{# update 108 (Tim): A5 member leaflet (landscape), two on one A4 sheet with a cut line. Original design. #}
+<body class="line-poster leaflet-page">
+<div class="lf-bar"><button class="action primary lp-print" type="button" data-print>&#128424; พิมพ์ / Print (A4 · 2 ใบ)</button>
+  <span>{{ leaf.LEAF_ID ~ ' · ' ~ leaf.LEAF_NAME if leaf else 'ใบปลิวทั่วไป (ไม่ระบุแหล่ง)' }}</span></div>
+<div class="lf-a4">
+{% for n in range(copies) %}
+<section class="lf-a5">
+  <div class="lf-left">
+    <div class="lf-brand"><img src="{{ url_for('static', filename='img/logo.png') }}" alt="AOI"><span>โรงสี AOI</span></div>
+    <h1>สมัครสมาชิก<br><em>ฟรี!</em> ผ่าน <b class="lf-line">LINE</b></h1>
+    <p class="lf-lead">สแกนครั้งเดียว ได้บัตรสมาชิกในมือถือ</p>
+    <ul class="lf-benefits">
+      <li><i>&#128276;</i>แจ้งเตือนเมื่อข้าวสีเสร็จ ไม่ต้องรอที่โรงสี</li>
+      <li><i>&#128200;</i>ราคาข้าวเปลือก ข้าวสาร รำ ปลายข้าว วันนี้</li>
+      <li><i>&#127873;</i>สะสมแต้ม ลุ้นของขวัญ รับคูปองส่วนลด</li>
+      <li><i>&#129534;</i>ใบเสร็จและบัตรสมาชิกส่งเข้า LINE</li>
+    </ul>
+    <ol class="lf-steps"><li>สแกน QR</li><li>กด <b>ส่ง</b> ข้อความใน LINE</li><li>กดลิงก์ กรอกชื่อ เบอร์ ที่อยู่</li></ol>
+  </div>
+  <div class="lf-right">
+    {% if qr %}<div class="od-qr lf-qr" data-qr="{{ qr }}"></div>{% else %}<div class="lf-qr lf-noqr">ตั้งค่า AOI_LINE_OA_ID ก่อน</div>{% endif %}
+    <p class="lf-scan">สแกนเลย &#128073; เพิ่มเพื่อน</p>
+    {% if oa %}<p class="lf-oa">LINE ID: <b>{{ oa }}</b></p>{% endif %}
+    <p class="lf-type">หรือพิมพ์ <b>สมัครสมาชิก</b> ในแชท</p>
+    {% if leaf %}<p class="lf-src">{{ leaf.LEAF_ID }}</p>{% endif %}
+  </div>
+  <div class="lf-grains" aria-hidden="true"></div>
+</section>
+{% if not loop.last %}<div class="lf-cut">&#9986; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -</div>{% endif %}
+{% endfor %}
+</div>
+<script src="{{ url_for('static', filename='js/qr.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/label.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/poster.js') }}" defer></script>
+</body></html>

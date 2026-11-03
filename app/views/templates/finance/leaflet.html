@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% from "_macros.html" import page_head, branch_picker %}
+{% block content %}
+{# update 108 (Tim): paper leaflet (A5) for new members through LINE; each batch has its own QR to count members by place #}
+<div id="tab-leaflet">
+{{ page_head(t('lfTitle'), url_for('finance.marketing', branch=branch)) }}
+<div class="card gap"><p class="desc-text">{{ t('lfDesc') }}</p>
+  <ol class="lf-how"><li>{{ t('lfHow1') }}</li><li>{{ t('lfHow2') }}</li><li>{{ t('lfHow3') }}</li></ol></div>
+{% if not oa %}<div class="card alert-warn" id="lf-no-oa">&#9888; {{ t('lfNoOa') }}</div>{% endif %}
+{% if not has_public %}<div class="card alert-warn" id="lf-no-public">&#9888; {{ t('lfNoPublic', origin=origin) }}</div>{% endif %}
+<div class="card branch-pick-card">{{ branch_picker('finance.leaflet', branch, branches, 'lf-branch-select') }}</div>
+
+<div class="card">
+  <div class="card-head"><p class="card-title">&#128196; {{ t('lfBatches') }}</p>
+    <a class="action small" href="{{ url_for('finance.leaflet_print', branch=branch) }}" target="_blank" rel="noopener" id="lf-print-general">{{ t('lfPrintGeneral') }}</a></div>
+  {% if can_edit %}
+  <form method="post" class="lf-new" id="lf-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="branch" value="{{ branch }}">
+    <div><label class="field-label" for="lf-name">{{ t('lfName') }}</label><input id="lf-name" name="LEAF_NAME" maxlength="60" required placeholder="{{ t('lfNamePh') }}"></div>
+    <div><label class="field-label" for="lf-note">{{ t('lfNote') }}</label><input id="lf-note" name="NOTE" maxlength="120"></div>
+    <div><button class="action primary" type="submit" id="lf-create">+ {{ t('lfCreate') }}</button></div>
+  </form>
+  {% endif %}
+  <div class="inv-table-wrap"><table class="tv-table lf-table">
+    <thead><tr><th>{{ t('lfCode') }}</th><th>{{ t('lfName') }}</th><th>{{ t('lfMade') }}</th><th class="num">{{ t('lfMembers') }}</th><th>{{ t('cpnStatus') }}</th><th></th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+    <tr class="{% if r.STATUS != 'A' %}lf-off{% endif %}">
+      <td><b>{{ r.LEAF_ID }}</b></td>
+      <td>{{ r.LEAF_NAME }}{% if r.NOTE %}<br><small class="cp-code">{{ r.NOTE }}</small>{% endif %}</td>
+      <td>{{ fmt_date(r.REGIST_DATE) }}</td>
+      <td class="num"><b>{{ r.members }}</b></td>
+      <td>{% if r.STATUS == 'A' %}<span class="badge approved">{{ t('lfOn') }}</span>{% else %}<span class="badge manual">{{ t('lfOff') }}</span>{% endif %}</td>
+      <td class="cpn-acts">
+        <a class="action small primary" href="{{ url_for('finance.leaflet_print', branch=branch, id=r.LEAF_ID) }}" target="_blank" rel="noopener">&#128424; {{ t('lfPrint') }}</a>
+        {% if can_edit %}<form method="post" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="branch" value="{{ branch }}">
+          <input type="hidden" name="id" value="{{ r.LEAF_ID }}">
+          <button class="action small" type="submit" name="action" value="{{ 'off' if r.STATUS == 'A' else 'on' }}">{{ t('lfTurnOff') if r.STATUS == 'A' else t('lfTurnOn') }}</button></form>{% endif %}
+      </td>
+    </tr>
+    {% else %}<tr><td colspan="6" class="hint center">{{ t('lfNone') }}</td></tr>{% endfor %}
+    </tbody>
+  </table></div>
+</div>
+
+<div class="card mt14" id="lf-members">
+  <div class="card-head"><p class="card-title">&#128101; {{ t('lfNewMembers') }}</p></div>
+  <div class="inv-table-wrap"><table class="tv-table">
+    <thead><tr><th>{{ t('lfWhen') }}</th><th>{{ t('colCustomer') }}</th><th>{{ t('lfInterest') }}</th><th>{{ t('lfFrom') }}</th></tr></thead>
+    <tbody>
+    {% for m in members %}
+    <tr><td>{{ to_local(m.CONSENT_DATE or m.REGIST_DATE).strftime('%d/%m/%Y %H:%M') }}</td>
+      <td><b>{{ m.CUST_NAME }}</b><br><small class="cp-code">{{ m.CUST_CODE }} &middot; {{ m.mobile }}</small></td>
+      <td>{% for i in m.INTERESTS or [] %}<span class="chip small">{{ t('lfInt_' ~ i) }}</span> {% endfor %}</td>
+      <td>{% if m.leaf %}{{ m.leaf.LEAF_ID }} &middot; {{ m.leaf.LEAF_NAME }}{% else %}<span class="hint">{{ t('lfFromLine') }}</span>{% endif %}</td></tr>
+    {% else %}<tr><td colspan="4" class="hint center">{{ t('lfNoMembers') }}</td></tr>{% endfor %}
+    </tbody>
+  </table></div>
+</div>
+</div>
+{% endblock %}

@@ -72,3 +72,38 @@ def coupon_qr(coupon_id):
     resp = Response(qr_png.png(coupon.qr_text(c), scale=14), mimetype="image/png")
     resp.headers["Cache-Control"] = "public, max-age=86400"
     return resp
+
+
+# ---------- update 108: member registration from the leaflet (the link comes in the LINE reply) ----------
+@bp.route("/register/<tk>", methods=["GET", "POST"])
+def register(tk):
+    from flask import render_template
+    from ..models import member_reg, notify, line_msg
+    from ..models.base import ValidationError
+    from ..models.tv import short_name
+    from ..security import check_csrf
+    from ..i18n import t_in
+    try:
+        user_id, leaf_id = member_reg.read_token(tk)
+    except ValidationError as error:
+        return render_template("line/register.html", error=t_in("th", error.key), done=None, form={}), 400
+    already = member_reg.linked_customer(user_id)
+    if already:
+        return render_template("line/register.html", error=None, done={"name": short_name(already.get("CUST_NAME", "")),
+                               "code": already["CUST_CODE"], "kind": "already"}, form={})
+    form, error = {}, None
+    if request.method == "POST":
+        check_csrf()
+        form = request.form
+        try:
+            customer, kind = member_reg.register(user_id, leaf_id, request.form)
+        except ValidationError as err:
+            error = t_in("th", err.key, **err.params)
+        else:
+            name = short_name(customer.get("CUST_NAME", "")) or customer["CUST_CODE"]
+            if notify.configured():
+                notify._push(user_id, line_msg.text("LN_REG_DONE", name=name, code=customer["CUST_CODE"]))
+                notify.send_card(customer, line_link.request_base())
+            return render_template("line/register.html", error=None, done={"name": name, "code": customer["CUST_CODE"], "kind": kind}, form={})
+    leaf = member_reg.get(leaf_id) if leaf_id else None
+    return render_template("line/register.html", error=error, done=None, form=form, leaf=leaf)

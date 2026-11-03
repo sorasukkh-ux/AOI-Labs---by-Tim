@@ -124,9 +124,41 @@ def _by_phone(digits):
     return found
 
 
+def request_base():
+    """Update 108: the public https address for links in replies (AOI_PUBLIC_URL, else the forwarded host of the webhook)."""
+    try:
+        from flask import request
+        host = request.headers.get("X-Forwarded-Host") or request.host
+        proto = request.headers.get("X-Forwarded-Proto") or request.scheme
+        origin = "%s://%s" % (proto.split(",")[0].strip(), host.split(",")[0].strip())
+    except RuntimeError:                                       # no request (tests, scripts)
+        origin = None
+    return notify.public_base(origin)
+
+
+def register_url(user_id, leaf_id=None):
+    """Update 108: the signed link to the member form for this LINE user; None without a public https address."""
+    from flask import url_for
+    from . import member_reg
+    base = request_base()
+    return base + url_for("line_api.register", tk=member_reg.token(user_id, leaf_id)) if base else None
+
+
+def _invite(user_id, leaf_id=None):
+    url = register_url(user_id, leaf_id)
+    return _m("LN_REG_INVITE", url=url) if url else _m("LN_REG_COUNTER")
+
+
 def answer_text(user_id, text):
     """(reply text, result code, customer code) for one text message."""
     from .milling_order import MillingOrder
+    from . import member_reg
+    wants, leaf_id = member_reg.wants_register(text)                 # update 108: leaflet / "สมัครสมาชิก"
+    if wants:
+        linked = col(Customer.COL).find_one({"LINE_USER_ID": user_id}, NO_ID)
+        if linked:
+            return _m("LN_HELP_LINKED", name=_short(linked.get("CUST_NAME", ""))), "reg_already", linked["CUST_CODE"]
+        return _invite(user_id, leaf_id), "reg_invite", None
     match = LINK_RE.search(text or "")
     if match:
         ord_id, code = match.group(1).upper(), match.group(2).lower()
@@ -150,7 +182,7 @@ def answer_text(user_id, text):
     if 9 <= len(digits) <= 15 and not re.search(r"[A-Za-z฀-๿]", text or ""):
         found = _by_phone(digits)
         if not found:
-            return _m("LN_PHONE_NOT_FOUND"), "phone_not_found", None
+            return _m("LN_PHONE_NOT_FOUND") + "\n\n" + _invite(user_id), "phone_not_found", None
         if len(found) > 1:
             return _m("LN_PHONE_MANY"), "phone_many", None
         customer = found[0]
@@ -176,7 +208,7 @@ def handle(events):
             continue                                         # groups and rooms are not used
         if kind == "follow":
             linked = col(Customer.COL).find_one({"LINE_USER_ID": user_id}, NO_ID)
-            reply = _m("LN_WELCOME_BACK", name=_short(linked.get("CUST_NAME", ""))) if linked else _m("LN_WELCOME")
+            reply = _m("LN_WELCOME_BACK", name=_short(linked.get("CUST_NAME", ""))) if linked else _m("LN_WELCOME") + "\n\n" + _invite(user_id)
             notify.reply(token, reply)
             _log(kind, user_id, "", "welcome", linked["CUST_CODE"] if linked else None)
         elif kind == "unfollow":

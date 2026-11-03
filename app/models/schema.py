@@ -61,6 +61,10 @@ COLLECTIONS = {
     "AOITS_MILL_TEST": [(["TEST_ID"], True), (["BRANCH_ID", "TEST_DATE"], False)],
     "AOILOG_AI_ASK": [(["BRANCH_ID", "LOG_DATE"], False), (["USER_ID", "LOG_DATE"], False)],
     "AOITS_BB_MUSIC": [(["BRANCH_ID", "THEME"], True)],                # update 106
+    "AOIMS_LEAFLET": [(["LEAF_ID"], True), (["BRANCH_ID"], False)],    # update 108
+    "AOIMS_COMPETITOR": [(["COMP_ID"], True), (["BRANCH_ID", "COMP_NAME"], False)],   # update 109
+    "AOITS_COMPPRICE": [(["PRICE_ID"], True), (["BRANCH_ID", "MAT_CODE", "SIDE", "PRICE_DATE"], False), (["COMP_ID", "PRICE_DATE"], False)],
+    "AOITS_COMPAI": [(["AI_ID"], True), (["BRANCH_ID", "REGIST_DATE"], False)],
     # ---- technical (not in the DB structure workbook): running numbers for order and customer codes ----
     "AOISYS_COUNTER": [(["COUNTER_KEY"], True)],
 }

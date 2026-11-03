@@ -4897,3 +4897,120 @@ class Update107(Base):
         self.assertEqual(self.client.get(urls["ranking"]).status_code, 200)
         css = self.text("/static/css/tv.css")
         self.assertNotIn(".theme-cards .xm-music, .theme-cards .bb-main { display: none", css)
+
+
+class Update108(Base):
+    """LINE member leaflet: batch + print, the registration reply link, the public form, counts by batch."""
+
+    def test_leaflet_register(self):
+        import os, re as _re
+        os.environ["AOI_LINE_OA_ID"] = "@aoitest"
+        os.environ["AOI_PUBLIC_URL"] = "https://aoi.example"
+        try:
+            self.login("admin")
+            self.client.get("/lang/en")
+            self.assertIn("lf-entry", self.text("/finance/marketing?branch=factory2"))
+            self.post("/finance/leaflet?branch=factory2", {"branch": "factory2", "LEAF_NAME": "Market day"}, "/finance/leaflet?branch=factory2")
+            leaf = self.db("AOIMS_LEAFLET")[0]
+            self.assertEqual((leaf["LEAF_ID"], leaf["BRANCH_ID"]), ("L0001", "factory2"))
+            page = self.text("/finance/leaflet/print?branch=factory2&id=L0001")
+            self.assertIn("REG-L0001", page)
+            self.assertLessEqual(len(__import__("html").unescape(_re.search(r'data-qr="([^"]+)"', page).group(1))), 106)
+            self.assertIn("oaMessage/%40aoitest", page)
+            self.logout()
+            user = "U" + "a" * 32
+            with self.app.test_request_context():
+                from app.models import line_link
+                reply, result, _c = line_link.answer_text(user, "สมัครสมาชิก AOI REG-L0001")
+            self.assertEqual(result, "reg_invite")
+            url = _re.search(r"https://aoi\.example(\S+)", reply).group(1)
+            self.assertEqual(self.client.get(url[:-3] + "xyz").status_code, 400)          # tampered link
+            form_page = self.text(url)
+            self.assertIn("reg-form", form_page)
+            token = _re.search(r'name="csrf_token" value="([^"]+)"', form_page).group(1)
+            data = {"csrf_token": token, "CUST_NAME": "Somsak Newmember", "MOBILE_NO": "0899998877", "ADDRESS": "1 Moo 2 Khon Kaen",
+                    "INT_ML": "1", "INT_BUY": "1"}
+            self.assertIn("reg-error", self.client.post(url, data=data).get_data(as_text=True))   # no consent
+            page = self.client.post(url, data=dict(data, CONSENT="1")).get_data(as_text=True)
+            self.assertIn("reg-done", page)
+            cust = next(c for c in self.db("AOIMS_CUSTOMER") if c.get("LINE_USER_ID") == user)
+            self.assertEqual((cust["REG_SOURCE"], cust["REG_CHANNEL"], cust["INTERESTS"], cust["LINE_LINK_VIA"]),
+                             ("L0001", "LINE", ["ML", "BUY"], "LEAFLET"))
+            self.assertIn("คุณเป็นสมาชิกแล้ว", self.text(url))                                    # opened again
+            self.assertEqual(sum(1 for c in self.db("AOIMS_CUSTOMER") if c.get("LINE_USER_ID") == user), 1)
+            # an existing customer's mobile links that customer instead of making a new one
+            user2 = "U" + "b" * 32
+            with self.app.app_context():
+                existing = col("AOIMS_CUSTOMER").find_one({"CUST_CODE": "C261001003"})
+            with self.app.test_request_context():
+                from app.models import line_link
+                reply2, _r, _c = line_link.answer_text(user2, "สมัครสมาชิก")
+            url2 = _re.search(r"https://aoi\.example(\S+)", reply2).group(1)
+            token = _re.search(r'name="csrf_token" value="([^"]+)"', self.text(url2)).group(1)
+            n = len(self.db("AOIMS_CUSTOMER"))
+            self.client.post(url2, data={"csrf_token": token, "CUST_NAME": "Other name", "MOBILE_NO": existing["MOBILE_NO"],
+                                         "ADDRESS": "x", "CONSENT": "1"})
+            self.assertEqual(len(self.db("AOIMS_CUSTOMER")), n)
+            self.assertEqual(next(c for c in self.db("AOIMS_CUSTOMER") if c["CUST_CODE"] == "C261001003")["LINE_USER_ID"], user2)
+            # counts on the leaflet page
+            self.login("admin")
+            self.client.get("/lang/en")
+            page = self.text("/finance/leaflet?branch=factory2")
+            self.assertIn("Somsak Newmember", page)
+            self.assertIn("Market day", page)
+        finally:
+            os.environ.pop("AOI_LINE_OA_ID", None)
+            os.environ.pop("AOI_PUBLIC_URL", None)
+
+
+class Update109(Base):
+    """Competitor analysis: competitors, price sightings, gaps against our prices, chart series, AI summary (mocked)."""
+
+    def test_competitor(self):
+        from unittest import mock
+        self.login("admin")
+        self.client.get("/lang/en")
+        self.assertIn("co-entry-link", self.text("/finance/marketing?branch=factory2"))
+        url = "/finance/competitor?branch=factory2"
+        self.post(url, {"branch": "factory2", "action": "comp", "COMP_NAME": "Mill A", "DISTANCE_KM": "5"}, url)
+        self.post(url, {"branch": "factory2", "action": "comp", "COMP_NAME": "mill a"}, url)            # duplicate name
+        self.post(url, {"branch": "factory2", "action": "comp", "COMP_NAME": "Buyer B"}, url)
+        comps = {c["COMP_NAME"]: c for c in self.db("AOIMS_COMPETITOR")}
+        self.assertEqual(sorted(comps), ["Buyer B", "Mill A"])
+        with self.app.app_context():
+            from app.models.price import Price
+            ours_buy = float(Price.get("factory2", "PADDY_HM")["PRICE_BUY"])
+            ours_sell = float(Price.get("factory2", "RICE_HM")["PRICE_SELL"])
+        a = comps["Mill A"]["COMP_ID"]
+        self.post(url, {"branch": "factory2", "action": "prices", "COMP_ID": a, "SOURCE": "board",
+                        "PR_PADDY_HM_B": "%.2f" % (ours_buy + 0.5), "PR_RICE_HM_S": "%.2f" % (ours_sell + 1)}, url)
+        self.post(url, {"branch": "factory2", "action": "prices", "COMP_ID": a, "PR_RICE_HM_S": "abc"}, url)   # bad price
+        self.post(url, {"branch": "factory2", "action": "prices", "COMP_ID": a}, url)                         # nothing
+        rows = self.db("AOITS_COMPPRICE")
+        self.assertEqual(len(rows), 2)
+        self.assertEqual({(r["MAT_CODE"], r["SIDE"]) for r in rows}, {("PADDY_HM", "B"), ("RICE_HM", "S")})
+        self.assertEqual(next(r for r in rows if r["SIDE"] == "B")["OUR_PRICE"], ours_buy)
+        with self.app.app_context():
+            from app.models import competitor as co
+            _c, cmp_rows = co.compare("factory2")
+            paddy = next(r for r in cmp_rows if r["key"] == "PADDY_HM:B")
+            rice = next(r for r in cmp_rows if r["key"] == "RICE_HM:S")
+            self.assertTrue(paddy["risk"])                      # they pay more for paddy
+            self.assertFalse(rice["risk"])                      # they sell dearer: we are better
+            self.assertEqual(paddy["best_gap"], 0.5)
+            s = co.series("factory2", "PADDY_HM:B", 90)
+            self.assertEqual(s["comps"][0]["name"], "Mill A")
+            self.assertTrue(s["ours"])
+        page = self.text(url)
+        self.assertIn("co-risk", page)
+        self.assertIn("+0.50", page)
+        # AI summary (the service is mocked)
+        with mock.patch("app.models.competitor.ai_ready", return_value=True), \
+                mock.patch("app.models.competitor._ai_text", return_value=("1) Mill A pays 0.50 more for jasmine paddy", "test-model")) as call:
+            self.post(url, {"branch": "factory2", "action": "ai"}, url)
+            self.assertIn("Mill A", call.call_args[0][0])
+            self.assertIn("pays 0.50 more", self.text(url))
+        self.assertEqual(self.db("AOITS_COMPAI")[0]["MODEL"], "test-model")
+        # delete a price
+        self.post(url, {"branch": "factory2", "action": "del", "id": rows[0]["PRICE_ID"]}, url)
+        self.assertEqual(len(self.db("AOITS_COMPPRICE")), 1)

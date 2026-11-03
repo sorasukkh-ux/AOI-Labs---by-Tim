@@ -340,6 +340,22 @@ are kept in `AOITS_SYSLOG` (14 days), the checks in `AOITS_HEALTH` (7 days).
 customer's LINE when "Also send to the customer's LINE" is ticked (shown for customers linked to LINE); "Send to LINE
 only" sends without printing. The same public https address is needed as for the queue QR (update 47).
 
+## Competitor analysis (update 109, DB 1.68)
+
+Marketing > "วิเคราะห์คู่แข่ง": add the competing mills / buyers of the branch, then record the prices staff saw or heard (date, source, any of: paddy buying price, rice / bran / broken selling price, milling fee per kg paddy). The page shows:
+- the comparison table: our price today vs each competitor's latest price (within 60 days), gap THB/kg and %, red where the competitor is better for the customer;
+- a chart of one item over 30 / 90 / 180 / 365 days (our price as a step line, competitors as dashed lines);
+- "ให้ AI สรุปตอนนี้": the AI (AOI_AI_API_KEY or AOI_GEMINI_API_KEY) writes where we are behind / ahead, trends, 3-5 actions and data gaps (max 10 a day per branch). Only prices and competitor names are sent.
+Same rights as Marketing (FN_MARKETING view / edit).
+
+## LINE member leaflet (update 108, DB 1.67)
+
+Marketing > "ใบปลิวสมัครสมาชิกผ่าน LINE": make a leaflet batch (e.g. a market day or a village), print it (A5, two per A4 sheet, cut line), and see how many members each batch brought.
+1. The QR opens AOI's LINE chat with "สมัคร REG-L0001" typed in; the person taps Send. (Typing "สมัคร", adding the account, or sending a mobile number that is not registered also gets the link.)
+2. LINE replies with a link to the member form (signed for that LINE account, valid 3 days): name, mobile, address, interests, consent.
+3. A new customer is made and linked to LINE; LINE sends the welcome (LN_REG_DONE) and the member card. A mobile number already at the mill links that customer instead.
+Needs `AOI_LINE_OA_ID` and `AOI_PUBLIC_URL` (the https address, port 5000 Public) in `.env`. The reply texts are in LINE Message Maintenance (LN_REG_INVITE, LN_REG_COUNTER, LN_REG_DONE).
+
 ## Music file for every billboard theme (update 107, DB 1.66)
 
 The own-music upload now works for all five billboard themes (default, Christmas, Songkran, price cards, ranking). Default, price cards and ranking have no built-in tune, so they play music only when a file is uploaded; the speaker button now also shows in the price cards and ranking themes.

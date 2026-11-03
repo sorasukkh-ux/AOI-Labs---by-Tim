@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="th"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex">
+<title>สมัครสมาชิก AOI</title><link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}"></head>
+{# update 108 (Tim): the member form opened from the LINE reply (leaflet QR). Thai only, phone-sized. #}
+<body class="reg-page">
+<main class="reg-card">
+  <img class="reg-logo" src="{{ url_for('static', filename='img/logo.png') }}" alt="AOI">
+  {% if done %}
+    <div class="reg-done" id="reg-done">
+      <div class="reg-tick">&#10003;</div>
+      {% if done.kind == 'already' %}<h1>คุณเป็นสมาชิกแล้ว</h1>
+      {% else %}<h1>สมัครสมาชิกเรียบร้อย</h1>{% endif %}
+      <p>คุณ <b>{{ done.name }}</b><br>รหัสสมาชิก <b class="reg-code">{{ done.code }}</b></p>
+      <p class="reg-hint">บัตรสมาชิกพร้อม QR ส่งไปใน LINE แล้ว แสดงบัตรนี้ที่เคาน์เตอร์ได้เลย<br>ปิดหน้านี้แล้วกลับไปที่ LINE ได้</p>
+    </div>
+  {% elif not form and error and not leaf is defined %}
+    <h1>ลิงก์ใช้ไม่ได้</h1>
+    <p class="reg-err" id="reg-error">{{ error }}</p>
+    <p class="reg-hint">พิมพ์คำว่า <b>สมัครสมาชิก</b> ในแชท LINE ของ AOI เพื่อรับลิงก์ใหม่</p>
+  {% else %}
+    <h1>สมัครสมาชิก AOI</h1>
+    <p class="reg-sub">กรอกข้อมูล 1 นาที รับบัตรสมาชิกทาง LINE{% if leaf %} <span class="reg-src">{{ leaf.LEAF_ID }}</span>{% endif %}</p>
+    {% if error %}<p class="reg-err" id="reg-error">{{ error }}</p>{% endif %}
+    <form method="post" class="reg-form" id="reg-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label for="reg-name">ชื่อ - นามสกุล</label>
+      <input id="reg-name" name="CUST_NAME" value="{{ form.get('CUST_NAME', '') }}" maxlength="100" required autocomplete="name">
+      <label for="reg-mobile">เบอร์มือถือ</label>
+      <input id="reg-mobile" name="MOBILE_NO" value="{{ form.get('MOBILE_NO', '') }}" maxlength="20" required inputmode="tel" placeholder="0812345678" autocomplete="tel">
+      <label for="reg-addr">ที่อยู่ (บ้านเลขที่ หมู่ ตำบล อำเภอ จังหวัด)</label>
+      <textarea id="reg-addr" name="ADDRESS" rows="3" maxlength="200" required>{{ form.get('ADDRESS', '') }}</textarea>
+      <fieldset class="reg-int"><legend>สนใจบริการ (เลือกได้หลายข้อ)</legend>
+        <label><input type="checkbox" name="INT_ML" value="1"{% if form.get('INT_ML') %} checked{% endif %}> สีข้าว</label>
+        <label><input type="checkbox" name="INT_SELL" value="1"{% if form.get('INT_SELL') %} checked{% endif %}> ขายข้าวเปลือกให้โรงสี</label>
+        <label><input type="checkbox" name="INT_BUY" value="1"{% if form.get('INT_BUY') %} checked{% endif %}> ซื้อข้าวสาร รำ ปลายข้าว</label>
+      </fieldset>
+      <label class="reg-consent"><input type="checkbox" name="CONSENT" value="1" required{% if form.get('CONSENT') %} checked{% endif %}>
+        ยินยอมให้ AOI เก็บชื่อ เบอร์มือถือ และที่อยู่ เพื่อให้บริการ แจ้งสถานะคำสั่ง และส่งข่าวสาร/โปรโมชันทาง LINE (ยกเลิกได้โดยแจ้งพนักงาน)</label>
+      <button class="action primary reg-btn" type="submit" id="reg-submit">สมัครสมาชิก</button>
+    </form>
+  {% endif %}
+</main>
+</body></html>
