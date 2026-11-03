@@ -5006,6 +5006,9 @@ class Update109(Base):
             self.assertEqual(s["comps"][0]["name"], "Mill A")
             self.assertTrue(s["ours"])
         page = self.text(url)
+        self.assertNotIn("built-in method", page)                                          # update 111: stats.total
+        self.assertIn("2 / 9", page)
+        self.assertNotIn("built-in method", self.text("/automation/ai"))
         self.assertIn("co-risk", page)
         self.assertIn("+0.50", page)
         # AI summary (the service is mocked)
@@ -5018,3 +5021,27 @@ class Update109(Base):
         # delete a price
         self.post(url, {"branch": "factory2", "action": "del", "id": rows[0]["PRICE_ID"]}, url)
         self.assertEqual(len(self.db("AOITS_COMPPRICE")), 1)
+
+
+class Update112(Base):
+    """The AI error says why (HTTP code + the service's message), never the key."""
+
+    def test_ai_error_reason(self):
+        import io, os, urllib.error
+        from unittest import mock
+        from app.models import ai_price
+        from app.models.base import ValidationError
+        body = b'{"error": {"code": 400, "message": "API key not valid. Please pass a valid API key.", "status": "INVALID_ARGUMENT"}}'
+        err = urllib.error.HTTPError("https://x", 400, "Bad Request", {}, io.BytesIO(body))
+        with self.app.app_context(), mock.patch("urllib.request.urlopen", side_effect=err):
+            with self.assertRaises(ValidationError) as ctx:
+                ai_price._post("https://x", {}, {"x-goog-api-key": "SECRET123"})
+        self.assertEqual(ctx.exception.key, "apErrBadRequest")
+        self.assertEqual(ctx.exception.params["code"], 400)
+        self.assertIn("API key not valid", ctx.exception.params["detail"])
+        self.assertNotIn("SECRET123", str(ctx.exception.params))
+        err = urllib.error.HTTPError("https://x", 429, "Too Many", {}, io.BytesIO(b"not json"))
+        with self.app.app_context(), mock.patch("urllib.request.urlopen", side_effect=err):
+            with self.assertRaises(ValidationError) as ctx:
+                ai_price._post("https://x", {}, {})
+        self.assertEqual((ctx.exception.key, ctx.exception.params["detail"]), ("apErrQuota", "-"))

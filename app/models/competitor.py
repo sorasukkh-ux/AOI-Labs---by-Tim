@@ -200,7 +200,7 @@ def compare(branch_id):
 
 def summary(rows):
     seen = [r for r in rows if r["n"]]
-    return {"items": len(rows), "seen": len(seen), "risk": sum(1 for r in seen if r["risk"]),
+    return {"total": len(rows), "seen": len(seen), "risk": sum(1 for r in seen if r["risk"]),
             "ok": sum(1 for r in seen if not r["risk"])}
 
 
@@ -242,12 +242,14 @@ def ai_ready():
     return provider()[0] is not None
 
 
-def _ai_text(prompt, max_tokens=900):
+def _ai_text(prompt, max_tokens=2000):
     from .ai_price import provider, _post, GEMINI_URL
     name, model = provider()
     if name == "gemini":
-        reply = _post(GEMINI_URL % model, {"contents": [{"role": "user", "parts": [{"text": prompt}]}],
-                                           "generationConfig": {"temperature": 0.3, "maxOutputTokens": max_tokens}},
+        gen = {"temperature": 0.3, "maxOutputTokens": max_tokens}
+        if "flash" in model and "2.5" in model:                # update 112: no hidden "thinking" eating the answer's tokens
+            gen["thinkingConfig"] = {"thinkingBudget": 0}
+        reply = _post(GEMINI_URL % model, {"contents": [{"role": "user", "parts": [{"text": prompt}]}], "generationConfig": gen},
                       {"x-goog-api-key": os.environ["AOI_GEMINI_API_KEY"].strip()})
         cand = (reply.get("candidates") or [{}])[0]
         return "".join(p.get("text", "") for p in (cand.get("content") or {}).get("parts", [])).strip(), model

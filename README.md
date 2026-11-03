@@ -340,6 +340,14 @@ are kept in `AOITS_SYSLOG` (14 days), the checks in `AOITS_HEALTH` (7 days).
 customer's LINE when "Also send to the customer's LINE" is ticked (shown for customers linked to LINE); "Send to LINE
 only" sends without printing. The same public https address is needed as for the queue QR (update 47).
 
+## AI errors say why (update 112)
+
+"เรียก AI ไม่สำเร็จ" now tells the reason with the HTTP code and the AI service's own short message: 400 bad request (often a wrong key or model name), 401/403 key not valid, 404 model not found, 429 quota / no credit, 5xx service down, or no internet. The key is never shown. Gemini 2.5 Flash no longer spends the answer's tokens on hidden "thinking" in the competitor summary. No DB change.
+
+## Fix: competitor counts (update 111)
+
+The "รายการที่มีราคาคู่แข่ง" card showed "0 / <built-in method items ...>" instead of "0 / 9": the template read the dictionary's own items() method. The key is now `total`. No DB change.
+
 ## Menu moves (update 110)
 
 - Competitor analysis is now part of AI: Automation > AI shows a competitor card (counts and the biggest gaps) with "เปิดวิเคราะห์คู่แข่ง"; the page is `/automation/ai/competitor`, rights AT_AI (view / edit). It left Marketing.

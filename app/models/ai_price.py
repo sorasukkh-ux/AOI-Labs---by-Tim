@@ -65,11 +65,21 @@ def _post(url, body, headers, timeout=90):
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             return json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as error:
-        current_app.logger.warning("AI price search: HTTP %s %s", error.code, error.read()[:300])
-        raise ValidationError("apErrService")
+        # update 112: say why (bad key, model, quota, ...) with the service's own short message; the key is never shown
+        raw = error.read()[:2000]
+        current_app.logger.warning("AI call: HTTP %s %s", error.code, raw[:300])
+        try:
+            detail = str((json.loads(raw.decode("utf-8", "replace")).get("error") or {}).get("message") or "")
+        except (ValueError, AttributeError):
+            detail = ""
+        detail = re.sub(r"\s+", " ", detail).strip()[:160] or "-"
+        key = {400: "apErrBadRequest", 401: "apErrKey", 403: "apErrKey", 404: "apErrModel", 429: "apErrQuota"}.get(error.code)
+        if key is None:
+            key = "apErrBusy" if error.code >= 500 else "apErrHttp"
+        raise ValidationError(key, code=error.code, detail=detail)
     except (urllib.error.URLError, TimeoutError, ValueError) as error:
-        current_app.logger.warning("AI price search failed: %s", error)
-        raise ValidationError("apErrService")
+        current_app.logger.warning("AI call failed: %s", error)
+        raise ValidationError("apErrNetwork", detail=str(getattr(error, "reason", error))[:120])
 
 
 def _ask(prompt, max_tokens):

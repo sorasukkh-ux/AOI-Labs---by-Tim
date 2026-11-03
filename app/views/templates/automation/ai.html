@@ -221,7 +221,7 @@
   <div class="dash-head"><p class="card-title sub">&#9878; {{ t('coTitle') }}</p><a class="action small" href="{{ url_for('automation.ai_competitor') }}" id="co-open">{{ t('coOpen') }} &rarr;</a></div>
   <div class="co-stats co-stats-mini">
     <div class="co-stat"><small>{{ t('coStatComps') }}</small><b>{{ co_stats.comps }}</b></div>
-    <div class="co-stat"><small>{{ t('coStatSeen') }}</small><b>{{ co_stats['seen'] }} / {{ co_stats['items'] }}</b></div>
+    <div class="co-stat"><small>{{ t('coStatSeen') }}</small><b>{{ co_stats.seen }} / {{ co_stats.total }}</b></div>
     <div class="co-stat bad"><small>{{ t('coStatRisk') }}</small><b>{{ co_stats.risk }}</b></div>
     <div class="co-stat good"><small>{{ t('coStatOk') }}</small><b>{{ co_stats.ok }}</b></div>
   </div>
