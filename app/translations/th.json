@@ -87,7 +87,7 @@
  "apChip": "ราคาจากเว็บ (AI)",
  "apErrAnswer": "คำตอบของ AI อ่านไม่ได้ ลองใหม่อีกครั้ง",
  "apErrBadRequest": "เรียก AI ไม่สำเร็จ (HTTP {code}): คำขอไม่ถูกต้อง มักเป็น API key ผิด หรือชื่อโมเดลใน .env ผิด - {detail}",
- "apErrBusy": "บริการ AI ขัดข้องชั่วคราว (HTTP {code}) ลองใหม่ภายหลัง",
+ "apErrBusy": "บริการ AI ยุ่งอยู่ (HTTP {code}) ระบบลองให้ 3 ครั้งแล้ว ลองใหม่อีกสักครู่ หรือใส่ AOI_GEMINI_FALLBACK_MODEL ใน .env - {detail}",
  "apErrHttp": "เรียก AI ไม่สำเร็จ (HTTP {code}) - {detail}",
  "apErrKey": "เรียก AI ไม่สำเร็จ (HTTP {code}): API key ไม่ถูกต้อง หมดอายุ หรือยังไม่ได้เปิดสิทธิ์ ตรวจสอบ key ใน .env - {detail}",
  "apErrModel": "เรียก AI ไม่สำเร็จ (HTTP {code}): ไม่พบโมเดล ตรวจสอบ AOI_GEMINI_MODEL / AOI_AI_MODEL ใน .env - {detail}",

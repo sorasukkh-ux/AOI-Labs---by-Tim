@@ -87,7 +87,7 @@
  "apChip": "Web prices (AI)",
  "apErrAnswer": "The AI's answer could not be read - try again.",
  "apErrBadRequest": "AI call failed (HTTP {code}): bad request, usually a wrong API key or model name in .env - {detail}",
- "apErrBusy": "The AI service is down for a moment (HTTP {code}); try again later.",
+ "apErrBusy": "The AI service is busy (HTTP {code}); tried 3 times. Try again in a while, or set AOI_GEMINI_FALLBACK_MODEL in .env - {detail}",
  "apErrHttp": "AI call failed (HTTP {code}) - {detail}",
  "apErrKey": "AI call failed (HTTP {code}): the API key is wrong, expired or not allowed; check the key in .env - {detail}",
  "apErrModel": "AI call failed (HTTP {code}): model not found; check AOI_GEMINI_MODEL / AOI_AI_MODEL in .env - {detail}",

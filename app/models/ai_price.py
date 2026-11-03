@@ -58,7 +58,30 @@ def provider():
 
 
 # ---------- calling the AI ----------
+BUSY_CODES = (500, 502, 503, 504, 529)
+RETRY_WAIT = (2, 6)                              # update 113: seconds before the 2nd and 3rd try when the service is busy
+
+
 def _post(url, body, headers, timeout=90):
+    """Update 113: a busy service (503 overloaded, 529, ...) is tried again twice, after 2 s and 6 s."""
+    import time
+    for wait in RETRY_WAIT + (None,):
+        try:
+            return _post_once(url, body, headers, timeout)
+        except ValidationError as error:
+            if wait is None or error.key != "apErrBusy":
+                raise
+            current_app.logger.info("AI busy (HTTP %s), trying again in %s s", error.params.get("code"), wait)
+            time.sleep(wait)
+
+
+def gemini_models(model):
+    """The model, then AOI_GEMINI_FALLBACK_MODEL (.env) if set: used when the first one stays busy."""
+    fallback = (os.environ.get("AOI_GEMINI_FALLBACK_MODEL") or "").strip()
+    return [model] + ([fallback] if fallback and fallback != model else [])
+
+
+def _post_once(url, body, headers, timeout=90):
     req = urllib.request.Request(url, data=json.dumps(body).encode("utf-8"), method="POST",
                                  headers=dict({"content-type": "application/json"}, **headers))
     try:
@@ -75,18 +98,30 @@ def _post(url, body, headers, timeout=90):
         detail = re.sub(r"\s+", " ", detail).strip()[:160] or "-"
         key = {400: "apErrBadRequest", 401: "apErrKey", 403: "apErrKey", 404: "apErrModel", 429: "apErrQuota"}.get(error.code)
         if key is None:
-            key = "apErrBusy" if error.code >= 500 else "apErrHttp"
+            key = "apErrBusy" if error.code in BUSY_CODES else "apErrHttp"
         raise ValidationError(key, code=error.code, detail=detail)
     except (urllib.error.URLError, TimeoutError, ValueError) as error:
         current_app.logger.warning("AI call failed: %s", error)
         raise ValidationError("apErrNetwork", detail=str(getattr(error, "reason", error))[:120])
 
 
+def _gemini_post(model, body, headers):
+    """Gemini call with the fallback model when the main model stays busy (update 113)."""
+    models = gemini_models(model)
+    for i, m in enumerate(models):
+        try:
+            return _post(GEMINI_URL % m, body, headers)
+        except ValidationError as error:
+            if error.key != "apErrBusy" or i == len(models) - 1:
+                raise
+            current_app.logger.warning("AI: %s busy, using the fallback model %s", m, models[i + 1])
+
+
 def _ask(prompt, max_tokens):
     """(text of the answer, [source links found by the search])."""
     name, model = provider()
     if name == "gemini":
-        reply = _post(GEMINI_URL % model, {"contents": [{"role": "user", "parts": [{"text": prompt}]}],
+        reply = _gemini_post(model, {"contents": [{"role": "user", "parts": [{"text": prompt}]}],
                                            "tools": [{"google_search": {}}],
                                            "generationConfig": {"temperature": 0.1, "maxOutputTokens": max_tokens}},
                       {"x-goog-api-key": os.environ["AOI_GEMINI_API_KEY"].strip()})

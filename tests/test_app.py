@@ -5045,3 +5045,49 @@ class Update112(Base):
             with self.assertRaises(ValidationError) as ctx:
                 ai_price._post("https://x", {}, {})
         self.assertEqual((ctx.exception.key, ctx.exception.params["detail"]), ("apErrQuota", "-"))
+
+
+class Update113(Base):
+    """A busy AI service (503) is tried again; the Gemini fallback model is used when the main one stays busy."""
+
+    def test_busy_retry_and_fallback(self):
+        import io, json as _json, os, urllib.error
+        from unittest import mock
+        from app.models import ai_price
+        from app.models.base import ValidationError
+
+        class Resp(io.BytesIO):
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+        def busy():
+            return urllib.error.HTTPError("https://x", 503, "Unavailable", {}, io.BytesIO(b'{"error": {"message": "The model is overloaded."}}'))
+        ok = Resp(_json.dumps({"ok": 1}).encode())
+        with self.app.app_context(), mock.patch("time.sleep") as sleep, \
+                mock.patch("urllib.request.urlopen", side_effect=[busy(), busy(), ok]) as call:
+            self.assertEqual(ai_price._post("https://x", {}, {}), {"ok": 1})
+            self.assertEqual(call.call_count, 3)
+            self.assertEqual([c.args[0] for c in sleep.call_args_list], [2, 6])
+        with self.app.app_context(), mock.patch("time.sleep"), \
+                mock.patch("urllib.request.urlopen", side_effect=[busy(), busy(), busy()]):
+            with self.assertRaises(ValidationError) as ctx:
+                ai_price._post("https://x", {}, {})
+            self.assertEqual(ctx.exception.key, "apErrBusy")
+        os.environ["AOI_GEMINI_FALLBACK_MODEL"] = "gemini-backup"
+        try:
+            urls = []
+
+            def fake(req, timeout=None):
+                urls.append(req.full_url)
+                if "gemini-main" in req.full_url:
+                    raise busy()
+                return Resp(_json.dumps({"ok": 2}).encode())
+            with self.app.app_context(), mock.patch("time.sleep"), mock.patch("urllib.request.urlopen", side_effect=fake):
+                self.assertEqual(ai_price._gemini_post("gemini-main", {}, {}), {"ok": 2})
+            self.assertEqual(sum("gemini-main" in u for u in urls), 3)
+            self.assertIn("gemini-backup", urls[-1])
+        finally:
+            os.environ.pop("AOI_GEMINI_FALLBACK_MODEL", None)
