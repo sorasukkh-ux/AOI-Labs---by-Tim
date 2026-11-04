@@ -63,3 +63,22 @@
   draw();
   var timer; window.addEventListener("resize", function () { clearTimeout(timer); timer = setTimeout(draw, 200); });
 })();
+
+/* update 116: while the AI summary runs in the background, ask every 4 s and reload when it is finished */
+(function () {
+  "use strict";
+  var box = document.getElementById("co-ai-run");
+  if (!box) return;
+  var url = box.getAttribute("data-poll"), tries = 0;
+  function poll() {
+    tries++;
+    fetch(url, { credentials: "same-origin", headers: { "Accept": "application/json" } })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (d.state === "running" && tries < 200) { setTimeout(poll, 4000); return; }
+        window.location.hash = "co-ai"; window.location.reload();
+      })
+      .catch(function () { if (tries < 200) setTimeout(poll, 6000); });
+  }
+  setTimeout(poll, 4000);
+})();

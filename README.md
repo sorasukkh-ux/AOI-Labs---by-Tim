@@ -340,6 +340,14 @@ are kept in `AOITS_SYSLOG` (14 days), the checks in `AOITS_HEALTH` (7 days).
 customer's LINE when "Also send to the customer's LINE" is ticked (shown for customers linked to LINE); "Send to LINE
 only" sends without printing. The same public https address is needed as for the queue QR (update 47).
 
+## Web price search in the background, summary without notes (update 117, DB 1.70)
+
+AI > Price analysis: "ค้นหาราคาวันนี้" and the 3-year history (web search, can take minutes) now run in the background like the competitor summary: the page answers at once, shows "AI กำลังค้นหา..." and checks `/automation/ai/job/<id>` every 4 seconds, then shows the result message (no more HTTP 504 "took too long to respond"). New collection AOITS_AIJOB. Competitor summary: Gemini is asked for JSON `{"answer": ...}` so its working notes ("Refine & Check Rules: All Thai? Yes ...") cannot become the summary; a reply that still looks like notes (note phrases, or mostly English when Thai was asked) is asked once more, then shown as an error to try again. Models without JSON output (HTTP 400) are asked as plain text.
+
+## AI summary in the background (update 116, DB 1.69)
+
+Pressing "ให้ AI สรุปตอนนี้" no longer waits for the AI inside the page request (Codespaces gave HTTP 504 "took too long to respond" when the AI was slow or busy). The page answers at once, shows "AI กำลังสรุป..." and checks every 4 seconds (`/automation/ai/competitor/ai-state`); when the AI is done the page shows the summary, or the reason it failed. One summary at a time per branch. AOITS_COMPAI: STATUS, ERROR, DONE_DATE.
+
 ## AI summary shows only the answer (update 115)
 
 Gemini 3 models send their working notes ("Refine & Check Rules ...") as separate "thought" parts; these are now dropped, the model is asked to start the answer with ===ANSWER=== (anything before it is cut), the answer may use up to 8,000 tokens (a cut answer ends with "(…)"), and the summary is shown formatted (headings, bold, bullets). No DB change.

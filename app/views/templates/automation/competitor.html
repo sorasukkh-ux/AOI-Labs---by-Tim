@@ -81,8 +81,12 @@
 <div class="card mt14" id="co-ai">
   <div class="card-head"><p class="card-title">&#129302; {{ t('coAi') }}</p>
     {% if can_edit and ai_ready %}<form method="post" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="branch" value="{{ branch }}">
-      <button class="action small primary" type="submit" name="action" value="ai" id="co-ai-btn">&#10024; {{ t('coAiRun') }}</button></form>{% endif %}</div>
+      <button class="action small primary" type="submit" name="action" value="ai" id="co-ai-btn"{% if ai_job.state == 'running' %} disabled{% endif %}>&#10024; {{ t('coAiRun') }}</button></form>{% endif %}</div>
   {% if not ai_ready %}<p class="hint">{{ t('coAiOff') }}</p>{% endif %}
+  {# update 116: the AI works in the background; this box polls until it is done #}
+  {% if ai_job.state == 'running' %}<div class="co-ai-run" id="co-ai-run" data-poll="{{ url_for('automation.ai_competitor_state', branch=branch) }}">
+    <i class="co-spin" aria-hidden="true"></i><span>{{ t('coAiWorking', since=ai_job.since) }}</span></div>
+  {% elif ai_job.state == 'error' %}<p class="co-ai-err" id="co-ai-err">&#9888; {{ ai_job.msg }}</p>{% endif %}
   {% if ai %}<p class="cap-note tight">{{ to_local(ai.REGIST_DATE).strftime('%d/%m/%Y %H:%M') }} &middot; {{ ai.REGIST_USER }} &middot; {{ ai.MODEL }}</p>
   <div class="co-ai-text" id="co-ai-text">{{ ai_md(ai.SUMMARY) }}</div>
   <p class="cap-note">{{ t('coAiNote') }}</p>

@@ -242,23 +242,84 @@ def ai_ready():
     return provider()[0] is not None
 
 
-def _ai_text(prompt, max_tokens=8000):
+def _ai_text(prompt, max_tokens=8000, lang="th"):
+    """The AI's final summary. Update 117: Gemini 3 models often wrote their plan ("Refine & Check Rules: All Thai? Yes")
+    as the answer, so Gemini is asked for JSON {"answer": "..."} (structured output keeps notes out of the field); a reply
+    that still looks like notes is asked once more, then reported as coErrAiNotes."""
+    for attempt in (1, 2):
+        text, model = _ai_once(prompt, max_tokens)
+        if text and not looks_like_notes(text, lang):
+            return text, model
+        current_app.logger.warning("AI competitor summary looked like working notes (try %d)", attempt)
+    raise ValidationError("coErrAiNotes")
+
+
+def _ai_once(prompt, max_tokens):
     from .ai_price import provider, _post, _gemini_post, gemini_text
     name, model = provider()
     if name == "gemini":
+        headers = {"x-goog-api-key": os.environ["AOI_GEMINI_API_KEY"].strip()}
         gen = {"temperature": 0.3, "maxOutputTokens": max_tokens}
         if "flash" in model and "2.5" in model:                # update 112: no hidden "thinking" eating the answer's tokens
             gen["thinkingConfig"] = {"thinkingBudget": 0}
-        reply = _gemini_post(model, {"contents": [{"role": "user", "parts": [{"text": prompt}]}], "generationConfig": gen},
-                      {"x-goog-api-key": os.environ["AOI_GEMINI_API_KEY"].strip()})
+        body = {"contents": [{"role": "user", "parts": [{"text": prompt + JSON_RULE}]}],
+                "generationConfig": dict(gen, responseMimeType="application/json", responseSchema=ANSWER_SCHEMA)}
+        try:
+            reply = _gemini_post(model, body, headers)
+        except ValidationError as error:
+            if error.key != "apErrBadRequest":                 # a model without structured output: ask as plain text
+                raise
+            body = {"contents": [{"role": "user", "parts": [{"text": prompt}]}], "generationConfig": gen}
+            reply = _gemini_post(model, body, headers)
         text, cut = gemini_text(reply)                      # update 115: no working notes, and say when it was cut
-        return clean_answer(text) + ("\n\n(…)" if cut and text else ""), reply.get("_model") or model
+        text = clean_answer(answer_of(text))
+        return text + ("\n\n(…)" if cut and text else ""), reply.get("_model") or model
     if name == "claude":
         cfg = current_app.config
         reply = _post(cfg["AI_API_URL"], {"model": model, "max_tokens": max_tokens, "messages": [{"role": "user", "content": prompt}]},
                       {"x-api-key": cfg["AI_API_KEY"], "anthropic-version": "2023-06-01"})
         return clean_answer("".join(p.get("text", "") for p in reply.get("content", []) if p.get("type") == "text")), model
     raise ValidationError("coErrAiOff")
+
+
+JSON_RULE = ('\n\nReply with JSON only: {"answer": "<the whole final answer for the staff, markdown allowed>"}. '
+             "The answer field holds only the final text - never the plan, a draft or a check of these rules.")
+ANSWER_SCHEMA = {"type": "OBJECT", "properties": {"answer": {"type": "STRING"}}, "required": ["answer"]}
+
+
+def answer_of(text):
+    """The "answer" of a JSON reply (also when wrapped in ```json fences); other text unchanged."""
+    raw = (text or "").strip()
+    if raw.startswith("```"):
+        raw = raw.strip("`")
+        raw = raw[4:] if raw.lower().startswith("json") else raw
+    start, end = raw.find("{"), raw.rfind("}")
+    if start >= 0 and end > start:
+        try:
+            data = json.loads(raw[start:end + 1])
+        except ValueError:
+            return text
+        if isinstance(data, dict) and isinstance(data.get("answer"), str):
+            return data["answer"]
+    return text
+
+
+NOTE_MARKS = ("check rules", "all thai?", "self-correction", "refine &", "refine and check", "constraint", "draft:", "let me",
+              "i will ", "i need to", "the user wants", "plan:")
+
+
+def looks_like_notes(text, lang):
+    """True for a reply that is the model's working notes, not the answer: typical note phrases, or (asked in Thai) a
+    text that is mostly English."""
+    low = (text or "").lower()
+    if sum(1 for m in NOTE_MARKS if m in low) >= 2:
+        return True
+    if lang == "th":
+        letters = [c for c in text if c.isalpha()]
+        thai = sum(1 for c in letters if "\u0e00" <= c <= "\u0e7f")
+        if letters and thai / len(letters) < 0.35:
+            return True
+    return False
 
 
 def clean_answer(text):
@@ -318,31 +379,87 @@ def ai_input(branch_id):
     return data
 
 
+RUN_MINUTES = 10                  # a summary still "running" after this is treated as failed
+_THREADS = []                     # tests wait for these
+
+
+def _prompt(data, lang):
+    return ("You advise a Thai rice mill (AOI Labs) about its local competitors. Write in %s, short and practical, "
+            "using only the figures given (THB per kg; 'gap' = competitor minus ours; for paddy buying a higher competitor "
+            "price attracts farmers away, for selling and the milling fee a lower competitor price attracts buyers away). "
+            "Sections: 1) Where we are behind (biggest gaps first, name the competitor), 2) Where we are ahead, "
+            "3) Trends, 4) 3-5 suggested actions (price, promotion, service) with expected effect, 5) Data gaps to fill "
+            "(items or competitors without recent prices). Say that prices come from staff reports and may be incomplete. "
+            "Never invent numbers. Write only the final answer for the staff: no plan, draft, checklist or notes about these rules. "
+            "Start the answer with the line ===ANSWER===.\n\nData (JSON):\n%s"
+            % ("Thai" if lang == "th" else "English", json.dumps(data, ensure_ascii=False, default=str)))
+
+
+def running_ai(branch_id):
+    since = now_utc() - timedelta(minutes=RUN_MINUTES)
+    return col(AI).find_one({"BRANCH_ID": branch_id, "STATUS": "R", "REGIST_DATE": {"$gte": since}}, NO_ID)
+
+
 def ai_summary(branch_id, user_id, lang):
+    """Update 116: checks now, then the AI is asked in the background (the answer can take longer than the browser /
+    Codespaces waits: HTTP 504). The page shows "working" and reloads when it is done. Returns the job record."""
     if not ai_ready():
         raise ValidationError("coErrAiOff")
+    if running_ai(branch_id):
+        raise ValidationError("coErrAiRunning")
     day_ago = now_utc() - timedelta(days=1)
     if col(AI).count_documents({"BRANCH_ID": branch_id, "REGIST_DATE": {"$gte": day_ago}}) >= AI_LIMIT_PER_DAY:
         raise ValidationError("coErrAiLimit", n=AI_LIMIT_PER_DAY)
     data = ai_input(branch_id)
     if not any(i["competitors"] for i in data["items"]):
         raise ValidationError("coErrAiNoData")
-    prompt = ("You advise a Thai rice mill (AOI Labs) about its local competitors. Write in %s, short and practical, "
-              "using only the figures given (THB per kg; 'gap' = competitor minus ours; for paddy buying a higher competitor "
-              "price attracts farmers away, for selling and the milling fee a lower competitor price attracts buyers away). "
-              "Sections: 1) Where we are behind (biggest gaps first, name the competitor), 2) Where we are ahead, "
-              "3) Trends, 4) 3-5 suggested actions (price, promotion, service) with expected effect, 5) Data gaps to fill "
-              "(items or competitors without recent prices). Say that prices come from staff reports and may be incomplete. "
-              "Never invent numbers. Write only the final answer for the staff: no plan, draft, checklist or notes about these rules. "
-              "Start the answer with the line ===ANSWER===.\n\nData (JSON):\n%s" % ("Thai" if lang == "th" else "English", json.dumps(data, ensure_ascii=False, default=str)))
-    text, model = _ai_text(prompt)
-    if not text:
-        raise ValidationError("coErrAiService")
-    doc = {"AI_ID": "CA%06d" % Counter.next("COMPAI"), "BRANCH_ID": branch_id, "SUMMARY": text[:8000], "MODEL": model,
-           "LANG": lang, "REGIST_DATE": now_utc(), "REGIST_USER": user_id}
+    doc = {"AI_ID": "CA%06d" % Counter.next("COMPAI"), "BRANCH_ID": branch_id, "SUMMARY": None, "MODEL": None, "STATUS": "R",
+           "ERROR": None, "LANG": lang, "REGIST_DATE": now_utc(), "REGIST_USER": user_id}
     col(AI).insert_one(dict(doc))
+    import threading
+    app = current_app._get_current_object()
+    th = threading.Thread(target=_run_ai, args=(app, doc["AI_ID"], _prompt(data, lang)), daemon=True)
+    _THREADS.append(th)
+    th.start()
     return doc
 
 
+def doc_lang(ai_id):
+    return (col(AI).find_one({"AI_ID": ai_id}, NO_ID) or {}).get("LANG") or "th"
+
+
+def _run_ai(app, ai_id, prompt):
+    from ..i18n import t_in
+    with app.app_context():
+        values = {"DONE_DATE": now_utc()}
+        try:
+            text, model = _ai_text(prompt, lang=doc_lang(ai_id))
+            if not text:
+                raise ValidationError("coErrAiService")
+            values.update(STATUS="D", SUMMARY=text[:8000], MODEL=model)
+        except ValidationError as error:
+            doc = col(AI).find_one({"AI_ID": ai_id}, NO_ID) or {}
+            values.update(STATUS="E", ERROR=t_in(doc.get("LANG") or "th", error.key, **error.params)[:500])
+        except Exception as error:                      # noqa: BLE001 - always end the job
+            app.logger.exception("AI summary failed")
+            values.update(STATUS="E", ERROR=str(error)[:300])
+        col(AI).update_one({"AI_ID": ai_id}, {"$set": values})
+
+
+def ai_state(branch_id):
+    """For the page and its poll: 'running', the last error (newer than the last summary) or 'done'."""
+    run = running_ai(branch_id)
+    if run:
+        return {"state": "running", "since": to_local(run["REGIST_DATE"]).strftime("%H:%M:%S")}
+    last = col(AI).find_one({"BRANCH_ID": branch_id, "STATUS": {"$in": ["D", "E"]}}, NO_ID, sort=[("REGIST_DATE", -1)])
+    if last and last.get("STATUS") == "E":
+        return {"state": "error", "msg": last.get("ERROR") or "-"}
+    return {"state": "done"}
+
+
 def last_ai(branch_id):
-    return col(AI).find_one({"BRANCH_ID": branch_id}, NO_ID, sort=[("REGIST_DATE", -1)])
+    """The latest finished summary (records from before update 116 have no STATUS)."""
+    for doc in col(AI).find({"BRANCH_ID": branch_id}, NO_ID).sort([("REGIST_DATE", -1)]):
+        if doc.get("STATUS", "D") == "D" and doc.get("SUMMARY"):
+            return doc
+    return None

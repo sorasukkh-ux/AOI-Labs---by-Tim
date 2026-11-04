@@ -4226,6 +4226,9 @@ class Update77(Base):
         with mock.patch.dict(os.environ, {"AOI_GEMINI_API_KEY": "k"}), mock.patch("app.models.ai_price._post", return_value=reply) as post:
             r = self.post("/automation/ai/prices", {"action": "aiweb", "sku": "PADDY_HM"}, "/automation/ai/prices")
             self.assertEqual(r.status_code, 302)
+            self.assertIn("job=AJ", r.headers["Location"])                               # update 117: in the background
+            from app.models import ai_job
+            ai_job.wait_all()
             url, body, headers = post.call_args[0]
             self.assertIn("gemini-2.5-flash:generateContent", url)
             self.assertEqual(body["tools"], [{"google_search": {}}])
@@ -4247,6 +4250,8 @@ class Update77(Base):
         reply = {"content": [{"type": "text", "text": json.dumps({"items": [], "sources": ["https://example.org/h"]})}]}
         with mock.patch.dict(os.environ, {"AOI_GEMINI_API_KEY": ""}), mock.patch("app.models.ai_price._post", return_value=reply) as post:
             self.post("/automation/ai/prices", {"action": "aiweb"}, "/automation/ai/prices")
+            from app.models import ai_job
+            ai_job.wait_all()
             body = post.call_args[0][1]
             self.assertEqual(body["tools"][0]["type"], "web_search_20250305")
 
@@ -4262,6 +4267,8 @@ class Update77(Base):
         reply = {"candidates": [{"content": {"parts": [{"text": json.dumps({"items": items, "sources": ["https://example.org/s"]})}]}}]}
         with mock.patch.dict(os.environ, {"AOI_GEMINI_API_KEY": "k"}), mock.patch("app.models.ai_price._post", return_value=reply):
             self.post("/automation/ai/prices", {"action": "aihist"}, "/automation/ai/prices")
+            from app.models import ai_job
+            ai_job.wait_all()
         self.assertEqual(len([d for d in self.db("AOITS_AIPRICE") if d["SOURCE"] == "AIHIST"]), 24)
         with self.app.test_request_context():
             a = price_signal.analyse("factory2", "PADDY_GL", "36M")
@@ -5015,7 +5022,10 @@ class Update109(Base):
         with mock.patch("app.models.competitor.ai_ready", return_value=True), \
                 mock.patch("app.models.competitor._ai_text", return_value=("1) Mill A pays 0.50 more for jasmine paddy", "test-model")) as call:
             self.post(url, {"branch": "factory2", "action": "ai"}, url)
+            for th in co._THREADS:                                                       # update 116: background job
+                th.join(5)
             self.assertIn("Mill A", call.call_args[0][0])
+            self.assertEqual(self.client.get("/automation/ai/competitor/ai-state?branch=factory2").get_json()["state"], "done")
             self.assertIn("pays 0.50 more", self.text(url))
         self.assertEqual(self.db("AOITS_COMPAI")[0]["MODEL"], "test-model")
         # delete a price
@@ -5147,3 +5157,118 @@ class Update115(Base):
         self.assertIn("<h4>1) จุดที่เสียเปรียบ</h4>", html)
         self.assertIn("<li><b>ข้าวสาร</b> แพงกว่า &lt;script&gt;", html)
         self.assertTrue(ai_price.gemini_text({"candidates": [{"finishReason": "MAX_TOKENS", "content": {"parts": [{"text": "a"}]}}]})[1])
+
+
+class Update116(Base):
+    """The AI summary runs in the background: the page answers at once, shows 'working', then the result or the error."""
+
+    def test_background(self):
+        import threading
+        from unittest import mock
+        from app.models import competitor as co
+        from app.models.base import ValidationError
+        self.login("admin")
+        self.client.get("/lang/en")
+        url = "/automation/ai/competitor?branch=factory2"
+        self.post(url, {"branch": "factory2", "action": "comp", "COMP_NAME": "Mill A"}, url)
+        cid = self.db("AOIMS_COMPETITOR")[0]["COMP_ID"]
+        self.post(url, {"branch": "factory2", "action": "prices", "COMP_ID": cid, "PR_PADDY_HM_B": "30"}, url)
+        gate = threading.Event()
+
+        def slow(prompt, **kw):
+            gate.wait(5)
+            raise ValidationError("apErrBusy", code=503, detail="high demand")
+        with mock.patch("app.models.competitor.ai_ready", return_value=True), mock.patch("app.models.competitor._ai_text", side_effect=slow):
+            r = self.post(url, {"branch": "factory2", "action": "ai"}, url)
+            self.assertEqual(r.status_code, 302)                                         # answered at once
+            page = self.text(url)
+            self.assertIn("co-ai-run", page)
+            self.assertEqual(self.client.get("/automation/ai/competitor/ai-state?branch=factory2").get_json()["state"], "running")
+            self.post(url, {"branch": "factory2", "action": "ai"}, url)                    # a second one is refused
+            self.assertEqual(len(self.db("AOITS_COMPAI")), 1)
+            gate.set()
+            for th in co._THREADS:
+                th.join(5)
+        state = self.client.get("/automation/ai/competitor/ai-state?branch=factory2").get_json()
+        self.assertEqual(state["state"], "error")
+        self.assertIn("503", state["msg"])
+        self.assertIn("co-ai-err", self.text(url))
+
+
+class Update117(Base):
+    """Web price search and history run as background jobs; the competitor summary never shows the AI's working notes."""
+
+    def test_web_prices_job(self):
+        import os, threading
+        from unittest import mock
+        from app.models import ai_job
+        from app.models.base import ValidationError
+        self.login("admin")
+        self.client.get("/lang/en")
+        gate = threading.Event()
+
+        def slow(user):
+            gate.wait(5)
+            return {"saved": ["PADDY"], "skipped": [], "provider": "gemini"}
+        with mock.patch.dict(os.environ, {"AOI_GEMINI_API_KEY": "k"}), mock.patch("app.models.ai_price.fetch", side_effect=slow), \
+                mock.patch("app.models.ai_price.fetch_history", return_value={"saved": 0, "provider": "gemini"}):
+            r = self.post("/automation/ai/prices", {"action": "aiweb", "sku": "PADDY"}, "/automation/ai/prices")
+            job = r.headers["Location"].split("job=")[1].split("&")[0].split("#")[0]
+            page = self.text("/automation/ai/prices?sku=PADDY&job=" + job)
+            self.assertIn('id="ap-job-run"', page)
+            self.assertIn('id="ap-fetch" disabled', page)
+            self.assertEqual(self.client.get("/automation/ai/job/" + job).get_json()["state"], "running")
+            self.post("/automation/ai/prices", {"action": "aihist"}, "/automation/ai/prices")   # another kind may run
+            self.post("/automation/ai/prices", {"action": "aiweb"}, "/automation/ai/prices")    # the same kind is refused
+            self.assertEqual(len([d for d in self.db("AOITS_AIJOB") if d["KIND"] == "aiweb"]), 1)
+            gate.set()
+            ai_job.wait_all()
+        self.assertEqual(self.client.get("/automation/ai/job/" + job).get_json()["state"], "done")
+        page = self.text("/automation/ai/prices?sku=PADDY")
+        self.assertIn("1 product(s) saved", page)                                             # flashed once
+        self.assertNotIn("1 product(s) saved", self.text("/automation/ai/prices?sku=PADDY"))
+        self.assertNotIn('id="ap-job-run"', page)
+        self.assertEqual(self.client.get("/automation/ai/job/AJ9999999").status_code, 404)
+
+    def test_job_error_is_shown(self):
+        import os
+        from unittest import mock
+        from app.models import ai_job
+        from app.models.base import ValidationError
+        self.login("admin")
+        self.client.get("/lang/en")
+        with mock.patch.dict(os.environ, {"AOI_GEMINI_API_KEY": "k"}), \
+                mock.patch("app.models.ai_price.fetch_history", side_effect=ValidationError("apErrBusy", code=503, detail="busy")):
+            r = self.post("/automation/ai/prices", {"action": "aihist"}, "/automation/ai/prices")
+            ai_job.wait_all()
+        job = r.headers["Location"].split("job=")[1].split("&")[0].split("#")[0]
+        self.assertEqual(self.client.get("/automation/ai/job/" + job).get_json()["state"], "error")
+        self.assertIn("503", self.text("/automation/ai/prices"))
+
+    def test_notes_are_not_an_answer(self):
+        import os
+        from unittest import mock
+        from app.models import competitor as co
+        from app.models.base import ValidationError
+        notes = {"candidates": [{"finishReason": "STOP", "content": {"parts": [{"text":
+                 "6. **Refine & Check Rules**:\n* All Thai? Yes.\n* Short and practical? Yes.\n* Only figures given? Yes (16.5, 16.15"}]}}]}
+        good = {"candidates": [{"finishReason": "STOP", "content": {"parts": [{"text": json.dumps(
+                {"answer": "## 1) จุดที่เสียเปรียบ\n* โรงสีเจริญผล รับซื้อข้าวเปลือกสูงกว่าเรา 2.25 บาท/กก."}, ensure_ascii=False)}]}}]}
+        with self.app.test_request_context(), mock.patch.dict(os.environ, {"AOI_GEMINI_API_KEY": "k", "AOI_GEMINI_MODEL": "gemini-3.6-flash"}):
+            with mock.patch("app.models.ai_price._post", side_effect=[notes, good]) as post:
+                text, model = co._ai_text("p", lang="th")
+            self.assertTrue(text.startswith("## 1)"))
+            self.assertEqual(post.call_count, 2)                                                # the notes were asked again
+            gen = post.call_args[0][1]["generationConfig"]
+            self.assertEqual(gen["responseMimeType"], "application/json")
+            with mock.patch("app.models.ai_price._post", return_value=notes):
+                with self.assertRaises(ValidationError) as ctx:
+                    co._ai_text("p", lang="th")
+            self.assertEqual(ctx.exception.key, "coErrAiNotes")
+            # a model without structured output (HTTP 400) is asked as plain text
+            plain = {"candidates": [{"content": {"parts": [{"text": "===ANSWER===\nเราซื้อแพงกว่าคู่แข่ง"}]}}]}
+            with mock.patch("app.models.ai_price._post", side_effect=[ValidationError("apErrBadRequest", code=400, detail="x"), plain]) as post:
+                self.assertEqual(co._ai_text("p", lang="th")[0], "เราซื้อแพงกว่าคู่แข่ง")
+            self.assertNotIn("responseMimeType", post.call_args[0][1]["generationConfig"])
+        self.assertEqual(co.answer_of('```json\n{"answer": "ok"}\n```'), "ok")
+        self.assertFalse(co.looks_like_notes("We pay 0.5 more", "en"))

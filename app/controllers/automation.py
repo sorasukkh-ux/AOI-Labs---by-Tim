@@ -414,14 +414,14 @@ def ai_prices():
                 flash_ok("psFetched", rows=r["rows"], new=r["new"], day=r["newest"])
                 return back("ps-sources")
             if action in ("aiweb", "aihist"):              # update 77: prices found on the web by the AI
-                from ..models import ai_price
-                if action == "aiweb":
-                    r = ai_price.fetch(_user_id())
-                    flash_ok("apFetched", n=len(r["saved"]), skipped=", ".join(r["skipped"]) or "-", provider=r["provider"])
-                else:
-                    r = ai_price.fetch_history(_user_id())
-                    flash_ok("apHistFetched", n=r["saved"], provider=r["provider"])
-                return back("ps-aiweb")
+                from ..models import ai_price, ai_job      # update 117: in the background (no HTTP 504)
+                if not ai_price.provider()[0]:
+                    raise ValidationError("apErrNotConfigured")
+                user = _user_id()
+                work = (lambda: ai_price.fetch(user)) if action == "aiweb" else (lambda: ai_price.fetch_history(user))
+                job = ai_job.start(action, branch, user, work)
+                flash_ok("ajStarted")
+                return redirect(url_for("automation.ai_prices", sku=code, p=period, job=job["JOB_ID"], _anchor="ps-aiweb"))
             if action == "settings":
                 if not can(AI_MENU, "edit"):
                     abort(403)
@@ -455,7 +455,9 @@ def ai_prices():
     from ..models import ai_price
     overview_rows = price_signal.overview(branch, cfg)
     ap_last = ai_price.last_fetch()
-    return render_template("automation/ai_prices.html", a=a, code=code, live_time=to_local(now_utc()).strftime("%H:%M:%S"), period=period, periods=list(price_signal.PERIODS),
+    from ..models import ai_job
+    job = ai_job.get(request.args.get("job")) or ai_job.running("aiweb") or ai_job.running("aihist")
+    return render_template("automation/ai_prices.html", ai_job=job, to_local=to_local, a=a, code=code, live_time=to_local(now_utc()).strftime("%H:%M:%S"), period=period, periods=list(price_signal.PERIODS),
                            cfg=cfg, overview=overview_rows, warnings=price_signal.warnings(overview_rows),
                            ap_provider=ai_price.provider()[0], ap_latest=ai_price.latest(), ap_last=fmt_datetime(ap_last["FETCH_DATE"]) if ap_last else None,
                            ap_region=ai_price.region(), sku_names={c: var.mat_name(c) for c in var.TRADED}, src_names={x: t("psSrc_" + x) for x in price_signal.SOURCES}, items=items, sources=price_signal.SOURCES,
@@ -481,7 +483,7 @@ def ai_competitor():
         action = request.form.get("action")
         acts = {"comp": (lambda: co.save_competitor(branch, request.form, current_user()["USER_ID"]), "coMsgComp", "co-comps"),
                 "del": (lambda: co.delete_price(branch, request.form.get("id")), "coMsgDeleted", "co-recent"),
-                "ai": (lambda: co.ai_summary(branch, current_user()["USER_ID"], get_lang()), "coMsgAi", "co-ai")}
+                "ai": (lambda: co.ai_summary(branch, current_user()["USER_ID"], get_lang()), "coMsgAiStarted", "co-ai")}
         if action in acts:
             run, ok, anchor = acts[action]
             try:
@@ -508,6 +510,42 @@ def ai_competitor():
     return render_template("automation/competitor.html", branch=branch, branches=maintainable_branches(), comps=comps, rows=rows,
                            stats=co.summary(rows), all_comps=co.competitors(branch), items=co.items(), item_name=co.item_name,
                            sources=co.SOURCES, recent=co.recent(branch), chart=co.series(branch, key, days), item=key, days=days,
-                           periods=co.PERIODS, ai=co.last_ai(branch), ai_md=co.light_md, ai_ready=co.ai_ready(), fresh=co.FRESH_DAYS,
+                           periods=co.PERIODS, ai=co.last_ai(branch), ai_md=co.light_md, ai_job=co.ai_state(branch), ai_ready=co.ai_ready(), fresh=co.FRESH_DAYS,
                            today=now_local().date().isoformat(), can_edit=can(AI_MENU, "edit"), to_local=to_local,
                            edit=co.get(request.args.get("edit")))
+
+
+@bp.route("/ai/job/<job_id>")
+@require(AI_MENU)
+def ai_job_state(job_id):
+    """Update 117: the page polls this while a long AI call runs; when it ends its message is flashed (once)."""
+    from ..models import ai_job
+    job = ai_job.get(job_id)
+    if not job:
+        abort(404)
+    if job["STATUS"] == "R":
+        return jsonify({"state": "running"})
+    if ai_job.mark_seen(job_id):
+        if job["STATUS"] == "E":
+            if job.get("ERROR_KEY"):
+                flash_error(ValidationError(job["ERROR_KEY"], **(job.get("ERROR_PARAMS") or {})))
+            else:
+                flash_error(ValidationError("ajErrFailed", detail=job.get("ERROR") or "-"))
+        elif job["KIND"] == "aiweb":
+            r = job["RESULT"] or {}
+            flash_ok("apFetched", n=len(r.get("saved") or []), skipped=", ".join(r.get("skipped") or []) or "-", provider=r.get("provider"))
+        elif job["KIND"] == "aihist":
+            r = job["RESULT"] or {}
+            flash_ok("apHistFetched", n=r.get("saved", 0), provider=r.get("provider"))
+    return jsonify({"state": "done" if job["STATUS"] == "D" else "error"})
+
+
+@bp.route("/ai/competitor/ai-state")
+@require(AI_MENU)
+def ai_competitor_state():
+    """Update 116: the page polls this while the AI summary runs in the background."""
+    from ..models import competitor as co
+    branch = pick_maintenance_branch(request.args.get("branch"))
+    if not branch:
+        abort(403)
+    return jsonify(co.ai_state(branch))

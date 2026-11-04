@@ -126,3 +126,22 @@
   draw();
   }
 })();
+
+/* update 117: while a long AI call (web prices, 3-year history) runs in the background, ask every 4 s and reload when done */
+(function () {
+  "use strict";
+  var box = document.getElementById("ap-job-run");
+  if (!box) return;
+  var url = box.getAttribute("data-poll"), back = box.getAttribute("data-back"), tries = 0;
+  function poll() {
+    tries++;
+    fetch(url, { credentials: "same-origin", headers: { "Accept": "application/json" } })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (d.state === "running" && tries < 220) { setTimeout(poll, 4000); return; }
+        window.location.href = back;
+      })
+      .catch(function () { if (tries < 220) setTimeout(poll, 6000); });
+  }
+  setTimeout(poll, 4000);
+})();
