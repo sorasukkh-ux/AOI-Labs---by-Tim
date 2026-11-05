@@ -1747,3 +1747,13 @@ body.leaflet-page { background: #e5e7eb; font-family: "Prompt", "IBM Plex Sans T
 .bb-autosave.wait, .bb-autosave.saving { color: #1d4ed8; background: #eff6ff; }
 .bb-autosave.ok { color: #047857; background: #ecfdf5; }
 .bb-autosave.err { color: #b91c1c; background: #fef2f2; }
+/* update 119: TV display + price billboard in one card */
+.tvb-links .tvb-link { margin-top: 10px; }
+.tvb-row { display: flex; gap: 10px; align-items: center; }
+.tvb-row input { flex: 1; min-width: 0; margin: 0; }
+.tvb-row .action { width: auto; min-width: 96px; margin: 0; flex: none; }
+.tvb-key { display: flex; align-items: center; justify-content: flex-end; gap: 12px; flex-wrap: wrap; margin-top: 14px; }
+.tvb-key .cap-note { margin: 0; }
+.tvb-key .action { width: auto; margin: 0; }
+.tvb-set { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--border); }
+.tvb-set-title { font-weight: 700; font-size: 17px; margin: 0 0 4px; }

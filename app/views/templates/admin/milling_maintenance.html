@@ -101,26 +101,36 @@
   </table>
   </div>
 </div>
-<div class="card mt14" id="tv-display">
-  <p class="card-title sub">&#128250; {{ t('tvTitle') }} &middot; {{ branch_label(branch) }}</p>
+{# update 119 (Tim): TV display and price billboard in ONE card - the links on top, then what the billboard shows #}
+<div class="card mt14 tvb-card" id="tv-display">
+  <p class="card-title sub">&#128250; {{ t('tvbTitle') }} &middot; {{ branch_label(branch) }}</p>
   <p class="cap-note tight">{{ t('tvNote') }}</p>
-  {% if tv_link %}
-  <label class="field-label" for="tv-link">{{ t('tvLink', branch=branch_label(branch)) }}</label>
-  <input type="text" id="tv-link" class="mono" readonly value="{{ tv_link }}" data-tv-path="{{ tv_path }}">
-  <p class="mt6 btn-row-inline"><a class="action" href="{{ tv_path }}" target="_blank" rel="noopener">{{ t('tvOpen') }} &rarr;</a>
-    <a class="action" id="bb-open" href="{{ bb_path }}" target="_blank" rel="noopener">{{ t('tvBillboardOpen') }} &rarr;</a></p>
-  <p class="cap-note">{{ t('tvBillboardNote') }}</p>
-  {% else %}<p class="hint">{{ t('tvNoKey') }}</p>{% endif %}
-  {% if editable %}
-  <form method="post" class="mt6"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <input type="hidden" name="branch" value="{{ branch }}"><input type="hidden" name="action" value="tvkey">
-    <button class="action" type="submit" id="tv-key-btn" data-confirm="{{ t('tvConfirmIssue', branch=branch_label(branch)) }}">{{ t('tvIssue') }}</button></form>
-  {% endif %}
-</div>
+  <section class="bb-sec tvb-links" id="tv-links">
+    <h3><span>&#128279;</span>{{ t('tvbLinks') }}</h3>
+    {% if tv_link %}
+    <div class="tvb-link">
+      <label class="field-label" for="tv-link">&#128250; {{ t('tvcQueue') }}</label>
+      <div class="tvb-row"><input type="text" id="tv-link" class="mono" readonly value="{{ tv_link }}" data-tv-path="{{ tv_path }}">
+        <a class="action" id="tv-open" href="{{ tv_path }}" target="_blank" rel="noopener">{{ t('tvOpen') }} &rarr;</a></div>
+    </div>
+    <div class="tvb-link">
+      <label class="field-label" for="bb-link">&#127915; {{ t('tvbBillboard') }}</label>
+      <div class="tvb-row"><input type="text" id="bb-link" class="mono" readonly value="{{ bb_path }}" data-tv-path="{{ bb_path }}">
+        <a class="action" id="bb-open" href="{{ bb_path }}" target="_blank" rel="noopener">{{ t('tvOpen') }} &rarr;</a></div>
+      <p class="cap-note tight">{{ t('tvBillboardNote') }}</p>
+    </div>
+    {% else %}<p class="hint">{{ t('tvNoKey') }}</p>{% endif %}
+    {% if editable %}
+    <form method="post" class="tvb-key"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="branch" value="{{ branch }}"><input type="hidden" name="action" value="tvkey">
+      <span class="cap-note">{{ t('tvbKeyNote') }}</span>
+      <button class="action small" type="submit" id="tv-key-btn" data-confirm="{{ t('tvConfirmIssue', branch=branch_label(branch)) }}">&#128273; {{ t('tvIssue') }}</button></form>
+    {% endif %}
+  </section>
 
-{# update 84 (Tim): what the price billboard shows - SKUs (order, buying / selling, a note), promotion, messages #}
-<div class="card mt14" id="bb-settings">
-  <p class="card-title sub">&#127915; {{ t('bbSetTitle') }} &middot; {{ branch_label(branch) }}</p>
+  {# update 84 (Tim): what the price billboard shows - SKUs (order, buying / selling, a note), promotion, messages #}
+  <div id="bb-settings" class="tvb-set">
+  <p class="tvb-set-title">&#127915; {{ t('bbSetTitle') }}</p>
   <p class="cap-note tight">{{ t('bbSetNote') }}</p>
   {# update 91 (Tim): tidier layout - numbered sections, a compact product table, one action bar #}
   <form method="post" id="bb-form" class="bb-form">
@@ -183,6 +193,7 @@
       <noscript><button class="action primary" type="submit" id="bb-save">{{ t('btnSave') }}</button></noscript>{% endif %}
     </div>
   </form>
+  </div>
   {# update 106 (Tim): the shop's own music file per theme (plays instead of the built-in tune) #}
   <section class="bb-sec bb-music-file" id="bb-music">
     <h3><span>&#9835;</span>{{ t('bbMusicFile') }}</h3>

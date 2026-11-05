@@ -5302,3 +5302,22 @@ class Update118(Base):
         self.assertEqual(r.status_code, 422)
         self.assertFalse(r.get_json()["ok"])
         self.assertIn("4", r.get_json()["message"])
+
+
+class Update119(Base):
+    """TV display and price billboard settings are one card on Milling Maintenance."""
+
+    def test_one_card(self):
+        import re
+        with self.app.app_context():
+            from app.models import tv
+            tv.issue_key("factory2", "admin")
+        self.login("admin")
+        self.client.get("/lang/en")
+        page = self.text("/admin/milling/maintenance?branch=factory2")
+        card = page[page.index('id="tv-display"'):page.index('id="line-setup"')]
+        for part in ('id="tv-link"', 'id="bb-link"', 'id="tv-key-btn"', 'id="bb-settings"', 'id="bb-form"', 'id="bb-music"'):
+            self.assertIn(part, card)
+        self.assertEqual(len(re.findall(r'class="card mt14[^"]*" id="(?:tv-display|bb-settings)"', page)), 1)
+        self.assertIn("TV display and price billboard", card)
+        self.assertIn('data-tv-path="/tv/factory2/prices?key=', card)

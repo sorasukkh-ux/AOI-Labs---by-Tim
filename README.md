@@ -340,6 +340,10 @@ are kept in `AOITS_SYSLOG` (14 days), the checks in `AOITS_HEALTH` (7 days).
 customer's LINE when "Also send to the customer's LINE" is ticked (shown for customers linked to LINE); "Send to LINE
 only" sends without printing. The same public https address is needed as for the queue QR (update 47).
 
+## TV display and price billboard in one card (update 119)
+
+Milling Maintenance: the TV display card and the price billboard settings are now one card "จอทีวีและป้ายราคา". On top, "ลิงก์สำหรับทีวี" has both links, each with its own Open button (milling queue screen and price billboard, the same key) and "ออกรหัสใหม่" (both old links stop at once); below it the billboard settings (sections 1-4, saved automatically) and the own music files. No DB change.
+
 ## Price billboard settings save themselves (update 118)
 
 Milling Maintenance > price billboard settings: no Save button any more. Every change (a tick, the order, a price toggle, the theme, the seconds, a running message) is saved by itself after a short pause; the note beside the button shows "กำลังบันทึก…", then "บันทึกอัตโนมัติแล้ว ✓ <time>" or the reason it could not be saved. "เปิดป้ายราคา →" saves a waiting change first, then opens the billboard. No DB change.
