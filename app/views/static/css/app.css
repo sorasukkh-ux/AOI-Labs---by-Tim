@@ -1741,3 +1741,9 @@ body.leaflet-page { background: #e5e7eb; font-family: "Prompt", "IBM Plex Sans T
 .co-spin { width: 18px; height: 18px; border-radius: 50%; border: 3px solid currentColor; border-right-color: transparent; animation: co-spin .9s linear infinite; }
 @keyframes co-spin { to { transform: rotate(360deg); } }
 .co-ai-err { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; border-radius: 10px; padding: 10px 12px; }
+/* update 118: billboard settings save themselves - the status pill beside "Open price billboard" */
+.bb-actions { align-items: center; }
+.bb-autosave { margin-right: auto; font-size: 14px; color: var(--muted, #64748b); padding: 6px 12px; border-radius: 999px; background: var(--soft, #f1f5f9); }
+.bb-autosave.wait, .bb-autosave.saving { color: #1d4ed8; background: #eff6ff; }
+.bb-autosave.ok { color: #047857; background: #ecfdf5; }
+.bb-autosave.err { color: #b91c1c; background: #fef2f2; }

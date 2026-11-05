@@ -340,6 +340,10 @@ are kept in `AOITS_SYSLOG` (14 days), the checks in `AOITS_HEALTH` (7 days).
 customer's LINE when "Also send to the customer's LINE" is ticked (shown for customers linked to LINE); "Send to LINE
 only" sends without printing. The same public https address is needed as for the queue QR (update 47).
 
+## Price billboard settings save themselves (update 118)
+
+Milling Maintenance > price billboard settings: no Save button any more. Every change (a tick, the order, a price toggle, the theme, the seconds, a running message) is saved by itself after a short pause; the note beside the button shows "กำลังบันทึก…", then "บันทึกอัตโนมัติแล้ว ✓ <time>" or the reason it could not be saved. "เปิดป้ายราคา →" saves a waiting change first, then opens the billboard. No DB change.
+
 ## Web price search in the background, summary without notes (update 117, DB 1.70)
 
 AI > Price analysis: "ค้นหาราคาวันนี้" and the 3-year history (web search, can take minutes) now run in the background like the competitor summary: the page answers at once, shows "AI กำลังค้นหา..." and checks `/automation/ai/job/<id>` every 4 seconds, then shows the result message (no more HTTP 504 "took too long to respond"). New collection AOITS_AIJOB. Competitor summary: Gemini is asked for JSON `{"answer": ...}` so its working notes ("Refine & Check Rules: All Thai? Yes ...") cannot become the summary; a reply that still looks like notes (note phrases, or mostly English when Thai was asked) is asked once more, then shown as an error to try again. Models without JSON output (HTTP 400) are asked as plain text.

@@ -5272,3 +5272,33 @@ class Update117(Base):
             self.assertNotIn("responseMimeType", post.call_args[0][1]["generationConfig"])
         self.assertEqual(co.answer_of('```json\n{"answer": "ok"}\n```'), "ok")
         self.assertFalse(co.looks_like_notes("We pay 0.5 more", "en"))
+
+
+class Update118(Base):
+    """Price billboard settings save themselves (one button: open the billboard)."""
+
+    def test_autosave(self):
+        with self.app.app_context():
+            from app.models import tv
+            tv.issue_key("factory2", "admin")
+        self.login("admin")
+        self.client.get("/lang/en")
+        url = "/admin/milling/maintenance?branch=factory2"
+        page = self.text(url)
+        self.assertIn('id="bb-autosave"', page)
+        self.assertIn('id="bb-open-save"', page)
+        self.assertIn("<noscript><button", page)                                         # Save only without JavaScript
+        self.assertIn("js/bb_settings.js", page)
+        form = {"branch": "factory2", "action": "billboard", "BB_SECONDS": "12", "BB_PROMO": "", "BB_SHOW_PADDY_HM": "1", "BB_BUY_PADDY_HM": "1"}
+        r = self.post(url, form, url, headers={"X-AOI-Fetch": "1"})
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.get_json()["ok"])
+        with self.app.app_context():
+            from app.models import tv
+            self.assertEqual(tv.bb_settings("factory2")["seconds"], 12)
+        self.assertNotIn("settings saved", self.text(url))                              # no flash left for the next page
+        form["BB_SECONDS"] = "99"
+        r = self.post(url, form, url, headers={"X-AOI-Fetch": "1"})
+        self.assertEqual(r.status_code, 422)
+        self.assertFalse(r.get_json()["ok"])
+        self.assertIn("4", r.get_json()["message"])

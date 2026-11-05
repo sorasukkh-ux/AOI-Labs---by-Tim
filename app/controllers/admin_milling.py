@@ -2,9 +2,9 @@
 
 These are maintenance screens, so the branch can be chosen here (within the user's authorized branches).
 """
-from flask import Blueprint, abort, redirect, render_template, request, url_for
+from flask import Blueprint, abort, jsonify, redirect, render_template, request, url_for
 
-from ..i18n import texts
+from ..i18n import t, texts
 from ..models.base import ValidationError
 from ..models.branch import Branch
 from ..models.customer import Customer
@@ -102,11 +102,16 @@ def maintenance():
                 flash_ok("bbMusicSaved" if request.form.get("action") == "bb_music" else "bbMusicDeleted")
             return redirect(url_for("admin_milling.maintenance", branch=branch, _anchor="bb-music"))
         if request.form.get("action") == "billboard":            # update 84: what the price billboard shows
+            ajax = request.headers.get("X-AOI-Fetch") == "1"      # update 118: saved by itself from the page (JSON)
             try:
                 tv.save_bb_settings(branch, request.form, current_user()["USER_ID"])
             except ValidationError as error:
+                if ajax:
+                    return jsonify({"ok": False, "message": t(error.key, **error.params)}), 422
                 flash_error(error)
             else:
+                if ajax:
+                    return jsonify({"ok": True, "message": t("bbSaved")})
                 flash_ok("bbSaved")
             return redirect(url_for("admin_milling.maintenance", branch=branch, _anchor="bb-settings"))
         try:
