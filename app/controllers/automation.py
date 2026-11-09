@@ -413,6 +413,24 @@ def ai_prices():
                 r = export_price.import_data(data, "upload:" + (upload.filename or "file")[:80], _user_id())
                 flash_ok("psFetched", rows=r["rows"], new=r["new"], day=r["newest"])
                 return back("ps-sources")
+            if action in ("gt_upload", "gt_kind", "gt_delete"):   # update 120: Google Trends market interest
+                from ..models import gtrend
+                if action == "gt_upload":
+                    upload = request.files.get("GT_FILE")
+                    data = upload.read(gtrend.MAX_BYTES + 1) if upload else b""
+                    if not data:
+                        raise ValidationError("gtErrNoFile")
+                    b = gtrend.import_csv(data, upload.filename, _user_id())
+                    flash_ok("gtImported", n=len(b["TERMS"]), rows=b["ROWS"], d0=b["DATE_FROM"], d1=b["DATE_TO"])
+                elif action == "gt_kind":
+                    gtrend.set_kind(request.form.get("TERM", ""), request.form.get("GEO", ""), request.form.get("KIND"))
+                    flash_ok("gtKindSaved")
+                else:
+                    if not can(AI_MENU, "delete"):
+                        abort(403)
+                    gtrend.delete_batch(request.form.get("BATCH_ID"))
+                    flash_ok("gtDeleted")
+                return back("ps-gtrend")
             if action in ("aiweb", "aihist"):              # update 77: prices found on the web by the AI
                 from ..models import ai_price, ai_job      # update 117: in the background (no HTTP 504)
                 if not ai_price.provider()[0]:
@@ -457,7 +475,9 @@ def ai_prices():
     ap_last = ai_price.last_fetch()
     from ..models import ai_job
     job = ai_job.get(request.args.get("job")) or ai_job.running("aiweb") or ai_job.running("aihist")
-    return render_template("automation/ai_prices.html", ai_job=job, to_local=to_local, a=a, code=code, live_time=to_local(now_utc()).strftime("%H:%M:%S"), period=period, periods=list(price_signal.PERIODS),
+    from ..models import gtrend
+    gt_items = gtrend.overview()
+    return render_template("automation/ai_prices.html", ai_job=job, to_local=to_local, gt_items=gt_items, gt_chart=gtrend.chart(gt_items), gt_batches=gtrend.batches(), gt_kinds=gtrend.KINDS, can_delete=can(AI_MENU, "delete"), fmt_datetime=fmt_datetime, a=a, code=code, live_time=to_local(now_utc()).strftime("%H:%M:%S"), period=period, periods=list(price_signal.PERIODS),
                            cfg=cfg, overview=overview_rows, warnings=price_signal.warnings(overview_rows),
                            ap_provider=ai_price.provider()[0], ap_latest=ai_price.latest(), ap_last=fmt_datetime(ap_last["FETCH_DATE"]) if ap_last else None,
                            ap_region=ai_price.region(), sku_names={c: var.mat_name(c) for c in var.TRADED}, src_names={x: t("psSrc_" + x) for x in price_signal.SOURCES}, items=items, sources=price_signal.SOURCES,

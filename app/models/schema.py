@@ -65,6 +65,10 @@ COLLECTIONS = {
     "AOIMS_COMPETITOR": [(["COMP_ID"], True), (["BRANCH_ID", "COMP_NAME"], False)],   # update 109
     "AOITS_COMPPRICE": [(["PRICE_ID"], True), (["BRANCH_ID", "MAT_CODE", "SIDE", "PRICE_DATE"], False), (["COMP_ID", "PRICE_DATE"], False)],
     "AOITS_COMPAI": [(["AI_ID"], True), (["BRANCH_ID", "REGIST_DATE"], False)],
+    "AOITS_AIJOB": [(["JOB_ID"], True), (["KIND", "STATUS", "REGIST_DATE"], False)],                  # update 117
+    "AOITS_GTRENDBATCH": [(["BATCH_ID"], True), (["REGIST_DATE"], False)],                           # update 120
+    "AOITS_GTREND": [(["BATCH_ID", "TERM", "GEO", "DAY"], True)],
+    "AOIMS_GTRENDTERM": [(["TERM", "GEO"], True)],
     # ---- technical (not in the DB structure workbook): running numbers for order and customer codes ----
     "AOISYS_COUNTER": [(["COUNTER_KEY"], True)],
 }

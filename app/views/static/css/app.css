@@ -1757,3 +1757,15 @@ body.leaflet-page { background: #e5e7eb; font-family: "Prompt", "IBM Plex Sans T
 .tvb-key .action { width: auto; margin: 0; }
 .tvb-set { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--border); }
 .tvb-set-title { font-weight: 700; font-size: 17px; margin: 0 0 4px; }
+/* update 120: Google Trends market interest card */
+.gt-chart-wrap { overflow-x: auto; }
+.gt-chart { width: 100%; min-width: 560px; height: auto; display: block; }
+.gt-grid { stroke: var(--border, #e5e7eb); stroke-width: 1; }
+.gt-ax { font: 11px sans-serif; fill: var(--muted, #64748b); }
+.gt-legend { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 6px 0 10px; font-size: 13px; }
+.gt-legend i { display: inline-block; width: 14px; height: 4px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
+#gt-table tr.gt-hit td { background: rgba(37, 99, 235, .07); }
+.badge.gt-rising { background: #dcfce7; color: #166534; } .badge.gt-falling { background: #fee2e2; color: #991b1b; } .badge.gt-flat { background: #f1f5f9; color: #475569; }
+.gt-up { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; } .gt-up input[type=file] { flex: 1; min-width: 200px; } .gt-up .action { width: auto; }
+.gt-how summary { cursor: pointer; font-size: 14px; }
+#gt-table select { min-width: 130px; width: auto; }

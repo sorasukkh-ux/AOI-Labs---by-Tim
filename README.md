@@ -340,6 +340,10 @@ are kept in `AOITS_SYSLOG` (14 days), the checks in `AOITS_HEALTH` (7 days).
 customer's LINE when "Also send to the customer's LINE" is ticked (shown for customers linked to LINE); "Send to LINE
 only" sends without printing. The same public https address is needed as for the queue QR (update 47).
 
+## Market interest from Google Trends (update 120, DB 1.71)
+
+AI > Price analysis has a new card "ความสนใจตลาด (Google Trends)" (also linked from Marketing). Download the CSV of the "Interest over time" chart on trends.google.com (Explore, up to 5 terms, Thailand, past 5 years) and upload it on the card. Each upload is kept as its own batch, because Google Trends values are relative (0-100 within one download); a term is read from its newest batch. The card shows the lines, and per term: latest value, change against the previous points (rising / falling / flat at ±15%), year on year, the busiest month, and what the term is about (jasmine / white / glutinous rice or milling service - guessed, can be changed). The terms of the selected SKU's variety are highlighted, and the AI (Ask AI) receives the signals as "market interest" - an early hint of demand, never a price. New collections AOITS_GTREND, AOITS_GTRENDBATCH, AOIMS_GTRENDTERM. Automatic weekly fetching (official Google Trends API once access is granted, or a paid provider) can come later on the same card.
+
 ## TV display and price billboard in one card (update 119)
 
 Milling Maintenance: the TV display card and the price billboard settings are now one card "จอทีวีและป้ายราคา". On top, "ลิงก์สำหรับทีวี" has both links, each with its own Open button (milling queue screen and price billboard, the same key) and "ออกรหัสใหม่" (both old links stop at once); below it the billboard settings (sections 1-4, saved automatically) and the own music files. No DB change.

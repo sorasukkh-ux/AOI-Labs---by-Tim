@@ -5321,3 +5321,66 @@ class Update119(Base):
         self.assertEqual(len(re.findall(r'class="card mt14[^"]*" id="(?:tv-display|bb-settings)"', page)), 1)
         self.assertIn("TV display and price billboard", card)
         self.assertIn('data-tv-path="/tv/factory2/prices?key=', card)
+
+
+class Update120(Base):
+    """Market interest from Google Trends CSV downloads on AI > Price analysis."""
+
+    OLD = ("Category: All categories\n\nWeek,ข้าวหอมมะลิ: (Thailand),สีข้าว: (Thailand)\n" +
+           "".join("2025-%02d-%02d,%d,%s\n" % (1 + w // 4, 1 + (w % 4) * 7, 40 + w, "<1" if w < 3 else str(10 + w)) for w in range(44)))
+
+    def test_parse_formats(self):
+        from app.models import gtrend
+        from app.models.base import ValidationError
+        p = gtrend.parse_csv(self.OLD.encode("utf-8-sig"))
+        self.assertEqual(p["terms"], [("ข้าวหอมมะลิ", "Thailand"), ("สีข้าว", "Thailand")])
+        self.assertEqual(p["gran"], "W")
+        self.assertEqual(p["points"][0][1][1], 0.5)                                    # "<1"
+        new = '"Time","glutinous rice"\n"2024-01","55"\n"2024-02","60"\n"2024-03","72"\n'
+        p2 = gtrend.parse_csv(new.encode())
+        self.assertEqual((p2["terms"][0][0], p2["gran"]), ("glutinous rice", "M"))
+        with self.assertRaises(ValidationError) as ctx:
+            gtrend.parse_csv("Category: All categories\n\nRegion,rice: (11/5/24 - 11/5/25)\nKhon Kaen,100\nUdon Thani,80\n".encode())
+        self.assertEqual(ctx.exception.key, "gtErrGeo")
+        with self.assertRaises(ValidationError):
+            gtrend.parse_csv(b"hello,world\nfoo,bar\n")
+        self.assertEqual(gtrend.guess_kind("ข้าวเหนียวเขี้ยวงู"), "GL")
+        self.assertEqual(gtrend.guess_kind("โรงสีข้าว ขอนแก่น"), "MILLING")
+        s = gtrend.signal([("2025-%02d-01" % m, v) for m, v in zip(range(1, 13), [10, 10, 10, 10, 12, 12, 12, 12, 20, 20, 30, 30])], "M")
+        self.assertEqual(s["label"], "rising")
+        self.assertEqual(s["peak_month"], 11)
+
+    def test_upload_page_and_ai(self):
+        import io
+        self.login("admin")
+        self.client.get("/lang/en")
+        url = "/automation/ai/prices?sku=PADDY_HM"
+        self.assertIn("No data yet", self.text(url))
+        data = {"action": "gt_upload", "sku": "PADDY_HM", "csrf_token": self.token(url), "GT_FILE": (io.BytesIO(self.OLD.encode("utf-8-sig")), "multiTimeline.csv")}
+        r = self.client.post("/automation/ai/prices", data=data, content_type="multipart/form-data")
+        self.assertEqual(r.status_code, 302)
+        page = self.text(url)
+        self.assertIn("Google Trends imported: 2 term(s)", page)
+        self.assertIn('class="gt-chart"', page)
+        self.assertIn('data-gt="ข้าวหอมมะลิ" class="gt-hit"', page)                  # the jasmine SKU highlights its term
+        self.assertIn("Milling service", page)
+        self.post("/automation/ai/prices", {"action": "gt_kind", "TERM": "สีข้าว", "GEO": "Thailand", "KIND": "OTHER"}, url)
+        self.assertEqual([t["KIND"] for t in self.db("AOIMS_GTRENDTERM") if t["TERM"] == "สีข้าว"], ["OTHER"])
+        with self.app.test_request_context():
+            from app.models import ai
+            snap = ai.snapshot("factory2")
+        terms = {m["term"]: m for m in snap["market_interest"]}
+        self.assertEqual(terms["ข้าวหอมมะลิ"]["about"], "HM")
+        self.assertIn(terms["ข้าวหอมมะลิ"]["label"], ("rising", "flat", "falling"))
+        # a second download is its own batch: the newest one is read
+        data["csrf_token"] = self.token(url); data["GT_FILE"] = (io.BytesIO('"Time","ข้าวหอมมะลิ: (Thailand)"\n"2025-10-05","90"\n"2025-10-12","95"\n'.encode()), "b.csv")
+        self.client.post("/automation/ai/prices", data=data, content_type="multipart/form-data")
+        with self.app.app_context():
+            from app.models import gtrend
+            pts, b = gtrend.series("ข้าวหอมมะลิ", "Thailand")
+        self.assertEqual(len(pts), 2)
+        bid = b["BATCH_ID"]
+        self.post("/automation/ai/prices", {"action": "gt_delete", "BATCH_ID": bid}, url)
+        self.assertNotIn(bid, [x["BATCH_ID"] for x in self.db("AOITS_GTRENDBATCH")])
+        self.assertEqual(len([x for x in self.db("AOITS_GTREND") if x["BATCH_ID"] == bid]), 0)
+        self.assertIn('id="cp-entry-gtrend"', self.text("/finance/marketing?branch=factory2"))
