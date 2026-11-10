@@ -3,37 +3,62 @@
 {% macro money(v) %}{{ '{:,.2f}'.format(v) if v is not none else '-' }}{% endmacro %}
 {% block content %}
 {# update 122 (Tim): product transformation formulas - several per product, costing at the branch's prices, AI comparison #}
-<div id="tab-formulas">
-{{ page_head(t('fmTitle'), url_for('automation.ai_screen')) }}
-<div class="card gap"><p class="desc-text">{{ t('fmDesc') }}</p></div>
-<div class="card branch-pick-card">{{ branch_picker('automation.ai_formulas', branch, branches, 'fm-branch-select') }}
-  <p class="cap-note">{{ t('fmBranchNote') }}</p></div>
+<div id="tab-formulas" class="fmd">
+{{ page_head(None, url_for('automation.ai_screen')) }}
+{# update 123 (Tim): dashboard look - gradient tiles, charts and a heat table #}
+{% macro bar_chart(ch, cid) %}<svg class="fmd-chart" id="{{ cid }}" viewBox="0 0 {{ ch.w }} {{ ch.h }}" role="img">
+  {% for k in ch.ticks %}<line x1="{{ ch.pl }}" x2="{{ ch.w - ch.pr }}" y1="{{ k.y }}" y2="{{ k.y }}" class="fmd-grid"/><text x="{{ ch.pl - 6 }}" y="{{ k.y + 4 }}" text-anchor="end" class="fmd-ax">{{ k.text }}</text>{% endfor %}
+  {% for b in ch.bars %}<rect x="{{ b.x }}" y="{{ b.y }}" width="{{ b.w }}" height="{{ b.h }}" rx="3" fill="{{ b.color }}"><title>{{ b.tip }}</title></rect>{% endfor %}
+  <line x1="{{ ch.pl }}" x2="{{ ch.w - ch.pr }}" y1="{{ ch.zero }}" y2="{{ ch.zero }}" class="fmd-zero"/>
+  {% for l in ch.labels %}<text x="{{ l.x }}" y="{{ ch.h - ch.pb + 16 }}" text-anchor="end" transform="rotate(-18 {{ l.x }} {{ ch.h - ch.pb + 16 }})" class="fmd-ax">{{ l.text }}</text>{% endfor %}
+</svg>
+<div class="fmd-legend">{% for sr in ch.series %}<span><svg width="10" height="10" aria-hidden="true"><circle cx="5" cy="5" r="5" fill="{{ sr.color }}"/></svg>{{ sr.name }}</span>{% endfor %}</div>{% endmacro %}
+<div class="fmd-band"><div><p class="fmd-band-title">&#129514; {{ t('fmTitle') }}</p><p class="fmd-band-desc">{{ t('fmDesc') }}</p></div>
+  <div class="fmd-band-pick">{{ branch_picker('automation.ai_formulas', branch, branches, 'fm-branch-select') }}</div></div>
 
-<div class="co-stats">
-  <div class="card co-stat"><small>{{ t('fmStatAll') }}</small><b id="fm-n-all">{{ counts.all }}</b></div>
-  <div class="card co-stat"><small>{{ t('fmStatActive') }}</small><b>{{ counts.active }}</b></div>
-  <div class="card co-stat"><small>{{ t('fmStatReady') }}</small><b id="fm-n-ready">{{ counts.ready }}</b></div>
-  <div class="card co-stat good"><small>{{ t('fmStatBetter') }}</small><b id="fm-n-better">{{ counts.better }}</b></div>
+<div class="fmd-tiles">
+  <div class="fmd-tile t1"><small>{{ t('fmStatActive') }} / {{ t('fmStatAll') }}</small><b><span>{{ counts.active }}</span> / <span id="fm-n-all">{{ counts.all }}</span></b></div>
+  <div class="fmd-tile t2"><small>{{ t('fmStatReady') }}</small><b id="fm-n-ready">{{ counts.ready }}</b></div>
+  <div class="fmd-tile t3"><small>{{ t('fmStatBetter') }}</small><b id="fm-n-better">{{ counts.better }}</b></div>
+  <div class="fmd-tile t4"><small>{{ t('fmTileBestValue') }}</small><b>{{ money(dash.best_value.c.per_kg) if dash.best_value else '-' }}</b>{% if dash.best_value %}<i>{{ dash.best_value.FORMULA_NAME }}</i>{% endif %}</div>
+  <div class="fmd-tile t5"><small>{{ t('fmTileBestProfit') }}</small><b>{{ money(dash.best_profit.c.profit) if dash.best_profit else '-' }}</b>{% if dash.best_profit %}<i>{{ dash.best_profit.FORMULA_NAME }}</i>{% endif %}</div>
+  <div class="fmd-tile t6"><small>{{ t('fmTilePotential') }}</small><b>{{ '{:,.0f}'.format(dash.potential) if dash.potential is not none else '-' }}</b><i>{{ t('fmTilePotentialNote') }}</i></div>
 </div>
 
-<div class="card mt14" id="fm-compare">
-  <div class="card-head"><p class="card-title">&#9878; {{ t('fmCompare') }}</p></div>
+<div class="fmd-panels">
+  <div class="fmd-panel" id="fm-donut"><p class="fmd-title">{{ t('fmChartSource') }}</p>
+    {% if dash.donut %}<div class="fmd-donut"><svg viewBox="0 0 220 220" role="img" aria-label="{{ t('fmChartSource') }}">
+      {% for d in dash.donut %}<path d="{{ d.d }}" fill="{{ d.color }}"><title>{{ d.label }}: {{ d.value }} ({{ d.pct }}%)</title></path>{% endfor %}
+      <text x="110" y="106" text-anchor="middle" class="fmd-donut-n">{{ dash.donut_total }}</text><text x="110" y="126" text-anchor="middle" class="fmd-ax">{{ t('fmList') }}</text></svg>
+      <ul class="fmd-donut-legend">{% for d in dash.donut %}<li><svg width="10" height="10" aria-hidden="true"><circle cx="5" cy="5" r="5" fill="{{ d.color }}"/></svg>{{ d.label }} <b>{{ d.pct }}%</b></li>{% endfor %}</ul></div>
+    {% else %}<p class="hint">{{ t('fmNone') }}</p>{% endif %}</div>
+  <div class="fmd-panel" id="fm-chart-value"><p class="fmd-title">{{ t('fmChartValue') }}</p>
+    {% if dash.value_chart %}{{ bar_chart(dash.value_chart, 'fm-svg-value') }}{% else %}<p class="hint">{{ t('fmCompareNone') }}</p>{% endif %}</div>
+  <div class="fmd-panel" id="fm-chart-money"><p class="fmd-title">{{ t('fmChartMoney') }}</p>
+    {% if dash.money_chart %}{{ bar_chart(dash.money_chart, 'fm-svg-money') }}{% else %}<p class="hint">{{ t('fmCompareNone') }}</p>{% endif %}</div>
+</div>
+
+<div class="fmd-panel mt14" id="fm-compare">
+  <p class="fmd-title">&#9878; {{ t('fmCompare') }}</p>
   <p class="cap-note tight">{{ t('fmCompareNote') }}</p>
-  {% if ranking %}{% for mat, items in ranking %}
-  <p class="fm-src-title">{{ mat_name(mat) }} <small class="hint">&middot; {{ t('fmRawPrice') }} {{ money(items[0].c.raw_price) }} {{ t('fmPerKg') }}</small></p>
-  <div class="inv-table-wrap"><table class="tv-table fm-rank">
-    <thead><tr><th>#</th><th>{{ t('fmFormula') }}</th><th class="num">{{ t('fmProfitBatch') }}</th><th class="num">{{ t('fmValueKg') }}</th>
-      <th class="num">{{ t('fmGainKg') }}</th><th class="num">{{ t('fmBatches') }}</th></tr></thead>
-    <tbody>{% for r in items %}
-    <tr><td>{{ loop.index }}</td><td><a href="#fm-{{ r.FORMULA_ID }}"><b>{{ r.FORMULA_NAME }}</b></a><br><small class="hint">{{ r.OUTPUT_QTY }} {{ t('fmUnit_' ~ r.OUTPUT_UNIT) }} {{ r.OUTPUT_NAME }}</small></td>
-      <td class="num">{{ money(r.c.profit) }}</td><td class="num"><b>{{ money(r.c.per_kg) }}</b></td>
-      <td class="num">{% if r.c.gain_kg is not none %}<span class="badge {{ 'approved' if r.c.gain_kg > 0 else 'blocked' }}">{{ '%+.2f'|format(r.c.gain_kg) }}</span>{% else %}-{% endif %}</td>
-      <td class="num">{{ r.c.batches }}</td></tr>{% endfor %}</tbody>
+  {% if dash.table %}
+  <div class="inv-table-wrap"><table class="fmd-table fm-rank">
+    <thead><tr><th>{{ t('fmFormula') }}</th><th>{{ t('fmSourceShort') }}</th><th class="num">{{ t('fmProfitBatch') }}</th><th class="num">{{ t('fmMargin') }}</th><th class="num">{{ t('fmUnitCostShort') }}</th>
+      <th class="num">{{ t('fmValueKg') }}</th><th class="num">{{ t('fmGainKg') }}</th><th class="num">{{ t('fmBatches') }}</th></tr></thead>
+    <tbody>{% for r in dash.table %}
+    <tr><td><a href="#fm-{{ r.FORMULA_ID }}"><b>{{ r.FORMULA_NAME }}</b></a><br><small class="hint">{{ r.OUTPUT_QTY }} {{ t('fmUnit_' ~ r.OUTPUT_UNIT) }} {{ r.OUTPUT_NAME }}</small></td>
+      <td>{{ mat_name(r.SOURCE_MAT) }}<br><small class="hint">{{ t('fmRawPrice') }} {{ money(r.c.raw_price) }}</small></td>
+      <td class="num hp{{ r.heat.profit }}">{{ money(r.c.profit) }}</td>
+      <td class="num ho{{ r.heat.margin }}">{{ r.c.margin_pct if r.c.margin_pct is not none else '-' }}%</td>
+      <td class="num hs{{ r.heat.cost }}">{{ money(r.c.unit_cost) }}</td>
+      <td class="num hb{{ r.heat.per_kg }}"><b>{{ money(r.c.per_kg) }}</b></td>
+      <td class="num hg{{ r.heat.gain }}">{% if r.c.gain_kg is not none %}{{ '%+.2f'|format(r.c.gain_kg) }}{% else %}-{% endif %}</td>
+      <td class="num hc{{ r.heat.batches }}">{{ r.c.batches }}</td></tr>{% endfor %}</tbody>
   </table></div>
-  {% endfor %}{% else %}<p class="hint">{{ t('fmCompareNone') }}</p>{% endif %}
+  {% else %}<p class="hint">{{ t('fmCompareNone') }}</p>{% endif %}
 </div>
 
-<div class="card mt14" id="fm-ai">
+<div class="card fmd-card mt14" id="fm-ai">
   <div class="card-head"><p class="card-title">&#129302; {{ t('fmAi') }}</p>
     {% if can_create and ai_ready %}<form method="post" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="branch" value="{{ branch }}">
       <button class="action small primary" type="submit" name="action" value="ai" id="fm-ai-btn"{% if ai_job and ai_job.STATUS == 'R' %} disabled{% endif %}>&#10024; {{ t('fmAiRun') }}</button></form>{% endif %}</div>
@@ -46,13 +71,14 @@
   {% elif ai_ready %}<p class="hint">{{ t('fmAiNone') }}</p>{% endif %}
 </div>
 
-<div class="card mt14" id="fm-list">
+<div class="card fmd-card mt14" id="fm-list">
   <div class="card-head"><p class="card-title">&#129514; {{ t('fmList') }}</p>
     {% if can_edit %}<a class="action small primary" id="fm-new" href="{{ url_for('automation.ai_formulas', branch=branch, src=source, edit='new', _anchor='fm-edit') }}">+ {{ t('fmNew') }}</a>{% endif %}</div>
   <nav class="chips">
     <a class="chip{% if not source %} active{% endif %}" href="{{ url_for('automation.ai_formulas', branch=branch, _anchor='fm-list') }}">{{ t('fmAll') }}</a>
     {% for m in sources if src_counts[m] %}<a class="chip{% if m == source %} active{% endif %}" href="{{ url_for('automation.ai_formulas', branch=branch, src=m, _anchor='fm-list') }}">{{ mat_name(m) }} ({{ src_counts[m] }})</a>{% endfor %}
   </nav>
+  <div class="fmd-list-grid">
   {% for f in rows %}{% set c = f.c %}
   <article class="fm-card{% if f.STATUS != 'A' %} lf-off{% endif %}" id="fm-{{ f.FORMULA_ID }}">
     <div class="fm-head"><div><b class="fm-name">{{ f.FORMULA_NAME }}</b>
@@ -85,6 +111,7 @@
     {% if f.SOURCE_REF %}<p class="cap-note tight">{{ t('fmRef') }} {% if f.SOURCE_REF.startswith('http') %}<a href="{{ f.SOURCE_REF }}" rel="noopener" target="_blank">{{ f.SOURCE_REF[:70] }}{% if f.SOURCE_REF|length > 70 %}&hellip;{% endif %}</a>{% else %}{{ f.SOURCE_REF }}{% endif %}</p>{% endif %}
   </article>
   {% else %}<p class="hint center">{{ t('fmNone') }}</p>{% endfor %}
+  </div>
 </div>
 
 {% if can_edit and edit %}{% set e = edit_doc or {} %}

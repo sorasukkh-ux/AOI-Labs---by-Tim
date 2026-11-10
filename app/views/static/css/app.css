@@ -1782,3 +1782,45 @@ body.leaflet-page { background: #e5e7eb; font-family: "Prompt", "IBM Plex Sans T
 .fm-form textarea { width: 100%; }
 #fm-list > .card-head, #fm-ai > .card-head, #fm-edit > .card-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
 #fm-list > .card-head .action, #fm-ai > .card-head .action, #fm-edit > .card-head .action, #fm-ai .inline-form .action { width: auto; margin: 0; }
+/* update 123: product transformation formulas - dashboard look (gradient tiles, charts, heat table) */
+.fmd-band { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; padding: 18px 20px; border-radius: 16px;
+  background: linear-gradient(120deg, #1e3a8a, #2563eb 55%, #0ea5e9); color: #fff; box-shadow: 0 10px 24px rgba(30, 58, 138, .22); }
+.fmd-band-title { font-size: 22px; font-weight: 800; margin: 0 0 4px; } .fmd-band-desc { margin: 0; font-size: 13px; opacity: .9; max-width: 640px; line-height: 1.5; }
+.fmd-band-pick { background: rgba(255, 255, 255, .14); border-radius: 12px; padding: 10px 12px; min-width: 220px; }
+.fmd-band-pick .field-label { color: #fff; } .fmd-band-pick .field-row { margin: 0; }
+.fmd-tiles { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-top: 12px; }
+@media (max-width: 1000px) { .fmd-tiles { grid-template-columns: repeat(3, 1fr); } } @media (max-width: 560px) { .fmd-tiles { grid-template-columns: repeat(2, 1fr); } }
+.fmd-tile { border-radius: 14px; padding: 14px 16px; color: #fff; display: flex; flex-direction: column; gap: 4px; min-height: 92px; box-shadow: 0 8px 18px rgba(15, 23, 42, .14); overflow: hidden; }
+.fmd-tile small { font-size: 12.5px; opacity: .92; } .fmd-tile b { font-size: 28px; line-height: 1.1; font-weight: 800; }
+.fmd-tile i { font-style: normal; font-size: 11.5px; opacity: .9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fmd-tile.t1 { background: linear-gradient(135deg, #7c3aed, #4f46e5); } .fmd-tile.t2 { background: linear-gradient(135deg, #1d4ed8, #1e40af); }
+.fmd-tile.t3 { background: linear-gradient(135deg, #0ea5e9, #0284c7); } .fmd-tile.t4 { background: linear-gradient(135deg, #14b8a6, #22c55e); }
+.fmd-tile.t5 { background: linear-gradient(135deg, #ec4899, #ef4444); } .fmd-tile.t6 { background: linear-gradient(135deg, #a855f7, #7e22ce); }
+.fmd-panels { display: grid; grid-template-columns: 1fr 1.25fr 1.25fr; gap: 12px; margin-top: 12px; }
+@media (max-width: 1000px) { .fmd-panels { grid-template-columns: 1fr; } }
+.fmd-panel, .fmd-card { background: var(--surface, #fff); border: 1px solid #e0e7ff; border-radius: 16px; padding: 14px 16px; box-shadow: 0 6px 16px rgba(30, 64, 175, .07); }
+.fmd-title { font-weight: 800; font-size: 16px; margin: 0 0 8px; color: #0f172a; }
+.fmd-chart { width: 100%; height: auto; display: block; } .fmd-grid { stroke: #e2e8f0; stroke-width: 1; } .fmd-zero { stroke: #64748b; stroke-width: 1.2; }
+.fmd-ax { font: 11px sans-serif; fill: #64748b; }
+.fmd-legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: #475569; margin-top: 4px; } .fmd-legend span, .fmd-donut-legend li { display: flex; align-items: center; gap: 6px; }
+.fmd-donut { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; } .fmd-donut svg[viewBox] { width: 170px; height: 170px; flex: 0 0 auto; }
+.fmd-donut-n { font: 800 30px sans-serif; fill: #0f172a; }
+.fmd-donut-legend { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: #334155; }
+.fmd-table { width: 100%; border-collapse: separate; border-spacing: 0 3px; font-size: 14px; }
+.fmd-table th { text-align: left; font-size: 12.5px; color: #334155; padding: 6px 10px; border-bottom: 2px solid #e2e8f0; white-space: nowrap; }
+.fmd-table th.num, .fmd-table td.num { text-align: right; } .fmd-table td { padding: 8px 10px; background: #f8fafc; }
+.fmd-table td:first-child { border-radius: 8px 0 0 8px; } .fmd-table td:last-child { border-radius: 0 8px 8px 0; }
+.fmd-table td.hp0 { background: #f3e8ff; } .fmd-table td.hp1 { background: #e9d5ff; } .fmd-table td.hp2 { background: #d8b4fe; } .fmd-table td.hp3 { background: #c084fc; } .fmd-table td.hp4 { background: #a855f7; color: #fff; }
+.fmd-table td.hb0 { background: #e0f2fe; } .fmd-table td.hb1 { background: #bae6fd; } .fmd-table td.hb2 { background: #7dd3fc; } .fmd-table td.hb3 { background: #38bdf8; } .fmd-table td.hb4 { background: #0ea5e9; color: #fff; }
+.fmd-table td.hg0 { background: #fee2e2; } .fmd-table td.hg1 { background: #fef9c3; } .fmd-table td.hg2 { background: #dcfce7; } .fmd-table td.hg3 { background: #86efac; } .fmd-table td.hg4 { background: #22c55e; color: #fff; }
+.fmd-table td.ho0 { background: #ffedd5; } .fmd-table td.ho1 { background: #fed7aa; } .fmd-table td.ho2 { background: #fdba74; } .fmd-table td.ho3 { background: #fb923c; } .fmd-table td.ho4 { background: #f97316; color: #fff; }
+.fmd-table td.hs0 { background: #f1f5f9; } .fmd-table td.hs1 { background: #e2e8f0; } .fmd-table td.hs2 { background: #cbd5e1; } .fmd-table td.hs3 { background: #94a3b8; color: #fff; } .fmd-table td.hs4 { background: #64748b; color: #fff; }
+.fmd-table td.hc0 { background: #ccfbf1; } .fmd-table td.hc1 { background: #99f6e4; } .fmd-table td.hc2 { background: #5eead4; } .fmd-table td.hc3 { background: #2dd4bf; } .fmd-table td.hc4 { background: #14b8a6; color: #fff; }
+.fmd .fm-card { border-color: #e0e7ff; border-radius: 14px; } .fmd .fm-kpis > div { background: linear-gradient(135deg, #eff6ff, #f5f3ff); }
+.fmd .fm-lines thead th { background: #eef2ff; }
+.fmd .fm-form, .fmd #fm-list .fm-card { max-width: none; }
+@media (min-width: 1000px) { .fmd-list-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; } .fmd-list-grid .fm-card { margin-top: 0; } }
+.fmd-list-grid { margin-top: 12px; }
+.fmd-table a { color: #1e3a8a; text-decoration: none; } .fmd-table a:hover { text-decoration: underline; }
+@media (max-width: 700px) { .fmd-table { min-width: 660px; } }
+.fm-card .cap-note a { overflow-wrap: anywhere; word-break: break-all; } .fm-card { min-width: 0; }

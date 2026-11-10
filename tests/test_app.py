@@ -5414,3 +5414,33 @@ class Update122(Base):
             self.assertTrue(data["formulas"])
             self.assertIn("missing", data["formulas"][0])
             self.assertIn("formula", __import__("app.models.ai_job", fromlist=["KINDS"]).KINDS)
+
+
+class Update123(Base):
+    """Formulas page in the dashboard look: gradient tiles, donut, bar charts and a heat table."""
+
+    def test_dashboard(self):
+        self.login("admin")
+        self.client.get("/lang/en")
+        url = "/automation/ai/formulas?branch=factory2"
+        page = self.text(url)
+        for part in ('class="fmd-band"', 'class="fmd-tile t1"', 'class="fmd-tile t6"', 'id="fm-donut"', 'id="fm-compare"', 'class="wide"'):
+            self.assertIn(part, page)
+        self.assertNotIn('id="fm-svg-value"', page)                  # nothing costed yet: no bars
+        self.assertNotIn(" style=", page.split('id="tab-formulas"')[1].split("</main>")[0] if "</main>" in page else "")
+        with self.app.test_request_context():
+            from app.models import formula as fm
+            from app.models.base import col
+            col("AOIMS_FORMULA").update_many({}, {"$set": {"OUTPUT_PRICE": 50.0}})
+            for f in fm.all_formulas():
+                ins = [dict(i, PRICE=1.0 if i["PRICE"] is None else i["PRICE"]) for i in f["INPUTS"]]
+                col("AOIMS_FORMULA").update_one({"FORMULA_ID": f["FORMULA_ID"]}, {"$set": {"INPUTS": ins}})
+            d = fm.dashboard(fm.overview("factory2"), {"value": "v", "raw": "r", "cost": "c", "revenue": "rev"})
+            self.assertEqual(len(d["table"]), 4)
+            self.assertEqual(max(r["heat"]["per_kg"] for r in d["table"]), 4)
+            self.assertEqual(sum(x["value"] for x in d["donut"]), 4)
+            self.assertEqual(len(d["value_chart"]["bars"]), 8)
+            self.assertEqual(fm._heat([5, 5, None]), [1, 1, None])
+        page = self.text(url)
+        for part in ('id="fm-svg-value"', 'id="fm-svg-money"', 'class="num hb4"', "Best value per kg"):
+            self.assertIn(part, page)

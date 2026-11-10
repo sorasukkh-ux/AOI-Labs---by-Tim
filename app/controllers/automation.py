@@ -568,7 +568,9 @@ def ai_formulas():
     job = ai_job.get(request.args.get("job")) or ai_job.running("formula")
     last = fm.last_ai(branch)
     from ..models.competitor import light_md, ai_ready
-    return render_template("automation/formulas.html", branch=branch, branches=maintainable_branches(), rows=rows, source=source,
+    dash = fm.dashboard(every, dict({m: mat_name(m) for m in fm.SOURCES}, value=t("fmValueKgShort"), raw=t("fmRawPrice"),
+                                    cost=t("fmTotalCost"), revenue=t("fmRevenue")))
+    return render_template("automation/formulas.html", dash=dash, branch=branch, branches=maintainable_branches(), rows=rows, source=source,
                            sources=fm.SOURCES, src_counts={m: sum(1 for r in every if r["SOURCE_MAT"] == m) for m in fm.SOURCES},
                            ranking=fm.ranking(every), counts=fm.counts(every), units=fm.UNITS, max_inputs=fm.MAX_INPUTS,
                            mats=[m for m in fm.SOURCES], edit=edit, edit_doc=edit_doc, ai_job=job, ai_last=last, ai_md=light_md,

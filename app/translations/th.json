@@ -2386,5 +2386,16 @@
  "fmUnit_pack": "ซอง",
  "fmUnit_piece": "ชิ้น",
  "fmUnit_bag": "ถุง",
- "fmUnit_set": "ชุด"
+ "fmUnit_set": "ชุด",
+ "fmValueKgShort": "มูลค่า/กก.",
+ "fmTileBestValue": "มูลค่า/กก. สูงสุด",
+ "fmTileBestProfit": "กำไร/รอบ สูงสุด",
+ "fmTilePotential": "กำไรจากสต็อกว่าง (บาท)",
+ "fmTilePotentialNote": "ถ้าแปรรูปสต็อกว่างด้วยสูตรที่ดีที่สุด",
+ "fmChartSource": "สูตรตามวัตถุดิบ",
+ "fmChartValue": "มูลค่า/กก. เทียบราคาขายดิบ",
+ "fmChartMoney": "ต้นทุนและรายได้ต่อรอบ",
+ "fmSourceShort": "วัตถุดิบ",
+ "fmMargin": "กำไร %",
+ "fmUnitCostShort": "ต้นทุน/หน่วย"
 }

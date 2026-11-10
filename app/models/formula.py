@@ -354,3 +354,96 @@ def seed_templates(db):
         db[COL].insert_one(doc)
     db["AOISYS_COUNTER"].insert_one({"COUNTER_KEY": "MIG-FORMULA-TPL", "SEQ": 1})
     return n
+
+
+# ---------- update 123: dashboard look (gradient tiles, charts, heat table) ----------
+PALETTE = ["#2563eb", "#38bdf8", "#7c3aed", "#94a3b8", "#22c55e", "#f97316", "#ec4899", "#14b8a6", "#eab308"]
+
+
+def _donut(parts, r=78, w=30, cx=110, cy=110):
+    """[(label, value)] -> ring segments as SVG paths (a single part is drawn as two half rings)."""
+    import math
+    total = sum(v for _l, v in parts) or 1
+    out, a0 = [], -math.pi / 2
+    for k, (label, value) in enumerate(parts):
+        frac = value / total
+        steps = [frac / 2, frac / 2] if frac > 0.999 else [frac]
+        ds = []
+        for f in steps:
+            a1 = a0 + f * 2 * math.pi
+            ro, ri = r + w / 2, r - w / 2
+            big = 1 if f > 0.5 else 0
+            ds.append("M%.1f %.1f A%.1f %.1f 0 %d 1 %.1f %.1f L%.1f %.1f A%.1f %.1f 0 %d 0 %.1f %.1f Z" % (
+                cx + ro * math.cos(a0), cy + ro * math.sin(a0), ro, ro, big, cx + ro * math.cos(a1), cy + ro * math.sin(a1),
+                cx + ri * math.cos(a1), cy + ri * math.sin(a1), ri, ri, big, cx + ri * math.cos(a0), cy + ri * math.sin(a0)))
+            a0 = a1
+        out.append({"label": label, "value": value, "pct": round_half_up(frac * 100, 1), "color": PALETTE[k % len(PALETTE)], "d": " ".join(ds)})
+    return out
+
+
+def _bars(items, series, w=560, h=230, pl=44, pr=10, pt=14, pb=44):
+    """Grouped bars. items: [(label, [values per series])]; negative values hang below the zero line."""
+    vals = [v for _l, vs in items for v in vs if v is not None]
+    if not vals:
+        return None
+    hi, lo = max(vals + [0]), min(vals + [0])
+    span = (hi - lo) or 1
+    Y = lambda v: pt + (hi - v) / span * (h - pt - pb)
+    group = (w - pl - pr) / len(items)
+    bw = min(34, group * 0.8 / len(series))
+    bars, labels = [], []
+    for k, (label, vs) in enumerate(items):
+        x0 = pl + k * group + (group - bw * len(series)) / 2
+        for s, v in enumerate(vs):
+            if v is None:
+                continue
+            y, y0 = Y(max(v, 0)), Y(min(v, 0))
+            bars.append({"x": round(x0 + s * bw, 1), "y": round(y, 1), "w": round(bw - 2, 1), "h": round(max(1.5, y0 - y), 1),
+                         "color": series[s][1], "tip": "%s · %s: %s" % (label, series[s][0], "{:,.2f}".format(v))})
+        labels.append({"x": round(pl + k * group + group / 2, 1), "text": label if len(label) <= 14 else label[:13] + "…"})
+    ticks = [{"y": round(Y(v), 1), "text": "{:,.0f}".format(v) if abs(v) >= 10 else "%.1f" % v} for v in (lo + span * i / 4 for i in range(5))]
+    return {"w": w, "h": h, "pl": pl, "pr": pr, "pb": pb, "zero": round(Y(0), 1), "bars": bars, "labels": labels, "ticks": ticks,
+            "series": [{"name": n, "color": c} for n, c in series]}
+
+
+def _heat(values):
+    """Each value's level 0-4 within its column (None stays None); the largest is 4."""
+    nums = [v for v in values if v is not None]
+    if not nums:
+        return [None] * len(values)
+    lo, hi = min(nums), max(nums)
+    return [None if v is None else (1 if hi == lo else int(round((v - lo) / (hi - lo) * 4))) for v in values]
+
+
+def dashboard(rows, labels):
+    """Everything the dashboard part of the page draws. `labels`: translated names {mat: name, 'value', 'raw', 'cost', 'revenue'}."""
+    active = [r for r in rows if r["STATUS"] == "A"]
+    costed = sorted((r for r in active if r["c"]["per_kg"] is not None), key=lambda r: -r["c"]["per_kg"])
+    best_value = costed[0] if costed else None
+    best_profit = max(costed, key=lambda r: r["c"]["profit"]) if costed else None
+    best = {}                                                # per source product: the formula that earns most from the free stock
+    for r in costed:
+        gain = r["c"]["profit"] * r["c"]["batches"]
+        if gain > best.get(r["SOURCE_MAT"], (0, None))[0]:
+            best[r["SOURCE_MAT"]] = (gain, r)
+    by_src = {}
+    for r in active:
+        by_src[r["SOURCE_MAT"]] = by_src.get(r["SOURCE_MAT"], 0) + 1
+    top = costed[:8]
+    table = [dict(r, heat={}) for r in costed]
+    for col_key, get_v in (("profit", lambda r: r["c"]["profit"]), ("per_kg", lambda r: r["c"]["per_kg"]),
+                           ("gain", lambda r: r["c"]["gain_kg"]), ("margin", lambda r: r["c"]["margin_pct"]),
+                           ("batches", lambda r: r["c"]["batches"]), ("cost", lambda r: r["c"]["unit_cost"])):
+        for r, level in zip(table, _heat([get_v(r) for r in costed])):
+            r["heat"][col_key] = level
+    return {
+        "best_value": best_value, "best_profit": best_profit,
+        "potential": round_half_up(sum(g for g, _r in best.values()), 2) if best else None,
+        "donut": _donut([(labels.get(m, m), n) for m, n in by_src.items()]) if by_src else [],
+        "donut_total": len(active),
+        "value_chart": _bars([(r["FORMULA_NAME"], [r["c"]["per_kg"], r["c"]["raw_price"]]) for r in top],
+                             [(labels["value"], "#2563eb"), (labels["raw"], "#94a3b8")]) if top else None,
+        "money_chart": _bars([(r["FORMULA_NAME"], [r["c"]["total"], r["c"]["revenue"]]) for r in top],
+                             [(labels["cost"], "#7c3aed"), (labels["revenue"], "#38bdf8")]) if top else None,
+        "table": table,
+    }

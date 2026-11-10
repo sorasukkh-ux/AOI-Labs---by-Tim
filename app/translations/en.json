@@ -2386,5 +2386,16 @@
  "fmUnit_pack": "sachet",
  "fmUnit_piece": "piece",
  "fmUnit_bag": "bag",
- "fmUnit_set": "set"
+ "fmUnit_set": "set",
+ "fmValueKgShort": "Value per kg",
+ "fmTileBestValue": "Best value per kg",
+ "fmTileBestProfit": "Best profit per batch",
+ "fmTilePotential": "Profit from free stock (THB)",
+ "fmTilePotentialNote": "if the free stock goes to the best formula",
+ "fmChartSource": "Formulas by source product",
+ "fmChartValue": "Value per kg vs raw price",
+ "fmChartMoney": "Cost and revenue per batch",
+ "fmSourceShort": "Source",
+ "fmMargin": "Margin %",
+ "fmUnitCostShort": "Cost per unit"
 }
