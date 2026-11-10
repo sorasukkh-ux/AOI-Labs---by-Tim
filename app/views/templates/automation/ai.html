@@ -231,6 +231,19 @@
   {% if co_ai_time %}<p class="cap-note">&#129302; {{ t('coAiLast') }} {{ co_ai_time }}</p>{% endif %}
 </section>
 
+{# update 122 (Tim): product transformation formulas (bran -> fertilizer, husk -> charcoal ...) #}
+<section class="card dash-card" id="ai-formulas">
+  <div class="dash-head"><p class="card-title sub">&#129514; {{ t('fmTitle') }}</p><a class="action small" href="{{ url_for('automation.ai_formulas') }}" id="fm-open">{{ t('fmOpen') }} &rarr;</a></div>
+  <div class="co-stats co-stats-mini">
+    <div class="co-stat"><small>{{ t('fmStatActive') }}</small><b>{{ fm_counts.active }}</b></div>
+    <div class="co-stat"><small>{{ t('fmStatReady') }}</small><b>{{ fm_counts.ready }}</b></div>
+    <div class="co-stat good"><small>{{ t('fmStatBetter') }}</small><b>{{ fm_counts.better }}</b></div>
+  </div>
+  {% if fm_best %}<ul class="co-risk-list">{% for r in fm_best %}
+    <li><b>{{ r.FORMULA_NAME }}</b> &middot; {{ t('fmValueKg') }} {{ '%.2f'|format(r.c.per_kg) }}{% if r.c.gain_kg is not none %} &middot; <span class="co-gap {{ 'good' if r.c.gain_kg > 0 else 'bad' }}">{{ '%+.2f'|format(r.c.gain_kg) }}</span>{% endif %}</li>{% endfor %}</ul>
+  {% else %}<p class="hint">{{ t('fmCardHint') }}</p>{% endif %}
+</section>
+
 <div class="dash-grid mt14">
 <section class="card dash-card span2" id="ai-price" data-live>
   <div class="dash-head"><p class="card-title sub">{{ t('aiPrice') }}</p>{% if can('FN_PRICING') %}<a class="action small" href="{{ url_for('finance.pricing') }}">{{ t('tabPricing') }} &rarr;</a>{% endif %}</div>

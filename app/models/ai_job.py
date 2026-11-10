@@ -15,7 +15,7 @@ from ..timeutil import now_utc
 
 COL = "AOITS_AIJOB"
 RUN_MINUTES = 12                  # a job still "running" after this is treated as failed (server restarted)
-KINDS = ("aiweb", "aihist")
+KINDS = ("aiweb", "aihist", "formula")       # update 122: formula = product transformation analysis
 _THREADS = []                     # tests wait for these
 
 

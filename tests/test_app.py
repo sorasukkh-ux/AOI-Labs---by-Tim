@@ -5323,64 +5323,94 @@ class Update119(Base):
         self.assertIn('data-tv-path="/tv/factory2/prices?key=', card)
 
 
-class Update120(Base):
-    """Market interest from Google Trends CSV downloads on AI > Price analysis."""
+class Update121(Base):
+    """Google Trends removed (Tim): no card, no upload action, no link, no AI field; old data is dropped by the seed."""
 
-    OLD = ("Category: All categories\n\nWeek,ข้าวหอมมะลิ: (Thailand),สีข้าว: (Thailand)\n" +
-           "".join("2025-%02d-%02d,%d,%s\n" % (1 + w // 4, 1 + (w % 4) * 7, 40 + w, "<1" if w < 3 else str(10 + w)) for w in range(44)))
-
-    def test_parse_formats(self):
-        from app.models import gtrend
-        from app.models.base import ValidationError
-        p = gtrend.parse_csv(self.OLD.encode("utf-8-sig"))
-        self.assertEqual(p["terms"], [("ข้าวหอมมะลิ", "Thailand"), ("สีข้าว", "Thailand")])
-        self.assertEqual(p["gran"], "W")
-        self.assertEqual(p["points"][0][1][1], 0.5)                                    # "<1"
-        new = '"Time","glutinous rice"\n"2024-01","55"\n"2024-02","60"\n"2024-03","72"\n'
-        p2 = gtrend.parse_csv(new.encode())
-        self.assertEqual((p2["terms"][0][0], p2["gran"]), ("glutinous rice", "M"))
-        with self.assertRaises(ValidationError) as ctx:
-            gtrend.parse_csv("Category: All categories\n\nRegion,rice: (11/5/24 - 11/5/25)\nKhon Kaen,100\nUdon Thani,80\n".encode())
-        self.assertEqual(ctx.exception.key, "gtErrGeo")
-        with self.assertRaises(ValidationError):
-            gtrend.parse_csv(b"hello,world\nfoo,bar\n")
-        self.assertEqual(gtrend.guess_kind("ข้าวเหนียวเขี้ยวงู"), "GL")
-        self.assertEqual(gtrend.guess_kind("โรงสีข้าว ขอนแก่น"), "MILLING")
-        s = gtrend.signal([("2025-%02d-01" % m, v) for m, v in zip(range(1, 13), [10, 10, 10, 10, 12, 12, 12, 12, 20, 20, 30, 30])], "M")
-        self.assertEqual(s["label"], "rising")
-        self.assertEqual(s["peak_month"], 11)
-
-    def test_upload_page_and_ai(self):
-        import io
+    def test_removed(self):
         self.login("admin")
         self.client.get("/lang/en")
-        url = "/automation/ai/prices?sku=PADDY_HM"
-        self.assertIn("No data yet", self.text(url))
-        data = {"action": "gt_upload", "sku": "PADDY_HM", "csrf_token": self.token(url), "GT_FILE": (io.BytesIO(self.OLD.encode("utf-8-sig")), "multiTimeline.csv")}
-        r = self.client.post("/automation/ai/prices", data=data, content_type="multipart/form-data")
-        self.assertEqual(r.status_code, 302)
-        page = self.text(url)
-        self.assertIn("Google Trends imported: 2 term(s)", page)
-        self.assertIn('class="gt-chart"', page)
-        self.assertIn('data-gt="ข้าวหอมมะลิ" class="gt-hit"', page)                  # the jasmine SKU highlights its term
-        self.assertIn("Milling service", page)
-        self.post("/automation/ai/prices", {"action": "gt_kind", "TERM": "สีข้าว", "GEO": "Thailand", "KIND": "OTHER"}, url)
-        self.assertEqual([t["KIND"] for t in self.db("AOIMS_GTRENDTERM") if t["TERM"] == "สีข้าว"], ["OTHER"])
-        with self.app.test_request_context():
-            from app.models import ai
-            snap = ai.snapshot("factory2")
-        terms = {m["term"]: m for m in snap["market_interest"]}
-        self.assertEqual(terms["ข้าวหอมมะลิ"]["about"], "HM")
-        self.assertIn(terms["ข้าวหอมมะลิ"]["label"], ("rising", "flat", "falling"))
-        # a second download is its own batch: the newest one is read
-        data["csrf_token"] = self.token(url); data["GT_FILE"] = (io.BytesIO('"Time","ข้าวหอมมะลิ: (Thailand)"\n"2025-10-05","90"\n"2025-10-12","95"\n'.encode()), "b.csv")
-        self.client.post("/automation/ai/prices", data=data, content_type="multipart/form-data")
+        page = self.text("/automation/ai/prices?sku=PADDY_HM")
+        self.assertNotIn("ps-gtrend", page)
+        self.assertNotIn("Google Trends", page)
+        self.assertNotIn("cp-entry-gtrend", self.text("/finance/marketing?branch=factory2"))
+        r = self.post("/automation/ai/prices", {"action": "gt_upload"}, "/automation/ai/prices")
+        self.assertIn(r.status_code, (302, 400))
         with self.app.app_context():
-            from app.models import gtrend
-            pts, b = gtrend.series("ข้าวหอมมะลิ", "Thailand")
-        self.assertEqual(len(pts), 2)
-        bid = b["BATCH_ID"]
-        self.post("/automation/ai/prices", {"action": "gt_delete", "BATCH_ID": bid}, url)
-        self.assertNotIn(bid, [x["BATCH_ID"] for x in self.db("AOITS_GTRENDBATCH")])
-        self.assertEqual(len([x for x in self.db("AOITS_GTREND") if x["BATCH_ID"] == bid]), 0)
-        self.assertIn('id="cp-entry-gtrend"', self.text("/finance/marketing?branch=factory2"))
+            from app.models import ai
+            self.assertNotIn("market_interest", ai.snapshot("factory2") if hasattr(ai, "snapshot") else {})
+            import importlib.util
+            self.assertIsNone(importlib.util.find_spec("app.models.gtrend"))
+            from app.db import get_db
+            from scripts.seed import seed
+            db = get_db()
+            db["AOITS_GTREND"].insert_one({"BATCH_ID": "GT00001", "TERM": "x"})
+            seed(log=lambda *a: None)
+            self.assertEqual(list(db["AOITS_GTREND"].find({})), [])
+
+
+class Update122(Base):
+    """Product transformation formulas (AI > สูตรการแปรรูปสินค้า): templates, costing, several per product, AI."""
+
+    URL = "/automation/ai/formulas?branch=factory2"
+
+    def form(self, **extra):
+        data = {"action": "save", "branch": "factory2", "FORMULA_NAME": "ปุ๋ยรำทดลอง", "SOURCE_MAT": "BRAN", "OUTPUT_NAME": "ปุ๋ยหมัก",
+                "OUTPUT_QTY": "100", "OUTPUT_UNIT": "kg", "OUTPUT_PRICE": "8", "OTHER_COST": "50", "PROCESS_DAYS": "10",
+                "IN_MAT_0": "BRAN", "IN_QTY_0": "50", "IN_MAT_1": "", "IN_NAME_1": "มูลวัว", "IN_QTY_1": "50", "IN_UNIT_1": "kg", "IN_PRICE_1": "1",
+                "STATUS": "A"}
+        data.update(extra)
+        return data
+
+    def test_templates_costing_and_crud(self):
+        self.login("admin")
+        self.client.get("/lang/en")
+        page = self.text(self.URL)
+        for name in ("ปุ๋ยโบกาฉิมูลสัตว์ (1:1:1)", "ปุ๋ยหมักสูตร พด.1", "ถ่านแกลบ (แกลบดำ / ไบโอชาร์)", "ถ่านอัดแท่งจากถ่านแกลบ"):
+            self.assertIn(name, page)
+        self.assertIn("Profit cannot be worked out yet", page)          # templates come without selling prices
+        self.assertEqual(len([f for f in self.db("AOIMS_FORMULA") if f["SOURCE_MAT"] == "HUSK"]), 3)   # several per product
+        # the seed adds the templates only once, even after one is deleted
+        tpl = [f for f in self.db("AOIMS_FORMULA") if f["TEMPLATE_FLG"]][0]["FORMULA_ID"]
+        self.post("/automation/ai/formulas", {"action": "del", "branch": "factory2", "id": tpl}, self.URL)
+        with self.app.app_context():
+            from app.db import get_db
+            from scripts.seed import seed
+            seed(log=lambda *a: None)
+        self.assertNotIn(tpl, [f["FORMULA_ID"] for f in self.db("AOIMS_FORMULA")])
+        # a new formula: the bran is valued at the branch's selling price
+        r = self.post("/automation/ai/formulas", self.form(), self.URL)
+        self.assertEqual(r.status_code, 302)
+        f = [x for x in self.db("AOIMS_FORMULA") if x["FORMULA_NAME"] == "ปุ๋ยรำทดลอง"][0]
+        with self.app.test_request_context():
+            from app.models import formula as fm
+            from app.models.price import Price
+            bran = float(Price.get("factory2", "BRAN")["PRICE_SELL"])
+            c = fm.cost(f, "factory2")
+        self.assertTrue(c["complete"])
+        self.assertAlmostEqual(c["total"], round(50 * bran + 50 + 50, 2), places=2)
+        self.assertEqual(c["revenue"], 800.0)
+        self.assertAlmostEqual(c["per_kg"], round((800 - 100) / 50, 2), places=2)
+        self.assertAlmostEqual(c["gain_kg"], round((800 - 100) / 50 - bran, 2), places=2)
+        page = self.text(self.URL)
+        self.assertIn('id="fm-' + f["FORMULA_ID"] + '"', page)
+        self.assertIn("Which formula pays best", page)
+        # errors keep what was typed
+        page = self.post("/automation/ai/formulas", self.form(FORMULA_NAME="ไม่มีรำ", IN_MAT_0="HUSK"), self.URL).get_data(as_text=True)
+        self.assertIn("must include", page)
+        self.assertIn('value="ไม่มีรำ"', page)
+        # copy is a variant of the same product
+        self.post("/automation/ai/formulas", {"action": "copy", "branch": "factory2", "id": f["FORMULA_ID"]}, self.URL)
+        self.assertEqual(len([x for x in self.db("AOIMS_FORMULA") if x["FORMULA_NAME"].startswith("ปุ๋ยรำทดลอง")]), 2)
+        # the AI needs a provider (none in tests)
+        r = self.post("/automation/ai/formulas", {"action": "ai", "branch": "factory2"}, self.URL)
+        self.assertEqual(r.status_code, 302)
+        self.assertIn('id="ai-formulas"', self.text("/automation/ai"))
+
+    def test_ai_job_and_input(self):
+        self.login("admin")
+        with self.app.test_request_context():
+            from app.models import formula as fm
+            data = fm.ai_input("factory2")
+            self.assertTrue(data["formulas"])
+            self.assertIn("missing", data["formulas"][0])
+            self.assertIn("formula", __import__("app.models.ai_job", fromlist=["KINDS"]).KINDS)

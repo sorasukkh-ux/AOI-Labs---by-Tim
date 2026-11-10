@@ -203,7 +203,6 @@ def snapshot(branch_id):
         "supply_indicator_nabc_agri_production_index": _supply(),
         "server_health": _health(),
         "price_signals": _signals(branch_id),
-        "market_interest": _interest(),                       # update 120: Google Trends (relative 0-100)
         "milling_analysis_last_30_days": _milling(branch_id),   # update 58: yield, times, holds (Milling Analysis)             # update 50: price sources, trend, buy / sell points                       # update 48: disk, memory, CPU, database, log
     }
 
@@ -220,14 +219,6 @@ def _milling(branch_id):
                 "note": "yield = rice kg / paddy kg (0-1), times in minutes (wait = registered to milling, milling = in process, ready = finished to closed)"}
     except Exception:                                     # noqa: BLE001
         return None
-
-
-def _interest():
-    from . import gtrend
-    try:
-        return gtrend.for_ai()
-    except Exception:                                         # noqa: BLE001 - never stop the question
-        return []
 
 
 def _signals(branch_id):
@@ -286,10 +277,6 @@ def ask(branch_id, user_id, question, lang):
               "the port, above mill-gate prices: use them for direction. own_* fields are the mill's own trading in AOI over 6 "
               "months (kg and average THB/kg bought and sold, %% against the market on the same days, margin per kg, gross "
               "profit, days the stock lasts): use them to judge the mill's own prices and stock. Say clearly that signals are not a guarantee. "
-              "market_interest is Google Trends search interest per term (relative 0-100 within each download, not volumes): "
-              "label rising / falling / flat compares the last 4 points with the 4 before, yoy_pct the same time a year earlier, "
-              "peak_month the month with the most interest; about tells the variety (HM / WH / GL) or MILLING demand. "
-              "Use it only as an early hint of demand, never as a price. "
               "Never invent numbers." % ("Thai" if lang == "th" else "English"))
     body = {"model": config["AI_MODEL"], "max_tokens": 600, "system": system,
             "messages": [{"role": "user", "content": "Figures of the branch (JSON):\n%s\n\nQuestion: %s"

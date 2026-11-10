@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% from "_macros.html" import page_head, branch_picker %}
+{% macro money(v) %}{{ '{:,.2f}'.format(v) if v is not none else '-' }}{% endmacro %}
+{% block content %}
+{# update 122 (Tim): product transformation formulas - several per product, costing at the branch's prices, AI comparison #}
+<div id="tab-formulas">
+{{ page_head(t('fmTitle'), url_for('automation.ai_screen')) }}
+<div class="card gap"><p class="desc-text">{{ t('fmDesc') }}</p></div>
+<div class="card branch-pick-card">{{ branch_picker('automation.ai_formulas', branch, branches, 'fm-branch-select') }}
+  <p class="cap-note">{{ t('fmBranchNote') }}</p></div>
+
+<div class="co-stats">
+  <div class="card co-stat"><small>{{ t('fmStatAll') }}</small><b id="fm-n-all">{{ counts.all }}</b></div>
+  <div class="card co-stat"><small>{{ t('fmStatActive') }}</small><b>{{ counts.active }}</b></div>
+  <div class="card co-stat"><small>{{ t('fmStatReady') }}</small><b id="fm-n-ready">{{ counts.ready }}</b></div>
+  <div class="card co-stat good"><small>{{ t('fmStatBetter') }}</small><b id="fm-n-better">{{ counts.better }}</b></div>
+</div>
+
+<div class="card mt14" id="fm-compare">
+  <div class="card-head"><p class="card-title">&#9878; {{ t('fmCompare') }}</p></div>
+  <p class="cap-note tight">{{ t('fmCompareNote') }}</p>
+  {% if ranking %}{% for mat, items in ranking %}
+  <p class="fm-src-title">{{ mat_name(mat) }} <small class="hint">&middot; {{ t('fmRawPrice') }} {{ money(items[0].c.raw_price) }} {{ t('fmPerKg') }}</small></p>
+  <div class="inv-table-wrap"><table class="tv-table fm-rank">
+    <thead><tr><th>#</th><th>{{ t('fmFormula') }}</th><th class="num">{{ t('fmProfitBatch') }}</th><th class="num">{{ t('fmValueKg') }}</th>
+      <th class="num">{{ t('fmGainKg') }}</th><th class="num">{{ t('fmBatches') }}</th></tr></thead>
+    <tbody>{% for r in items %}
+    <tr><td>{{ loop.index }}</td><td><a href="#fm-{{ r.FORMULA_ID }}"><b>{{ r.FORMULA_NAME }}</b></a><br><small class="hint">{{ r.OUTPUT_QTY }} {{ t('fmUnit_' ~ r.OUTPUT_UNIT) }} {{ r.OUTPUT_NAME }}</small></td>
+      <td class="num">{{ money(r.c.profit) }}</td><td class="num"><b>{{ money(r.c.per_kg) }}</b></td>
+      <td class="num">{% if r.c.gain_kg is not none %}<span class="badge {{ 'approved' if r.c.gain_kg > 0 else 'blocked' }}">{{ '%+.2f'|format(r.c.gain_kg) }}</span>{% else %}-{% endif %}</td>
+      <td class="num">{{ r.c.batches }}</td></tr>{% endfor %}</tbody>
+  </table></div>
+  {% endfor %}{% else %}<p class="hint">{{ t('fmCompareNone') }}</p>{% endif %}
+</div>
+
+<div class="card mt14" id="fm-ai">
+  <div class="card-head"><p class="card-title">&#129302; {{ t('fmAi') }}</p>
+    {% if can_create and ai_ready %}<form method="post" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="branch" value="{{ branch }}">
+      <button class="action small primary" type="submit" name="action" value="ai" id="fm-ai-btn"{% if ai_job and ai_job.STATUS == 'R' %} disabled{% endif %}>&#10024; {{ t('fmAiRun') }}</button></form>{% endif %}</div>
+  {% if not ai_ready %}<p class="hint">{{ t('coAiOff') }}</p>{% endif %}
+  {% if ai_job and ai_job.STATUS == 'R' %}<div class="co-ai-run" id="fm-job-run" data-poll="{{ url_for('automation.ai_job_state', job_id=ai_job.JOB_ID) }}" data-back="{{ url_for('automation.ai_formulas', branch=branch, src=source) }}#fm-ai">
+    <i class="co-spin" aria-hidden="true"></i><span>{{ t('ajWorking_formula', since=fmt_datetime(ai_job.REGIST_DATE)) }}</span></div>{% endif %}
+  {% if ai_last %}<p class="cap-note tight">{{ fmt_datetime(ai_last.DONE_DATE or ai_last.REGIST_DATE) }} &middot; {{ ai_last.REGIST_USER }} &middot; {{ ai_last.RESULT.model }}</p>
+  <div class="co-ai-text" id="fm-ai-text">{{ ai_md(ai_last.RESULT.text) }}</div>
+  <p class="cap-note">{{ t('fmAiNote') }}</p>
+  {% elif ai_ready %}<p class="hint">{{ t('fmAiNone') }}</p>{% endif %}
+</div>
+
+<div class="card mt14" id="fm-list">
+  <div class="card-head"><p class="card-title">&#129514; {{ t('fmList') }}</p>
+    {% if can_edit %}<a class="action small primary" id="fm-new" href="{{ url_for('automation.ai_formulas', branch=branch, src=source, edit='new', _anchor='fm-edit') }}">+ {{ t('fmNew') }}</a>{% endif %}</div>
+  <nav class="chips">
+    <a class="chip{% if not source %} active{% endif %}" href="{{ url_for('automation.ai_formulas', branch=branch, _anchor='fm-list') }}">{{ t('fmAll') }}</a>
+    {% for m in sources if src_counts[m] %}<a class="chip{% if m == source %} active{% endif %}" href="{{ url_for('automation.ai_formulas', branch=branch, src=m, _anchor='fm-list') }}">{{ mat_name(m) }} ({{ src_counts[m] }})</a>{% endfor %}
+  </nav>
+  {% for f in rows %}{% set c = f.c %}
+  <article class="fm-card{% if f.STATUS != 'A' %} lf-off{% endif %}" id="fm-{{ f.FORMULA_ID }}">
+    <div class="fm-head"><div><b class="fm-name">{{ f.FORMULA_NAME }}</b>
+      {% if f.TEMPLATE_FLG %}<span class="badge neutral">{{ t('fmTemplate') }}</span>{% endif %}{% if f.STATUS != 'A' %}<span class="badge manual">{{ t('lfOff') }}</span>{% endif %}
+      <br><small class="hint">{{ mat_name(f.SOURCE_MAT) }} &rarr; {{ f.OUTPUT_QTY }} {{ t('fmUnit_' ~ f.OUTPUT_UNIT) }} {{ f.OUTPUT_NAME }}{% if f.PROCESS_DAYS is not none %} &middot; {{ t('fmDaysN', n=f.PROCESS_DAYS) }}{% endif %} &middot; {{ f.FORMULA_ID }}</small></div>
+      <div class="fm-actions">{% if can_edit %}<a class="action small" href="{{ url_for('automation.ai_formulas', branch=branch, src=source, edit=f.FORMULA_ID, _anchor='fm-edit') }}">{{ t('btnEdit') }}</a>{% endif %}
+        {% if can_create %}<form method="post" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="branch" value="{{ branch }}"><input type="hidden" name="id" value="{{ f.FORMULA_ID }}"><button class="action small" type="submit" name="action" value="copy">{{ t('fmCopy') }}</button></form>{% endif %}
+        {% if can_delete %}<form method="post" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="branch" value="{{ branch }}"><input type="hidden" name="id" value="{{ f.FORMULA_ID }}"><button class="action small" type="submit" name="action" value="del" data-confirm="{{ t('fmConfirmDel', name=f.FORMULA_NAME) }}">{{ t('coDel') }}</button></form>{% endif %}</div></div>
+    <div class="inv-table-wrap"><table class="tv-table fm-lines">
+      <thead><tr><th>{{ t('fmIngredient') }}</th><th class="num">{{ t('fmQty') }}</th><th class="num">{{ t('fmUnitPrice') }}</th><th class="num">{{ t('fmAmount') }}</th></tr></thead>
+      <tbody>{% for l in c.lines %}
+      <tr{% if l.mat == f.SOURCE_MAT %} class="fm-source"{% endif %}><td>{{ l.name }}{% if l.mat and l.name != mat_name(l.mat) %} <small class="hint">({{ mat_name(l.mat) }})</small>{% endif %}</td>
+        <td class="num">{{ l.qty }} {{ t('fmUnit_' ~ l.unit) }}</td>
+        <td class="num">{% if l.price is not none %}{{ money(l.price) }}{% if l.auto %} <small class="fm-auto" title="{{ t('fmAutoTip') }}">{{ t('fmAuto') }}</small>{% endif %}{% else %}<span class="fm-miss">{{ t('fmNoPrice') }}</span>{% endif %}</td>
+        <td class="num">{{ money(l.amount) }}</td></tr>{% endfor %}
+      <tr><td>{{ t('fmOther') }}</td><td></td><td></td><td class="num">{{ money(c.other) }}</td></tr></tbody>
+      <tfoot><tr><th>{{ t('fmTotalCost') }}</th><th></th><th></th><th class="num">{{ money(c.total) }}</th></tr>
+        <tr><th>{{ t('fmRevenue') }} <small class="hint">({{ f.OUTPUT_QTY }} {{ t('fmUnit_' ~ f.OUTPUT_UNIT) }} &times; {{ money(f.OUTPUT_PRICE) if f.OUTPUT_PRICE is not none else '?' }})</small></th><th></th><th></th><th class="num">{{ money(c.revenue) }}</th></tr></tfoot>
+    </table></div>
+    {% if c.complete %}
+    <div class="fm-kpis">
+      <div><small>{{ t('fmProfitBatch') }}</small><b class="{{ 'good' if c.profit > 0 else 'bad' }}">{{ money(c.profit) }}</b>{% if c.margin_pct is not none %}<small>{{ c.margin_pct }}%</small>{% endif %}</div>
+      <div><small>{{ t('fmUnitCost', unit=t('fmUnit_' ~ f.OUTPUT_UNIT)) }}</small><b>{{ money(c.unit_cost) }}</b></div>
+      <div><small>{{ t('fmValueKg') }}</small><b>{{ money(c.per_kg) }}</b><small>{{ t('fmVsRaw', v=money(c.raw_price)) }}</small></div>
+      <div><small>{{ t('fmBatches') }}</small><b>{{ c.batches }}</b><small>{{ t('fmFree', kg='{:,.0f}'.format(c.free)) }}</small></div>
+    </div>
+    {% else %}<p class="fm-missing">&#9888; {{ t('fmMissing', items=c.missing|map('replace', '__output__', t('fmOutputPrice'))|join(', ')) }}</p>{% endif %}
+    {% if f.STEPS %}<details class="fm-steps"><summary>{{ t('fmSteps') }}</summary><p class="fm-steps-text">{{ f.STEPS }}</p></details>{% endif %}
+    {% if f.NOTE %}<p class="cap-note tight">{{ f.NOTE }}</p>{% endif %}
+    {% if f.SOURCE_REF %}<p class="cap-note tight">{{ t('fmRef') }} {% if f.SOURCE_REF.startswith('http') %}<a href="{{ f.SOURCE_REF }}" rel="noopener" target="_blank">{{ f.SOURCE_REF[:70] }}{% if f.SOURCE_REF|length > 70 %}&hellip;{% endif %}</a>{% else %}{{ f.SOURCE_REF }}{% endif %}</p>{% endif %}
+  </article>
+  {% else %}<p class="hint center">{{ t('fmNone') }}</p>{% endfor %}
+</div>
+
+{% if can_edit and edit %}{% set e = edit_doc or {} %}
+<div class="card mt14" id="fm-edit"{% if edit == 'typed' %} data-scroll{% endif %}>
+  <div class="card-head"><p class="card-title">&#9999;&#65039; {{ t('fmEditTitle') if e.FORMULA_ID else t('fmNew') }}</p>
+    <a class="action small" href="{{ url_for('automation.ai_formulas', branch=branch, src=source, _anchor='fm-list') }}">{{ t('btnCancel') }}</a></div>
+  <form method="post" id="fm-form" class="fm-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="branch" value="{{ branch }}"><input type="hidden" name="action" value="save">
+    <input type="hidden" name="FORMULA_ID" value="{{ e.FORMULA_ID or '' }}">
+    <div class="fm-grid">
+      <div class="span2"><label class="field-label" for="fm-name">{{ t('fmName') }}</label><input type="text" id="fm-name" name="FORMULA_NAME" maxlength="80" required value="{{ e.FORMULA_NAME or '' }}"></div>
+      <div><label class="field-label" for="fm-src">{{ t('fmSource') }}</label>
+        <select id="fm-src" name="SOURCE_MAT">{% for m in sources %}<option value="{{ m }}"{% if m == (e.SOURCE_MAT or source or 'BRAN') %} selected{% endif %}>{{ mat_name(m) }}</option>{% endfor %}</select></div>
+      <div><label class="field-label" for="fm-st">{{ t('cpnStatus') }}</label><select id="fm-st" name="STATUS"><option value="A">{{ t('lfOn') }}</option><option value="I"{% if e.STATUS == 'I' %} selected{% endif %}>{{ t('lfOff') }}</option></select></div>
+      <div class="span2"><label class="field-label" for="fm-out">{{ t('fmOutput') }}</label><input type="text" id="fm-out" name="OUTPUT_NAME" maxlength="60" required value="{{ e.OUTPUT_NAME or '' }}" placeholder="{{ t('fmOutputPh') }}"></div>
+      <div><label class="field-label" for="fm-oq">{{ t('fmOutQty') }}</label><input id="fm-oq" name="OUTPUT_QTY" type="number" step="0.001" min="0" inputmode="decimal" required value="{{ e.OUTPUT_QTY if e.OUTPUT_QTY is defined and e.OUTPUT_QTY is not none else '' }}"></div>
+      <div><label class="field-label" for="fm-ou">{{ t('fmUnit') }}</label><select id="fm-ou" name="OUTPUT_UNIT">{% for u in units %}<option value="{{ u }}"{% if u == (e.OUTPUT_UNIT or 'kg') %} selected{% endif %}>{{ t('fmUnit_' ~ u) }}</option>{% endfor %}</select></div>
+      <div><label class="field-label" for="fm-op">{{ t('fmOutputPrice') }}</label><input id="fm-op" name="OUTPUT_PRICE" type="number" step="0.01" min="0" inputmode="decimal" value="{{ e.OUTPUT_PRICE if e.OUTPUT_PRICE is not none and e.OUTPUT_PRICE is defined else '' }}" placeholder="{{ t('fmPricePh') }}"></div>
+      <div><label class="field-label" for="fm-oc">{{ t('fmOther') }}</label><input id="fm-oc" name="OTHER_COST" type="number" step="0.01" min="0" inputmode="decimal" value="{{ e.OTHER_COST if e.OTHER_COST else '' }}" placeholder="{{ t('fmOtherPh') }}"></div>
+      <div><label class="field-label" for="fm-days">{{ t('fmDays') }}</label><input id="fm-days" name="PROCESS_DAYS" type="number" step="0.5" min="0" max="365" value="{{ e.PROCESS_DAYS if e.PROCESS_DAYS is not none and e.PROCESS_DAYS is defined else '' }}"></div>
+    </div>
+    <p class="field-label mt6">{{ t('fmInputs') }}</p>
+    <p class="cap-note tight">{{ t('fmInputsNote') }}</p>
+    <div class="fm-inputs">
+      {% set ins = e.INPUTS or [] %}
+      {% for n in range(max_inputs) %}{% set i = ins[n] if n < ins|length else {} %}
+      <div class="fm-in-row">
+        <select name="IN_MAT_{{ n }}" aria-label="{{ t('fmMillItem') }}"><option value="">{{ t('fmOtherItem') }}</option>{% for m in mats %}<option value="{{ m }}"{% if i.MAT_CODE == m %} selected{% endif %}>{{ mat_name(m) }}</option>{% endfor %}</select>
+        <input type="text" name="IN_NAME_{{ n }}" maxlength="60" value="{{ i.NAME or '' }}" placeholder="{{ t('fmInName') }}" aria-label="{{ t('fmInName') }}">
+        <input name="IN_QTY_{{ n }}" type="number" step="0.001" min="0" inputmode="decimal" value="{{ i.QTY if i.QTY is defined and i.QTY is not none else '' }}" placeholder="{{ t('fmQty') }}" aria-label="{{ t('fmQty') }}">
+        <select name="IN_UNIT_{{ n }}" aria-label="{{ t('fmUnit') }}">{% for u in units %}<option value="{{ u }}"{% if u == (i.UNIT or 'kg') %} selected{% endif %}>{{ t('fmUnit_' ~ u) }}</option>{% endfor %}</select>
+        <input name="IN_PRICE_{{ n }}" type="number" step="0.01" min="0" inputmode="decimal" value="{{ i.PRICE if i.PRICE is not none and i.PRICE is defined else '' }}" placeholder="{{ t('fmInPricePh') }}" aria-label="{{ t('fmUnitPrice') }}">
+      </div>{% endfor %}
+    </div>
+    <label class="field-label mt6" for="fm-steps">{{ t('fmSteps') }}</label><textarea id="fm-steps" name="STEPS" rows="6" maxlength="3000">{{ e.STEPS or '' }}</textarea>
+    <div class="fm-grid mt6">
+      <div class="span2"><label class="field-label" for="fm-ref">{{ t('fmRefLabel') }}</label><input type="text" id="fm-ref" name="SOURCE_REF" maxlength="300" value="{{ e.SOURCE_REF or '' }}"></div>
+      <div class="span2"><label class="field-label" for="fm-note">{{ t('coNote') }}</label><input type="text" id="fm-note" name="NOTE" maxlength="300" value="{{ e.NOTE or '' }}"></div>
+    </div>
+    <div class="mt6"><button class="action primary" type="submit" id="fm-save">{{ t('btnSave') }}</button></div>
+  </form>
+</div>
+{% endif %}
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/formulas.js') }}" defer></script>{% endblock %}

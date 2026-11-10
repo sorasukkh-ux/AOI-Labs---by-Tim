@@ -197,6 +197,12 @@ def seed(log=print, reset=False):
         db["AOIMS_MATERIAL"].update_one({"MAT_CODE": code, "MAT_DESC": old}, {"$set": {"MAT_DESC": _var.DESC_TH[code]}})
     merge_broken(db)                              # update 61: one broken rice SKU
     pending_for_cancelled(db)                     # update 72: goods of cancelled orders -> Pending maintenance
+    # update 121: Google Trends removed (Tim: no help for the business) - its data goes too
+    for name in ("AOITS_GTREND", "AOITS_GTRENDBATCH", "AOIMS_GTRENDTERM"):
+        db.drop_collection(name)
+    db["AOISYS_COUNTER"].delete_many({"COUNTER_KEY": "GTREND"})
+    from app.models import formula as _formula      # update 122: starter templates of product transformation formulas
+    _formula.seed_templates(db)
     for branch_id, name in BRANCHES:
         add("AOIMS_SYSPARAM", {"BRANCH_ID": branch_id}, dict(MILL_SETTINGS, BRANCH_NAME=name))
         for variety in _var.VARIETIES:

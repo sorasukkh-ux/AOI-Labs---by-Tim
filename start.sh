@@ -5,6 +5,8 @@
 #   ./start.sh sim    the app and every motor simulated (no device keys to copy) - update 45
 set -euo pipefail
 cd "$(dirname "$0")"
+# update 121: files of removed features (unzip never deletes them)
+rm -f app/models/gtrend.py
 
 # a Python that has pip: in some codespace terminals "python3" is the system one without pip
 PY=""

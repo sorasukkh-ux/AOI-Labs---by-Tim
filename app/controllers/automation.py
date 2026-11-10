@@ -358,7 +358,11 @@ def ai_screen():
     from ..models import competitor as co                     # update 110: competitor analysis is part of AI
     co_comps, co_rows = co.compare(branch)
     co_risk = sorted((r for r in co_rows if r["risk"]), key=lambda r: -abs((r["best_gap"] or 0) / (r["ours"] or 1)))[:4]
-    return render_template("automation/ai.html", co_stats=dict(co.summary(co_rows), comps=len(co_comps)), co_risk=co_risk,
+    from ..models import formula as fm                        # update 122: product transformation formulas
+    fm_rows = fm.overview(branch)
+    fm_best = [items[0] for _m, items in fm.ranking(fm_rows)]
+    return render_template("automation/ai.html", fm_counts=fm.counts(fm_rows), fm_best=fm_best,
+                           co_stats=dict(co.summary(co_rows), comps=len(co_comps)), co_risk=co_risk,
                            co_ai_time=fmt_datetime((co.last_ai(branch) or {}).get("REGIST_DATE")), mill=mres["total"], mill_varieties=mill_by_variety, mill_pct=ma.pct,
                            can_mill=can("AD_MILLANALYSIS"), signals=signals, sig_counts=counts, health_hist=health_hist,
                            api_hourly=monitor.api_hourly(24), fc_total=round(sum(f["kg"] for f in fc)), health=hl, health_logs=hl_logs, health_time=to_local(hl["CHECK_DATE"]).strftime("%d/%m/%Y %H:%M:%S"),
@@ -413,24 +417,6 @@ def ai_prices():
                 r = export_price.import_data(data, "upload:" + (upload.filename or "file")[:80], _user_id())
                 flash_ok("psFetched", rows=r["rows"], new=r["new"], day=r["newest"])
                 return back("ps-sources")
-            if action in ("gt_upload", "gt_kind", "gt_delete"):   # update 120: Google Trends market interest
-                from ..models import gtrend
-                if action == "gt_upload":
-                    upload = request.files.get("GT_FILE")
-                    data = upload.read(gtrend.MAX_BYTES + 1) if upload else b""
-                    if not data:
-                        raise ValidationError("gtErrNoFile")
-                    b = gtrend.import_csv(data, upload.filename, _user_id())
-                    flash_ok("gtImported", n=len(b["TERMS"]), rows=b["ROWS"], d0=b["DATE_FROM"], d1=b["DATE_TO"])
-                elif action == "gt_kind":
-                    gtrend.set_kind(request.form.get("TERM", ""), request.form.get("GEO", ""), request.form.get("KIND"))
-                    flash_ok("gtKindSaved")
-                else:
-                    if not can(AI_MENU, "delete"):
-                        abort(403)
-                    gtrend.delete_batch(request.form.get("BATCH_ID"))
-                    flash_ok("gtDeleted")
-                return back("ps-gtrend")
             if action in ("aiweb", "aihist"):              # update 77: prices found on the web by the AI
                 from ..models import ai_price, ai_job      # update 117: in the background (no HTTP 504)
                 if not ai_price.provider()[0]:
@@ -475,9 +461,7 @@ def ai_prices():
     ap_last = ai_price.last_fetch()
     from ..models import ai_job
     job = ai_job.get(request.args.get("job")) or ai_job.running("aiweb") or ai_job.running("aihist")
-    from ..models import gtrend
-    gt_items = gtrend.overview()
-    return render_template("automation/ai_prices.html", ai_job=job, to_local=to_local, gt_items=gt_items, gt_chart=gtrend.chart(gt_items), gt_batches=gtrend.batches(), gt_kinds=gtrend.KINDS, can_delete=can(AI_MENU, "delete"), fmt_datetime=fmt_datetime, a=a, code=code, live_time=to_local(now_utc()).strftime("%H:%M:%S"), period=period, periods=list(price_signal.PERIODS),
+    return render_template("automation/ai_prices.html", ai_job=job, to_local=to_local, can_delete=can(AI_MENU, "delete"), fmt_datetime=fmt_datetime, a=a, code=code, live_time=to_local(now_utc()).strftime("%H:%M:%S"), period=period, periods=list(price_signal.PERIODS),
                            cfg=cfg, overview=overview_rows, warnings=price_signal.warnings(overview_rows),
                            ap_provider=ai_price.provider()[0], ap_latest=ai_price.latest(), ap_last=fmt_datetime(ap_last["FETCH_DATE"]) if ap_last else None,
                            ap_region=ai_price.region(), sku_names={c: var.mat_name(c) for c in var.TRADED}, src_names={x: t("psSrc_" + x) for x in price_signal.SOURCES}, items=items, sources=price_signal.SOURCES,
@@ -535,6 +519,63 @@ def ai_competitor():
                            edit=co.get(request.args.get("edit")))
 
 
+@bp.route("/ai/formulas", methods=["GET", "POST"])
+@require(AI_MENU)
+def ai_formulas():
+    """Update 122 (Tim): product transformation formulas (สูตรการแปรรูปสินค้า) - several per product, costing at the
+    branch's prices, value per kg against selling the product as it is, and an AI comparison."""
+    from ..models import formula as fm, ai_job
+    from ..i18n import get_lang
+    requested = request.values.get("branch")
+    branch = pick_maintenance_branch(requested)
+    if not branch or (requested and requested != branch):
+        abort(403)
+    source = request.values.get("src") if request.values.get("src") in fm.SOURCES else None
+    typed = None
+    if request.method == "POST":
+        action = request.form.get("action")
+        need = {"save": "edit", "copy": "create", "del": "delete", "ai": "create"}.get(action)
+        if not need or not can(AI_MENU, need):
+            abort(403)
+        anchor, edit_id = "fm-list", None
+        try:
+            if action == "save":
+                f = fm.save(request.form, _user_id())
+                flash_ok("fmSaved", name=f["FORMULA_NAME"])
+                anchor = "fm-" + f["FORMULA_ID"]
+            elif action == "copy":
+                f = fm.copy(request.form.get("id"), _user_id(), t("fmCopySuffix"))
+                flash_ok("fmCopied", name=f["FORMULA_NAME"])
+                edit_id, anchor = f["FORMULA_ID"], "fm-edit"
+            elif action == "del":
+                fm.delete(request.form.get("id"))
+                flash_ok("fmDeleted")
+            else:
+                job = fm.ai_start(branch, _user_id(), get_lang())
+                return redirect(url_for("automation.ai_formulas", branch=branch, src=source, job=job["JOB_ID"], _anchor="fm-ai"))
+        except ValidationError as error:
+            flash_error(error)
+            if action == "save":                                # the form again with what was typed
+                typed = fm.form_doc(request.form)
+            else:
+                anchor = "fm-ai" if action == "ai" else anchor
+        if typed is None:
+            return redirect(url_for("automation.ai_formulas", branch=branch, src=source, edit=edit_id, _anchor=anchor))
+    rows = fm.overview(branch, source)
+    every = rows if not source else fm.overview(branch)
+    edit = "typed" if typed else request.args.get("edit")
+    edit_doc = typed or (fm.get(edit) if edit and edit != "new" else None)
+    job = ai_job.get(request.args.get("job")) or ai_job.running("formula")
+    last = fm.last_ai(branch)
+    from ..models.competitor import light_md, ai_ready
+    return render_template("automation/formulas.html", branch=branch, branches=maintainable_branches(), rows=rows, source=source,
+                           sources=fm.SOURCES, src_counts={m: sum(1 for r in every if r["SOURCE_MAT"] == m) for m in fm.SOURCES},
+                           ranking=fm.ranking(every), counts=fm.counts(every), units=fm.UNITS, max_inputs=fm.MAX_INPUTS,
+                           mats=[m for m in fm.SOURCES], edit=edit, edit_doc=edit_doc, ai_job=job, ai_last=last, ai_md=light_md,
+                           ai_ready=ai_ready(), fmt_datetime=fmt_datetime, mat_name=mat_name,
+                           can_edit=can(AI_MENU, "edit"), can_create=can(AI_MENU, "create"), can_delete=can(AI_MENU, "delete"))
+
+
 @bp.route("/ai/job/<job_id>")
 @require(AI_MENU)
 def ai_job_state(job_id):
@@ -557,6 +598,8 @@ def ai_job_state(job_id):
         elif job["KIND"] == "aihist":
             r = job["RESULT"] or {}
             flash_ok("apHistFetched", n=r.get("saved", 0), provider=r.get("provider"))
+        elif job["KIND"] == "formula":
+            flash_ok("fmAiDone")
     return jsonify({"state": "done" if job["STATUS"] == "D" else "error"})
 
 

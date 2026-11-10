@@ -12,7 +12,7 @@
 <p class="desc-text dash-desc">{{ t('psDesc') }}</p>
 <p class="live-bar" data-live-clock data-ok="{{ t('liveOk', n=60) }}" data-lost="{{ t('liveLost') }}" data-paused="{{ t('livePaused') }}" data-down="{{ t('liveDown') }}"><i></i><span>{{ t('liveOk', n=60) }} {{ live_time }}</span></p><p class="cap-note dash-desc">{{ t('psDisclaimer') }}</p>
 <nav class="chips dash-nav">
-  <a class="chip" href="#ps-chart">{{ t('psChart') }}</a><a class="chip" href="#ps-trade">{{ t('psTradeChip') }}</a><a class="chip" href="#ps-aiweb">{{ t('apChip') }}</a><a class="chip" href="#ps-gtrend">{{ t('gtChip') }}</a><a class="chip" href="#ps-overview">{{ t('psOverview') }}</a>
+  <a class="chip" href="#ps-chart">{{ t('psChart') }}</a><a class="chip" href="#ps-trade">{{ t('psTradeChip') }}</a><a class="chip" href="#ps-aiweb">{{ t('apChip') }}</a><a class="chip" href="#ps-overview">{{ t('psOverview') }}</a>
   <a class="chip" href="#ps-sources">{{ t('psSources') }}</a><a class="chip" href="#ps-settings">{{ t('psSettings') }}</a><a class="chip" href="#ps-ask">{{ t('aiAsk') }}</a>
 </nav>
 
@@ -177,45 +177,6 @@
   <p class="cap-note">{{ t('psUnitNote') }}</p>
 </section>
 
-{# update 120 (Tim): market interest from Google Trends - CSV downloads, each kept as its own batch #}
-<section class="card dash-card mt14" id="ps-gtrend">
-  <div class="dash-head"><p class="card-title sub">&#128200; {{ t('gtTitle') }}</p><span class="badge neutral">Google Trends</span></div>
-  <p class="hint">{{ t('gtNote') }}</p>
-  {% if gt_chart %}
-  <div class="gt-chart-wrap"><svg class="gt-chart" viewBox="0 0 {{ gt_chart.w }} {{ gt_chart.h }}" role="img" aria-label="{{ t('gtTitle') }}">
-    {% for g in gt_chart.grid %}<line x1="{{ gt_chart.pad }}" x2="{{ gt_chart.w - gt_chart.pad }}" y1="{{ g.y }}" y2="{{ g.y }}" class="gt-grid"/><text x="4" y="{{ g.y + 4 }}" class="gt-ax">{{ g.v }}</text>{% endfor %}
-    {% for k in gt_chart.ticks %}<line x1="{{ k.x }}" x2="{{ k.x }}" y1="{{ gt_chart.pad }}" y2="{{ gt_chart.h - gt_chart.pad }}" class="gt-grid"/><text x="{{ k.x + 4 }}" y="{{ gt_chart.h - 10 }}" class="gt-ax">{{ k.label }}</text>{% endfor %}
-    {% for l in gt_chart.lines %}<path d="{{ l.path }}" fill="none" stroke="{{ l.color }}" stroke-width="2.4" stroke-linejoin="round"/><circle cx="{{ l.lx }}" cy="{{ l.ly }}" r="4" fill="{{ l.color }}"/>{% endfor %}
-  </svg></div>
-  <div class="gt-legend">{% for l in gt_chart.lines %}<span><svg width="16" height="6" aria-hidden="true"><rect width="16" height="6" rx="3" fill="{{ l.color }}"/></svg> {{ l.term }}</span>{% endfor %}</div>
-  <div class="inv-table-wrap"><table class="tv-table" id="gt-table">
-    <thead><tr><th>{{ t('gtTerm') }}</th><th>{{ t('gtAbout') }}</th><th class="num">{{ t('gtLast') }}</th><th class="num">{{ t('gtChange') }}</th><th class="num">{{ t('gtYoy') }}</th><th>{{ t('gtPeak') }}</th><th>{{ t('gtSignal') }}</th></tr></thead>
-    <tbody>{% for i in gt_items %}{% set sg = i.signal or {} %}<tr data-gt="{{ i.term }}"{% if code.startswith('PADDY_HM') or code.startswith('RICE_HM') %}{% if i.kind == 'HM' %} class="gt-hit"{% endif %}{% elif code.endswith('_GL') %}{% if i.kind == 'GL' %} class="gt-hit"{% endif %}{% elif i.kind == 'WH' and (code == 'PADDY' or code == 'RICE_W5') %} class="gt-hit"{% endif %}>
-      <td><b>{{ i.term }}</b><br><small class="hint">{{ i.geo or '-' }} &middot; {{ t('gtGran_' ~ i.batch.GRAN) }} &middot; {{ i.batch.DATE_TO }}</small></td>
-      <td>{% if can_edit %}<form method="post" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="gt_kind"><input type="hidden" name="sku" value="{{ code }}"><input type="hidden" name="p" value="{{ period }}">
-        <input type="hidden" name="TERM" value="{{ i.term }}"><input type="hidden" name="GEO" value="{{ i.geo }}">
-        <select name="KIND" data-autosubmit aria-label="{{ t('gtAbout') }}">{% for k in gt_kinds %}<option value="{{ k }}"{% if k == i.kind %} selected{% endif %}>{{ t('gtKind_' ~ k) }}</option>{% endfor %}</select></form>
-        {% else %}{{ t('gtKind_' ~ i.kind) }}{% endif %}</td>
-      <td class="num">{{ '%.0f'|format(sg.last) if sg.last is not none else '-' }}</td>
-      <td class="num">{% if sg.change_pct is not none %}{{ '%+.0f'|format(sg.change_pct) }}%{% else %}-{% endif %}</td>
-      <td class="num">{% if sg.yoy_pct is not none %}{{ '%+.0f'|format(sg.yoy_pct) }}%{% else %}-{% endif %}</td>
-      <td>{{ t('gtMonth_' ~ sg.peak_month) if sg.peak_month else '-' }}</td>
-      <td><span class="badge gt-{{ sg.label or 'flat' }}">{{ t('gtLabel_' ~ (sg.label or 'flat')) }}</span></td></tr>{% endfor %}</tbody>
-  </table></div>
-  {% else %}<p class="hint">{{ t('gtNone') }}</p>{% endif %}
-  {% if can_fetch %}
-  <details class="gt-how mt6"><summary>{{ t('gtHowTitle') }}</summary><ol class="hint">
-    <li>{{ t('gtHow1') }}</li><li>{{ t('gtHow2') }}</li><li>{{ t('gtHow3') }}</li><li>{{ t('gtHow4') }}</li></ol></details>
-  <form method="post" enctype="multipart/form-data" class="gt-up mt6"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="gt_upload"><input type="hidden" name="sku" value="{{ code }}"><input type="hidden" name="p" value="{{ period }}">
-    <input type="file" id="gt-file" name="GT_FILE" accept=".csv,text/csv" required aria-label="{{ t('gtFile') }}">
-    <button class="action primary" type="submit" id="gt-upload">&#11014; {{ t('gtUpload') }}</button></form>
-  {% endif %}
-  {% if gt_batches %}<details class="mt6"><summary>{{ t('gtBatches', n=gt_batches|length) }}</summary>
-  <div class="inv-table-wrap"><table class="tv-table" id="gt-batches"><tbody>{% for b in gt_batches %}<tr><td>{{ b.BATCH_ID }}</td><td>{{ b.TERMS|join(', ') }}</td><td>{{ b.DATE_FROM }} &rarr; {{ b.DATE_TO }}</td><td>{{ fmt_datetime(b.REGIST_DATE) }}</td>
-    <td>{% if can_delete %}<form method="post" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="gt_delete"><input type="hidden" name="sku" value="{{ code }}"><input type="hidden" name="p" value="{{ period }}"><input type="hidden" name="BATCH_ID" value="{{ b.BATCH_ID }}">
-      <button class="action small-btn" type="submit" data-confirm="{{ t('gtDelConfirm') }}">{{ t('gtDel') }}</button></form>{% endif %}</td></tr>{% endfor %}</tbody></table></div></details>{% endif %}
-  <p class="cap-note">{{ t('gtCaution') }}</p>
-</section>
 <div class="card dash-card mt14" id="ps-sources" data-live>
   <p class="card-title sub">{{ t('psSrc_TREA') }}</p>
   <p class="desc-text">{{ t('psTreaDesc') }}</p>
