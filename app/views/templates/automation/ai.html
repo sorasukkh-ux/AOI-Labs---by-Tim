@@ -31,7 +31,7 @@
 <p class="live-bar" data-live-clock data-ok="{{ t('liveOk', n=15) }}" data-lost="{{ t('liveLost') }}" data-paused="{{ t('livePaused') }}" data-down="{{ t('liveDown') }}"><i></i><span>{{ t('liveOk', n=15) }} {{ live_time }}</span></p>
 <nav class="chips dash-nav" id="dash-nav" data-live>
   <a class="chip{% if health.LEVEL != 'ok' %} hl-chip-{{ health.LEVEL }}{% endif %}" href="#ai-health">{{ t('hlTitle') }}{% if health.LEVEL != 'ok' %} &#9888;{% endif %}</a>
-  <a class="chip" href="#ai-forecast">{{ t('aiForecast') }}</a>{% if can_mill %}<a class="chip" href="#ai-milling">{{ t('tabMillAnalysis') }}</a>{% endif %}<a class="chip" href="#ai-signals">{{ t('psChip') }}</a><a class="chip" href="#ai-price">{{ t('aiPrice') }}</a>
+  <a class="chip" href="#ai-forecast">{{ t('aiForecast') }}</a>{% if can_mill %}<a class="chip" href="#ai-milling">{{ t('tabMillAnalysis') }}</a>{% endif %}<a class="chip" href="#ai-signals">{{ t('psChip') }}</a><a class="chip" href="#ai-competitor">{{ t('coTitle') }}</a><a class="chip" href="#ai-formulas">{{ t('fmTitle') }}</a><a class="chip" href="#ai-price">{{ t('aiPrice') }}</a>
   <a class="chip" href="#ai-supply">{{ t('spChip') }}</a><a class="chip" href="#ai-alerts">{{ t('aiAlerts') }} ({{ alerts|length }})</a><a class="chip" href="#ai-ask">{{ t('aiAsk') }}</a>
 </nav>
 

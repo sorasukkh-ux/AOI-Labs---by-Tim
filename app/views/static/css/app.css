@@ -1824,3 +1824,11 @@ body.leaflet-page { background: #e5e7eb; font-family: "Prompt", "IBM Plex Sans T
 .fmd-table a { color: #1e3a8a; text-decoration: none; } .fmd-table a:hover { text-decoration: underline; }
 @media (max-width: 700px) { .fmd-table { min-width: 660px; } }
 .fm-card .cap-note a { overflow-wrap: anywhere; word-break: break-all; } .fm-card { min-width: 0; }
+/* update 124: quick jumps on every long page + a round "to top" button */
+.to-top { position: fixed; right: 16px; bottom: 18px; z-index: 30; width: 46px; height: 46px; border-radius: 50%; border: 0; cursor: pointer;
+  background: var(--accent, #2563eb); color: #fff; font-size: 22px; line-height: 1; box-shadow: 0 6px 16px rgba(15, 23, 42, .28);
+  opacity: 0; pointer-events: none; transform: translateY(8px); transition: opacity .2s, transform .2s; }
+.to-top.show { opacity: .92; pointer-events: auto; transform: none; }
+.to-top:hover { opacity: 1; }
+@media print { .to-top, .quick-jump { display: none !important; } }
+.dash-card[id], .fmd-panel[id], section[id] { scroll-margin-top: 64px; }

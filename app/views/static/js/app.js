@@ -489,56 +489,87 @@
   });
 })();
 
-/* Administration: a bar of quick jumps to each section of the page (cards with a title, home sub-groups).
-   It stays at the top while scrolling; the section on screen is highlighted. */
+/* Quick jumps: a bar of chips to each section of the page. It stays at the top while scrolling and the section on
+   screen is highlighted. Update 124 (Tim): on EVERY long page (was: Administration and Hardware only), with a round
+   "to top" button at the bottom right of any page that scrolls.
+   Sections: cards / panels with a title (not nested ones, not small tiles of a grid); a page that has its own chip
+   row (.dash-nav: AI, Price analysis) keeps its own labels - the bar is built from those links. */
 (function () {
   var label = document.body.getAttribute("data-quick-jump");
   if (!label) return;
-  var targets = [];
-  document.querySelectorAll(".home-subgroup, .card").forEach(function (node) {
-    if (node.closest("#app-modal-overlay, template") || (node.parentElement && node.parentElement.closest(".card"))) return;
-    // update 57: a card that is one tile of a grid or row (the KPI tiles of Milling Analysis) is not a section -
-    // the bar was put inside the grid and squeezed into one tile
-    var shown = node.parentElement && window.getComputedStyle(node.parentElement).display;
-    if (shown && /grid|flex/.test(shown)) return;
-    var head = node.querySelector(".home-sub-title, .card-title");
-    if (!head || !head.textContent.trim()) return;
-    if (!node.id) node.id = "qj-" + targets.length;
-    targets.push({ node: node, text: head.textContent.replace(/\s+/g, " ").trim() });
-  });
-  if (targets.length < 3) return;
+  var topText = document.body.getAttribute("data-quick-top") || "Top";
+  function isLong(factor) { return document.documentElement.scrollHeight > window.innerHeight * factor; }
+
+  // ---- the round "to top" button (any page taller than 1.4 screens) ----
+  if (isLong(1.4)) {
+    var fab = document.createElement("button");
+    fab.type = "button"; fab.className = "to-top"; fab.id = "to-top"; fab.textContent = "↑"; fab.title = topText; fab.setAttribute("aria-label", topText);
+    fab.addEventListener("click", function () { window.scrollTo({ top: 0, behavior: "smooth" }); });
+    document.body.appendChild(fab);
+    var showFab = function () { fab.classList.toggle("show", window.scrollY > 500); };
+    window.addEventListener("scroll", showFab, { passive: true }); showFab();
+  }
+
+  // ---- the sections ----
+  var targets = [], own = document.querySelector("nav.dash-nav");
+  if (own) {
+    own.querySelectorAll('a[href^="#"]').forEach(function (a) {
+      var node = document.getElementById(a.getAttribute("href").slice(1));
+      if (node) targets.push({ node: node, text: a.textContent.replace(/\s+/g, " ").trim() });
+    });
+  } else {
+    document.querySelectorAll(".home-subgroup, .card, .fmd-panel, [data-qj-title]").forEach(function (node) {
+      if (node.closest("#app-modal-overlay, #qr-scan-overlay, template, [hidden]") || (node.parentElement && node.parentElement.closest(".card, .fmd-panel"))) return;
+      var named = node.getAttribute("data-qj-title");               // a section named by the page itself
+      if (!named) {
+        // a card that is one tile of a grid or row (KPI tiles) is not a section; a big panel of a grid, or a card of
+        // a one-column list (flex column), is
+        var ps = node.parentElement && window.getComputedStyle(node.parentElement);
+        if (ps && /grid|flex/.test(ps.display) && !(/flex/.test(ps.display) && /column/.test(ps.flexDirection)) &&
+            !(node.matches(".dash-card, .fmd-panel") && node.offsetHeight >= 150)) return;
+      }
+      var head = node.querySelector(".home-sub-title, .card-title, .fmd-title");
+      var text = named || (head && head.textContent.replace(/\s+/g, " ").trim());
+      if (!text || node.offsetHeight === 0) return;
+      if (!node.id) node.id = "qj-" + targets.length;
+      targets.push({ node: node, text: text });
+    });
+  }
+  if (targets.length < 2 || !isLong(1.6)) return;
   var nav = document.createElement("nav");
-  nav.className = "quick-jump"; nav.setAttribute("aria-label", label);
-  // update 59: the chips are in a track that scrolls sideways; when they do not all fit, the ‹ › buttons, the mouse
-  // wheel and the ≡ button (shows every chip on several rows) reach the hidden ones - before, a mouse could not
+  nav.className = "quick-jump"; nav.id = "quick-jump"; nav.setAttribute("aria-label", label);
+  // the chips are in a track that scrolls sideways; when they do not all fit, the ‹ › buttons, the mouse wheel and
+  // the ≡ button (shows every chip on several rows) reach the hidden ones
   var bar = document.createElement("div");
   bar.className = "qj-track";
+  var top = document.createElement("a");                       // first, so it is always in reach
+  top.href = "#"; top.className = "qj-chip qj-top"; top.textContent = "↑ " + topText;
+  top.addEventListener("click", function (e) { e.preventDefault(); window.scrollTo({ top: 0, behavior: "smooth" }); });
+  bar.appendChild(top);
   var links = targets.map(function (tg) {
     var a = document.createElement("a");
-    a.href = "#" + tg.node.id; a.className = "qj-chip";
-    a.textContent = tg.text.length > 28 ? tg.text.slice(0, 27) + "\u2026" : tg.text;
+    tg.id = tg.node.id;
+    a.href = "#" + tg.id; a.className = "qj-chip";
+    a.textContent = tg.text.length > 28 ? tg.text.slice(0, 27) + "…" : tg.text;
     a.title = tg.text;
     a.addEventListener("click", function (e) {
       e.preventDefault();
-      if (tg.node.tagName === "DETAILS") tg.node.open = true;          // update 43: e.g. Machine setup opens when jumped to
-      tg.node.scrollIntoView({ behavior: "smooth", block: "start" }); history.replaceState(null, "", "#" + tg.node.id);
+      var node = document.getElementById(tg.id) || tg.node;       // a live page swaps its sections: find it again
+      if (node.tagName === "DETAILS") node.open = true;               // e.g. Machine setup opens when jumped to
+      node.scrollIntoView({ behavior: "smooth", block: "start" }); history.replaceState(null, "", "#" + tg.id);
     });
     bar.appendChild(a);
     return a;
   });
-  var top = document.createElement("a");
-  top.href = "#"; top.className = "qj-chip qj-top"; top.textContent = "\u2191 " + (document.body.getAttribute("data-quick-top") || "Top");
-  top.addEventListener("click", function (e) { e.preventDefault(); window.scrollTo({ top: 0, behavior: "smooth" }); });
-  bar.appendChild(top);
   function arrow(cls, text, dir) {
     var b = document.createElement("button");
     b.type = "button"; b.className = "qj-arrow " + cls; b.textContent = text; b.setAttribute("aria-label", text);
     b.addEventListener("click", function () { bar.scrollBy({ left: dir * Math.max(160, bar.clientWidth * 0.7), behavior: "smooth" }); });
     return b;
   }
-  var prev = arrow("qj-prev", "\u2039", -1), next = arrow("qj-next", "\u203A", 1);
+  var prev = arrow("qj-prev", "‹", -1), next = arrow("qj-next", "›", 1);
   var all = document.createElement("button");
-  all.type = "button"; all.className = "qj-arrow qj-all"; all.textContent = "\u2261"; all.setAttribute("aria-expanded", "false");
+  all.type = "button"; all.className = "qj-arrow qj-all"; all.textContent = "≡"; all.setAttribute("aria-expanded", "false");
   all.setAttribute("aria-label", label);
   all.addEventListener("click", function () {
     var open = nav.classList.toggle("open"); all.setAttribute("aria-expanded", open ? "true" : "false"); update();
@@ -557,20 +588,31 @@
     e.preventDefault(); bar.scrollLeft += e.deltaY;
   }, { passive: false });
   links.forEach(function (l) { l.addEventListener("click", function () { if (nav.classList.contains("open")) all.click(); }); });
-  targets[0].node.parentNode.insertBefore(nav, targets[0].node);
+  // where the bar goes: in place of the page's own chip row, else before the first section - outside any grid / row,
+  // and as a direct child of a tall block (a sticky bar only sticks while its parent is on screen)
+  if (own) {
+    own.parentNode.insertBefore(nav, own); own.hidden = true; own.removeAttribute("data-live");   // not swapped back by the live refresh
+  } else {
+    var at = targets[0].node;
+    while (at.parentElement && at.parentElement !== document.body &&
+           (/grid|flex/.test(window.getComputedStyle(at.parentElement).display) || at.parentElement.offsetHeight < document.documentElement.scrollHeight * 0.5)) at = at.parentElement;
+    at.parentNode.insertBefore(nav, at);
+  }
   setTimeout(update, 0);
   if ("IntersectionObserver" in window) {
     var observer = new IntersectionObserver(function (entries) {
       entries.forEach(function (en) {
         if (!en.isIntersecting) return;
-        var i = targets.findIndex(function (tg) { return tg.node === en.target; });
+        var i = targets.findIndex(function (tg) { return tg.id === en.target.id; });
         links.forEach(function (l, j) { l.classList.toggle("active", j === i); });
-        if (links[i] && links[i].scrollIntoView && bar.scrollWidth > bar.clientWidth) {
-          bar.scrollLeft = links[i].offsetLeft - 16;
-        }
+        if (links[i] && bar.scrollWidth > bar.clientWidth) bar.scrollLeft = links[i].offsetLeft - 16;
       });
     }, { rootMargin: "-80px 0px -60% 0px" });
     targets.forEach(function (tg) { observer.observe(tg.node); });
+    document.addEventListener("aoi:live", function () {           // the live refresh replaced some sections
+      observer.disconnect();
+      targets.forEach(function (tg) { var n = document.getElementById(tg.id); if (n) observer.observe(n); });
+    });
   }
 })();
 

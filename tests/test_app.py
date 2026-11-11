@@ -2584,7 +2584,7 @@ class Update26(Base):
     def test_quick_jump_on_administration_pages(self):
         self.assertIn("data-quick-jump", self.text("/admin/milling/"))
         self.assertIn("data-quick-jump", self.text("/?g=AD"))
-        self.assertNotIn("data-quick-jump", self.text("/?g=SV"))
+        self.assertIn("data-quick-jump", self.text("/?g=SV"))          # update 124: every page (the bar appears only on long ones)
 
     def test_relink_another_line_account(self):
         with self.app.app_context():
@@ -5444,3 +5444,25 @@ class Update123(Base):
         page = self.text(url)
         for part in ('id="fm-svg-value"', 'id="fm-svg-money"', 'class="num hb4"', "Best value per kg"):
             self.assertIn(part, page)
+
+
+class Update124(Base):
+    """Quick jumps and the "to top" button on every long page (was Administration and Hardware only)."""
+
+    def test_every_page_gets_the_bar(self):
+        self.login("admin")
+        self.client.get("/lang/en")
+        for path in ("/automation/ai", "/automation/ai/prices", "/automation/ai/formulas", "/automation/ai/competitor", "/finance/pricing",
+                     "/finance/market", "/service/milling/", "/inventory/", "/admin/milling/maintenance", "/automation/hardware"):
+            page = self.text(path)
+            self.assertIn('data-quick-jump="Jump to"' if 'data-quick-jump="Jump to"' in page else "data-quick-jump=", page, path)
+            self.assertIn("data-quick-top=", page, path)
+        self.assertNotIn("data-quick-jump", self.text("/automation/scada?embed=1"))
+        ai = self.text("/automation/ai")
+        self.assertIn('href="#ai-formulas"', ai)
+        self.assertIn('href="#ai-competitor"', ai)
+        self.assertIn('data-qj-title=', self.text("/automation/scada"))
+        with open(os.path.join(os.path.dirname(__file__), "..", "app", "views", "static", "js", "app.js"), encoding="utf-8") as fh:
+            js = fh.read()
+        for part in ('fab.className = "to-top"', "nav.dash-nav", "data-qj-title", 'own.removeAttribute("data-live")'):
+            self.assertIn(part, js)

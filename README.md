@@ -340,6 +340,10 @@ are kept in `AOITS_SYSLOG` (14 days), the checks in `AOITS_HEALTH` (7 days).
 customer's LINE when "Also send to the customer's LINE" is ticked (shown for customers linked to LINE); "Send to LINE
 only" sends without printing. The same public https address is needed as for the queue QR (update 47).
 
+## Quick jumps and "to top" on every long page (update 124, DB 1.73 unchanged)
+
+The sticky bar of quick jumps (chips to each section, ‹ › and ≡ when they do not fit) was only on the Administration pages and Hardware Control. It is now on every page that is longer than about 1.6 screens and has at least two sections, and every page longer than 1.4 screens gets a round ↑ button at the bottom right. The first chip is "↑ Top". Sections are found automatically (cards and panels with a title; a card of a one-column list counts, small tiles of a grid do not); a page can name a block itself with `data-qj-title` (SCADA diagram, user list, role details). The AI page and Price analysis keep their own chip labels - the bar is built from their chip row (now also Competitor analysis and Product transformation formulas) and replaces it. Sections swapped by the live refresh are found again by id. Not on embedded pages, the TV pages or print.
+
 ## Formulas page as a dashboard (update 123, DB 1.73 unchanged)
 
 Tim asked for the product transformation formulas page in a dashboard look (his sample: a PPC analytics dashboard). The page is now wide and opens with a gradient title band with the branch picker, six gradient tiles (active / all formulas, fully costed, better than raw, best value per kg, best profit per batch, profit if the free stock goes to the best formula), three chart panels drawn on the server as SVG (formulas by source product as a donut, value per kg against the raw selling price, cost and revenue per batch) and the comparison as one heat table (each column shaded from its lowest to its highest value). The formula cards sit two per row on a wide screen. `formula.dashboard()` builds all of it; no inline styles (CSP).
