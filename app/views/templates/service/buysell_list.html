@@ -10,6 +10,7 @@
 {% block content %}
 <div id="tab-update-buysell-status">
 {{ page_head(t('updateBuySellStatusTitle'), url_for('home.index', g='SV')) }}
+<a class="card cp-entry mt14" id="gr-entry" href="{{ url_for('service_buysell.grades') }}">&#128300; <b>{{ t('grTitle') }}</b>{% if grade_free %} <span class="badge pending">{{ t('grFreeN', n=grade_free|length) }}</span>{% endif %} &rarr;</a>
 <form method="get" action="{{ url_for('service_buysell.order_list') }}" class="card mt14 bs-search" id="bs-search-form">
   {% if view_arg %}<input type="hidden" name="view" value="{{ view_arg }}">{% endif %}{% if status %}<input type="hidden" name="status" value="{{ status }}">{% endif %}{% if ord_type %}<input type="hidden" name="type" value="{{ ord_type }}">{% endif %}
   <input type="hidden" name="go" value="1">
@@ -77,6 +78,27 @@
     </form>
     {% if order.REF_INV_LOC %}<p class="bs-note">{{ t('lblLocation') }}: {{ order.REF_INV_LOC }}</p>{% endif %}
 
+    {# update 126: rice quality results of the camera grader, kept with a buying order #}
+    {% if order.ORD_TYPE == 'BY' %}
+    {% for g in grades.get(order.ORD_ID, []) %}
+    <p class="bs-note gr-on" data-grade="{{ g.GRADE_ID }}">&#128300; {{ t('grLabel') }}:
+      {% if g.VARIETY %}{{ g.VARIETY }}{% if g.PURITY_PCT is not none %} {{ g.PURITY_PCT }}%{% endif %} &middot; {% endif %}
+      {% if g.HEAD_RICE_PCT is not none %}<b>{{ t('grHead') }} {{ g.HEAD_RICE_PCT }}%</b>{% endif %}
+      {% if g.BROKEN_PCT is not none %}&middot; {{ t('grBroken') }} {{ g.BROKEN_PCT }}%{% endif %}
+      {% if g.MOISTURE_PCT is not none %}&middot; {{ t('grMoisture') }} {{ g.MOISTURE_PCT }}%{% endif %}
+      {% if g.CHALKY_PCT is not none %}&middot; {{ t('grChalky') }} {{ g.CHALKY_PCT }}%{% endif %}
+      {% if g.PHOTO_FLG %}&middot; <a href="{{ url_for('service_buysell.grade_photo', grade_id=g.GRADE_ID) }}" target="_blank" rel="noopener">{{ t('grPhoto') }}</a>{% endif %}
+      &middot; <a href="{{ url_for('service_buysell.grade_report', grade_id=g.GRADE_ID) }}" data-popup data-grade-report-link>&#128424; {{ t('grReportBtn') }}</a>
+      <small class="hint">{{ g.GRADE_ID }}{% if g.LINE_DATE %} &middot; &#128172; {{ t('grLineDone') }}{% endif %}</small></p>
+    {% endfor %}
+    {% if editable and grade_free and not grades.get(order.ORD_ID) %}
+    <form method="post" action="{{ url_for('service_buysell.grades') }}" class="cpn-use gr-attach">
+      {{ hidden() }}<input type="hidden" name="back" value="list"><input type="hidden" name="ORD_ID" value="{{ order.ORD_ID }}">
+      <select name="GRADE_ID" aria-label="{{ t('grLabel') }}">{% for g in grade_free %}<option value="{{ g.GRADE_ID }}">{{ g.GRADE_ID }}{% if g.SAMPLE_NO %} &middot; {{ g.SAMPLE_NO }}{% endif %} &middot; {{ t('grHead') }} {{ g.HEAD_RICE_PCT if g.HEAD_RICE_PCT is not none else '-' }}%</option>{% endfor %}</select>
+      <button class="action small" type="submit" name="action" value="attach">&#128300; {{ t('grAttach') }}</button>
+    </form>
+    {% endif %}
+    {% endif %}
     <a class="action bs-billing-btn" href="{{ url_for('service_buysell.billing', ids=order.ORD_ID) }}" data-popup>{{ t('btnPrintBilling') }}</a>
     {# update 96: campaign coupon for a customer buying order (SL) #}
     {% if order.COUPON_ID %}<p class="bs-note cpn-on" data-coupon>&#127903; {{ t('cpnLabel') }} {{ order.COUPON_ID }} -{{ order.COUPON_AMT|num }} THB &middot; <b>{{ t('cpnToPay') }} {{ (order.amount - (order.COUPON_AMT or 0))|num }} THB</b></p>{% endif %}

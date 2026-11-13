@@ -1,0 +1,42 @@
+{# update 125 (Tim's design): one VFD drives one of the two main motors through contactors KM1 / KM2 (interlocked);
+   the Raspberry Pi talks Modbus to the VFD, switches the contactor coils and reads their feedback; AOI chooses the motor. #}
+{% macro box(x, y, w, h, kind, title, sub=None, sub2=None, sub3=None) %}
+<g class="mf-box mf-{{ kind }}"><rect x="{{ x }}" y="{{ y }}" width="{{ w }}" height="{{ h }}" rx="14"/>
+  <text x="{{ x + w / 2 }}" y="{{ y + (h / 2 + 7 if not sub else (40 if sub2 else h / 2 - 6)) }}" text-anchor="middle" class="mf-t">{{ title }}</text>
+  {% if sub %}<text x="{{ x + w / 2 }}" y="{{ y + (72 if sub2 else h / 2 + 24) }}" text-anchor="middle" class="mf-s">{{ sub }}</text>{% endif %}
+  {% if sub2 %}<text x="{{ x + w / 2 }}" y="{{ y + 104 }}" text-anchor="middle" class="mf-s">{{ sub2 }}</text>{% endif %}
+  {% if sub3 %}<text x="{{ x + w / 2 }}" y="{{ y + 136 }}" text-anchor="middle" class="mf-s">{{ sub3 }}</text>{% endif %}</g>
+{% endmacro %}
+<div class="mf-wrap"><svg class="mf-svg" id="motor-flow-svg" viewBox="0 0 1300 850" role="img" aria-label="{{ t('mfTitle') }}">
+  <defs>
+    <marker id="mf-ap" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="mf-ah-p"/></marker>
+    <marker id="mf-ac" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="mf-ah-c"/></marker>
+  </defs>
+  {# power path #}
+  <path class="mf-p" marker-end="url(#mf-ap)" d="M300 90 H340"/><path class="mf-p" marker-end="url(#mf-ap)" d="M610 90 H650"/><path class="mf-p" marker-end="url(#mf-ap)" d="M920 90 H960"/>
+  <path class="mf-p" d="M1095 145 V212 H800"/><path class="mf-p" marker-end="url(#mf-ap)" d="M800 212 V292"/><path class="mf-p" marker-end="url(#mf-ap)" d="M1100 212 V292"/>
+  <path class="mf-p" marker-end="url(#mf-ap)" d="M800 404 V492"/><path class="mf-p" marker-end="url(#mf-ap)" d="M1100 404 V492"/>
+  <path class="mf-p" marker-end="url(#mf-ap)" d="M800 580 V652"/><path class="mf-p" marker-end="url(#mf-ap)" d="M1100 580 V652"/>
+  {# control signals #}
+  <path class="mf-c" marker-end="url(#mf-ac)" d="M552 332 H612 V190 H992 V148"/>
+  <path class="mf-c" marker-end="url(#mf-ac)" d="M552 362 H670"/>
+  <path class="mf-c" marker-end="url(#mf-ac)" d="M552 442 H642 V464 H1262 V348 H1236"/>
+  <path class="mf-c" marker-start="url(#mf-ac)" marker-end="url(#mf-ac)" d="M292 480 V550"/>
+  <path class="mf-i" d="M932 348 H972"/>
+  <text x="802" y="182" text-anchor="middle" class="mf-l">Modbus RS485</text>
+  <text x="952" y="278" text-anchor="middle" class="mf-l">{{ t('mfInterlock') }}</text>
+  {{ box(32, 32, 270, 112, 'pw', t('mfMainSwitch'), t('mfMainSwitchSub')) }}
+  {{ box(342, 32, 270, 112, 'pw', t('mfKm0'), t('mfKm0Sub')) }}
+  {{ box(652, 32, 270, 112, 'pw', t('mfReactor'), t('mfReactorSub')) }}
+  {{ box(962, 32, 270, 112, 'pw', t('mfVfd'), t('mfVfdSub')) }}
+  {{ box(672, 292, 260, 112, 'pw', t('mfKm', n=1), t('mfKmSub', n=1)) }}
+  {{ box(972, 292, 260, 112, 'pw', t('mfKm', n=2), t('mfKmSub', n=2)) }}
+  {{ box(672, 492, 260, 88, 'pw', t('mfOl', n=1)) }}
+  {{ box(972, 492, 260, 88, 'pw', t('mfOl', n=2)) }}
+  {{ box(672, 652, 260, 112, 'mt', t('mfMotor', n=1), '30 HP') }}
+  {{ box(972, 652, 260, 112, 'mt', t('mfMotor', n=2), t('mfMotorNew')) }}
+  {{ box(32, 292, 520, 184, 'ct', 'Raspberry Pi', t('mfPi1'), t('mfPi2'), t('mfPi3')) }}
+  {{ box(32, 552, 520, 112, 'ct', 'AOI', t('mfAoiSub')) }}
+  <path class="mf-p" d="M32 815 H92"/><text x="108" y="822" class="mf-l">{{ t('mfLegendPower') }}</text>
+  <path class="mf-c" d="M332 815 H392"/><text x="408" y="822" class="mf-l">{{ t('mfLegendControl') }}</text>
+</svg></div>

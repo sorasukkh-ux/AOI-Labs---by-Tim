@@ -203,6 +203,8 @@ def seed(log=print, reset=False):
     db["AOISYS_COUNTER"].delete_many({"COUNTER_KEY": "GTREND"})
     from app.models import formula as _formula      # update 122: starter templates of product transformation formulas
     _formula.seed_templates(db)
+    from app.models import grade as _grade          # update 126: one rice quality grader (Raspberry Pi) per branch
+    _grade.seed_devices(db, [b for b, _n in BRANCHES])
     for branch_id, name in BRANCHES:
         add("AOIMS_SYSPARAM", {"BRANCH_ID": branch_id}, dict(MILL_SETTINGS, BRANCH_NAME=name))
         for variety in _var.VARIETIES:

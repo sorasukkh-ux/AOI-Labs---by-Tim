@@ -7,6 +7,7 @@ On MongoDB the whole run shares ONE throw-away database (aoi_test_...): it is em
 and dropped at the end. Creating and dropping a database per test opened so many data files that the
 MongoDB server ran out of file handles and aborted.
 """
+import base64
 import os
 import sys
 import re
@@ -5466,3 +5467,163 @@ class Update124(Base):
             js = fh.read()
         for part in ('fab.className = "to-top"', "nav.dash-nav", "data-qj-title", 'own.removeAttribute("data-live")'):
             self.assertIn(part, js)
+
+
+class Update125(Base):
+    """Hardware Control shows Tim's motor control process flow (one VFD, two main motors, KM1 / KM2 interlocked)."""
+
+    def test_flow_card(self):
+        self.login("admin")
+        self.client.get("/lang/en")
+        page = self.text("/automation/hardware")
+        card = page.split('id="motor-flow"')[1].split('<div class="card mt14">')[0]
+        for part in ("Motor control process flow", 'id="motor-flow-svg"', "Contactor KM0", "Line reactor", "VFD 22 kW", "Contactor KM1", "Contactor KM2",
+                     "Overload OL2", "Raspberry Pi", "Modbus RS485", "interlock", "30 HP, new", "Power 380 V", "E-stop cuts KM0",
+                     "Switching sequence: motor 1", "<b>Safety check</b>", "<b>Load motor 2 settings</b>", "No auto-retry"):
+            self.assertIn(part, card)
+        self.assertNotIn(" style=", card)
+        self.client.get("/lang/th")
+        self.assertIn("ผังการควบคุมมอเตอร์", self.text("/automation/hardware"))
+
+
+class Update126(Base):
+    """Rice quality grader (Raspberry Pi + camera): device API, results kept with buying orders, simulator."""
+
+    def key(self):
+        with self.app.app_context():
+            from app.models import grade
+            return grade.issue_key("factory2", "F2-GRADER", "test")
+
+    def buy_order(self):
+        with self.app.app_context():
+            from app.models.buysell_order import BuySellOrder
+            orders = BuySellOrder.for_branch("factory2", None, "BY")
+            if orders:
+                return orders[0]["ORD_ID"]
+        self.client.post("/service/buysell/new", data={"csrf_token": self.token("/service/milling/new"), "ORD_TYPE": "BY", "mode": "open",
+                                                         "CUST_CODE": "C261001001", "QTY_PADDY": "100"}, headers={"Accept": "application/json"})
+        with self.app.app_context():
+            from app.models.buysell_order import BuySellOrder
+            orders = BuySellOrder.for_branch("factory2", None, "BY")
+        return orders[0]["ORD_ID"] if orders else None
+
+    def post_result(self, key, body, grader="F2-GRADER"):
+        return self.client.post("/api/v1/graders/%s/results" % grader, json=body, headers={"X-Device-Key": key})
+
+    def test_api_and_screens(self):
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
+        import grader_sim
+        key = self.key()
+        self.assertEqual(self.post_result("wrong", {"whole": 80}).status_code, 401)
+        self.assertEqual(self.post_result(key, {"whole": 80}, "F1-GRADER").status_code, 401)        # the key is this grader's only
+        self.assertEqual(self.post_result(key, {"note": "nothing"}).status_code, 422)
+        self.assertEqual(self.post_result(key, {"whole": 80, "broken": 30}).status_code, 422)
+        self.assertEqual(self.post_result(key, {"whole": 80, "photo": "bm90IGFuIGltYWdl"}).status_code, 422)
+        self.assertEqual(self.post_result(key, {"whole": 80, "order": "BY-NOPE"}).status_code, 422)
+        body = grader_sim.make_sample("PADDY_HM", quality=0.9, rng=__import__("random").Random(7))
+        self.assertAlmostEqual(body["whole"] + body["broken"], 100.0, places=1)
+        self.assertTrue(base64.b64decode(body["photo"]).startswith(b"\x89PNG"))
+        r = self.post_result(key, dict(body, sample="S-1"))
+        self.assertEqual(r.status_code, 200)
+        gid = r.get_json()["id"]
+        self.assertTrue(gid.startswith("GR"))
+        g = [x for x in self.db("AOITS_GRADE") if x["GRADE_ID"] == gid][0]
+        self.assertEqual((g["MAT_CODE"], g["PHOTO_FLG"], g["ORD_ID"], g["GRAINS"]), ("PADDY_HM", True, None, body["grains"]))
+        # the screens
+        self.login("admin")
+        self.client.get("/lang/en")
+        page = self.text("/service/buysell/grades")
+        for part in ("Rice quality grading", "F2-GRADER", 'data-grade="%s"' % gid, "Online", "S-1", "/grades/%s/photo" % gid):
+            self.assertIn(part, page)
+        photo = self.client.get("/service/buysell/grades/%s/photo" % gid)
+        self.assertEqual((photo.status_code, photo.mimetype), (200, "image/png"))
+        self.assertEqual(self.client.get("/service/buysell/grades/GR999999/photo").status_code, 404)
+        self.assertIn('id="gr-entry"', self.text("/service/buysell/"))
+        # a new key is shown once and the old one stops
+        page = self.post("/service/buysell/grades", {"action": "key", "GRADER_ID": "F2-GRADER"}, "/service/buysell/grades").get_data(as_text=True)
+        self.assertIn('id="gr-key-value"', page)
+        self.assertEqual(self.post_result(key, {"whole": 80}).status_code, 401)
+
+    def test_keep_with_buying_order(self):
+        key = self.key()
+        self.login("admin")
+        self.client.get("/lang/en")
+        ord_id = self.buy_order()
+        if not ord_id:
+            self.skipTest("no buying order in the sample data")
+        orders = self.client.get("/api/v1/graders/F2-GRADER/orders", headers={"X-Device-Key": key}).get_json()["orders"]
+        self.assertIn(ord_id, [o["order"] for o in orders])
+        self.assertNotIn("customer", orders[0])
+        # sent with the order: kept at once
+        r = self.post_result(key, {"whole": 85, "broken": 15, "head_rice": 50.2, "moisture": 14.1, "order": "AOI-" + ord_id})
+        self.assertEqual(r.get_json()["order"], ord_id)
+        page = self.text("/service/buysell/")
+        self.assertIn("Head rice 50.2%", page)
+        # sent without: attached by the staff, then detached
+        gid = self.post_result(key, {"whole": 70, "broken": 30, "head_rice": 41.0}).get_json()["id"]
+        self.post("/service/buysell/grades", {"action": "attach", "GRADE_ID": gid, "ORD_ID": ord_id}, "/service/buysell/grades")
+        self.assertEqual([x["ORD_ID"] for x in self.db("AOITS_GRADE") if x["GRADE_ID"] == gid], [ord_id])
+        again = self.post("/service/buysell/grades", {"action": "attach", "GRADE_ID": gid, "ORD_ID": ord_id}, "/service/buysell/grades")
+        self.assertEqual(again.status_code, 302)
+        self.post("/service/buysell/grades", {"action": "detach", "GRADE_ID": gid}, "/service/buysell/grades")
+        self.assertEqual([x["ORD_ID"] for x in self.db("AOITS_GRADE") if x["GRADE_ID"] == gid], [None])
+
+
+class Update127(Update126):
+    """The grading result as a slip in the receipt format: Print, and Send LINE to the customer of its buying order."""
+
+    USER = "U" + "0123456789abcdef" * 2
+
+    def test_api_and_screens(self):
+        pass
+
+    def test_keep_with_buying_order(self):
+        pass
+
+    def test_report_and_line(self):
+        from unittest import mock
+        key = self.key()
+        self.login("admin")
+        self.client.get("/lang/en")
+        ord_id = self.buy_order()
+        self.assertTrue(ord_id)
+        free = self.post_result(key, {"whole": 70, "broken": 30, "head_rice": 47.6, "moisture": 14.0, "sample": "S-9"}).get_json()["id"]
+        page = self.text("/service/buysell/grades/%s/report" % free)
+        for part in ("Rice quality result", free, "S-9", "Head rice", "47.6%", "Broken", "30.0%", "Moisture", "not a laboratory certificate",
+                     "data-print-receipt", "Attach the result to a buying order first"):
+            self.assertIn(part, page)
+        self.assertNotIn("data-receipt-line=", page)
+        self.assertEqual(self.post("/service/buysell/grades/line", {"ids": free}, "/service/buysell/grades").status_code, 422)
+        self.assertEqual(self.client.get("/service/buysell/grades/GR999999/report").status_code, 404)
+        gid = self.post_result(key, {"whole": 85, "broken": 15, "head_rice": 57.8, "moisture": 14.1, "chalky": 3.2, "order": ord_id,
+                                     "material": "PADDY", "variety": "ปทุมธานี 1", "purity": 96.5}).get_json()["id"]
+        page = self.text("/service/buysell/grades/%s/report" % gid)
+        self.assertIn("Receipt", self.text("/service/buysell/billing?ids=" + ord_id))          # same pop-up family
+        self.assertIn("Order No.", page)
+        for part in ("Variety found", "ปทุมธานี 1", "Variety purity", "96.5%", '<tr class="rc-strong"><td>Head rice</td>'):
+            self.assertIn(part, page)
+        self.assertNotIn("data-receipt-line=", page)                                          # customer not linked to LINE
+        self.assertEqual(self.post("/service/buysell/grades/line", {"ids": gid}, "/service/buysell/grades").status_code, 422)
+        with self.app.app_context():
+            col("AOIMS_CUSTOMER").update_one({"CUST_CODE": "C261001001"}, {"$set": {"LINE_USER_ID": self.USER}})
+        self.assertIn('data-receipt-line="/service/buysell/grades/line"', self.text("/service/buysell/grades/%s/report" % gid))
+        with mock.patch.dict(os.environ, {"AOI_LINE_CHANNEL_TOKEN": "token", "AOI_PUBLIC_URL": ""}), \
+                mock.patch("app.models.notify._push", return_value=None) as push:
+            r = self.post("/service/buysell/grades/line", {"ids": gid, "PUBLIC_BASE": "https://mill.example.com"}, "/service/buysell/grades")
+            self.assertEqual(r.get_json(), {"ok": True, "message": "The result was sent to the customer's LINE."})
+            user, text, image, flex = push.call_args[0]
+            self.assertEqual((user, image), (self.USER, None))
+            self.assertIn("ผลตรวจคุณภาพข้าว", text)
+            self.assertIn("57.8%", text)
+            flat = json.dumps(flex, ensure_ascii=False)
+            for part in ("AOI Labs", "ใบแจ้งผลตรวจคุณภาพข้าว", "พันธุ์ที่ตรวจพบ", "ปทุมธานี 1", "ต้นข้าว", "57.8%", "ความชื้น", "14.1%", gid, "https://mill.example.com"):
+                self.assertIn(part, flat)
+        kinds = [(n["NOTIFY_KIND"], n["ORD_TYPE"], n["ORD_ID"], n["NOTIFY_FLG"]) for n in self.db("AOITS_NOTIFY") if n["NOTIFY_KIND"] == "grade"]
+        self.assertEqual(kinds, [("grade", "BY", ord_id, "1")])
+        self.assertTrue([g for g in self.db("AOITS_GRADE") if g["GRADE_ID"] == gid][0].get("LINE_DATE"))
+        self.assertIn("Sent to LINE at", self.text("/service/buysell/grades/%s/report" % gid))
+        self.assertIn("data-grade-report-link", self.text("/service/buysell/"))
+        self.assertIn("gr-report-btn", self.text("/service/buysell/grades"))
+        from app.models import line_msg
+        with self.app.app_context():
+            self.assertIn("LN_GRADE", [m["MSG_ID"] for m in line_msg.all_messages("en")])

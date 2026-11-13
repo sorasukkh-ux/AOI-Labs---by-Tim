@@ -101,6 +101,17 @@
   {% if machines|length > in_use|length %}<p class="cap-note" id="mc-not-used">{{ t('mcNotUsedNote', n=machines|length - in_use|length) }}</p>{% endif %}
 </div>
 
+{# update 125 (Tim): the motor control process flow - one VFD, two main motors #}
+<div class="card mt14" id="motor-flow">
+  <p class="card-title sub">{{ t('mfTitle') }}</p>
+  <p class="cap-note tight">{{ t('mfNote') }}</p>
+  {% include "automation/_motor_flow.html" %}
+  <p class="mf-seq-title">{{ t('mfSeqTitle') }}</p>
+  <ol class="mf-steps">{% for n in range(1, 8) %}{% set parts = t('mfStep' ~ n).split('**') %}<li{% if n == 7 %} class="mf-ready"{% endif %}><b>{{ parts[1] }}</b>{{ parts[2] }}</li>{% endfor %}</ol>
+  <p class="mf-fail">&#9888; {{ t('mfFail') }}</p>
+  <p class="cap-note">{{ t('mfEstop') }}</p>
+</div>
+
 <div class="card mt14">
   <p class="card-title sub">{{ t('mcCommands') }}</p>
   <div class="inv-table-wrap"><table class="tv-table" id="cmd-table">

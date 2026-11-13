@@ -67,6 +67,9 @@ COLLECTIONS = {
     "AOITS_COMPAI": [(["AI_ID"], True), (["BRANCH_ID", "REGIST_DATE"], False)],
     "AOITS_AIJOB": [(["JOB_ID"], True), (["KIND", "STATUS", "REGIST_DATE"], False)],                  # update 117
     "AOIMS_FORMULA": [(["FORMULA_ID"], True), (["SOURCE_MAT", "FORMULA_NAME"], False)],              # update 122
+    "AOIMS_GRADER": [(["GRADER_ID"], True), (["BRANCH_ID"], False)],                                 # update 126
+    "AOITS_GRADE": [(["GRADE_ID"], True), (["BRANCH_ID", "TEST_DATE"], False), (["ORD_ID"], False)],
+    "AOITS_GRADEPHOTO": [(["GRADE_ID"], True)],
     # ---- technical (not in the DB structure workbook): running numbers for order and customer codes ----
     "AOISYS_COUNTER": [(["COUNTER_KEY"], True)],
 }

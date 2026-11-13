@@ -322,6 +322,37 @@ def send_receipt(orders, customer, browser_origin=None):
     return send(doc)
 
 
+# ---------- update 127: rice quality result to the customer's LINE ----------
+def send_grade(g, order, customer, browser_origin=None):
+    """The grading result of a buying order as a card (Flex Message, receipt look) with the LN_GRADE text as its
+    alternative text. Saved in AOITS_NOTIFY (kind grade, ORD_TYPE BY, ORD_ID the buying order)."""
+    from . import grade, line_flex, line_msg
+    from .tv import short_name
+    from .variety import mat_name
+    from ..i18n import t_in
+    if not line_msg.active("LN_GRADE"):
+        return {"NOTIFY_FLG": ERROR, "ERROR": "lnLabelOff"}
+    name = customer.get("CUST_NAME") or order["CUST_CODE"]
+    number = "#%s" % (order.get("QR_ID") or order["ORD_ID"])
+    date = to_local(g["TEST_DATE"]).strftime("%d/%m/%Y %H:%M")
+    pct = lambda v: "-" if v is None else "%s%%" % v
+    now = now_utc()
+    seq = Counter.next("NT-" + order["ORD_ID"])
+    doc = {"NOTIFY_ID": "NT-%s-%02d" % (order["ORD_ID"], seq), "ORD_ID": order["ORD_ID"], "ORD_TYPE": order.get("ORD_TYPE"),
+           "CUST_CODE": order["CUST_CODE"], "NOTIFY_KIND": "grade", "NOTIFY_DATETIME": None, "NOTIFY_FLG": UNSENT,
+           "NOTIFY_MESSAGE": line_msg.text("LN_GRADE", no=number, name=short_name(name) or name, head=pct(g.get("HEAD_RICE_PCT")),
+                                           broken=pct(g.get("BROKEN_PCT")), moisture=pct(g.get("MOISTURE_PCT")), date=date),
+           "ERROR": None, "REGIST_DATE": now, "LAST_UPDATE": now, "IMAGE_URL": None}
+    head = [(t_in("th", "receiptOrderNo"), number), (t_in("th", "receiptCustomer"), name), (t_in("th", "receiptDate"), date)]
+    if g.get("MAT_CODE"):
+        head.append((t_in("th", "colProduct"), mat_name(g["MAT_CODE"], "th")))
+    head.append((t_in("th", "grReportNo"), g["GRADE_ID"] + (" · " + g["SAMPLE_NO"] if g.get("SAMPLE_NO") else "")))
+    doc["NOTIFY_FLEX"] = line_flex.grade_report(t_in("th", "grReportTitle"), head, grade.report_rows(g, "th"),
+                                                t_in("th", "grReportNote"), public_base(browser_origin), strong=t_in("th", "grHead"))
+    col(COL).insert_one(dict(doc))
+    return send(doc)
+
+
 # ---------- update 96: campaign coupon to the customer's LINE ----------
 def coupon_token(coupon_id):
     import hashlib

@@ -11,7 +11,10 @@ it is shown once). No browser session or CSRF token is used here.
     POST /api/v1/commands/<CMD_ID>/ack              {"ok": true, "result": "..."}         command carried out
     POST /api/v1/meters/<METER_ID>/readings         {"kwh": 12345.6, "time": "2026-10-12T09:00:00+07:00"}
 
-See scripts/aoi_gateway.py (inverter by Modbus; --simulate starts the virtual inverter scripts/vfd_sim.py) and
+    POST /api/v1/graders/<GRADER_ID>/results        rice quality result of the camera grader (update 126, models/grade.py)
+    GET  /api/v1/graders/<GRADER_ID>/orders         the open buying orders, to pick one on the grader
+
+See scripts/grader_sim.py (a pretend grader), scripts/aoi_gateway.py (inverter by Modbus; --simulate starts the virtual inverter scripts/vfd_sim.py) and
 scripts/device_sim.py (simple start/stop machine) for working examples.
 """
 from datetime import datetime, timezone
@@ -106,3 +109,27 @@ def meter_reading(meter_id):
     except ValidationError as error:
         return _error(error)
     return jsonify({"ok": True, "id": reading["READ_ID"], "used_kwh": reading["USED_KWH"]})
+
+
+# ---------- update 126: rice quality grader (Raspberry Pi + camera) ----------
+@bp.route("/graders/<grader_id>/results", methods=["POST"])
+def grader_result(grader_id):
+    from ..models import grade
+    dev = grade.by_key(grader_id, _key())
+    if not dev:
+        return _denied()
+    try:
+        doc = grade.save_result(dev, request.get_json(silent=True))
+    except ValidationError as error:
+        return _error(error)
+    return jsonify({"ok": True, "id": doc["GRADE_ID"], "order": doc["ORD_ID"]})
+
+
+@bp.route("/graders/<grader_id>/orders", methods=["GET"])
+def grader_orders(grader_id):
+    from ..models import grade
+    dev = grade.by_key(grader_id, _key())
+    if not dev:
+        return _denied()
+    grade.seen(dev)
+    return jsonify({"ok": True, "orders": grade.open_orders(dev["BRANCH_ID"])})

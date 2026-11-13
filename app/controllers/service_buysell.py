@@ -131,12 +131,107 @@ def order_list():
         orders = [o for o in orders if o["ORD_STATUS"] == status]
     if view == "closed":                                 # the most recently ended first
         orders = sorted(orders, key=lambda o: -o["LAST_UPDATE"].timestamp())[:CLOSED_LIMIT]
-    return render_template("service/buysell_list.html", orders=orders, q=q, view=view, view_arg=None if view == "active" else view,
+    from ..models import grade                               # update 126: rice quality results of the camera grader
+    grades = grade.for_orders([o["ORD_ID"] for o in orders if o["ORD_TYPE"] == bs.BUY])
+    return render_template("service/buysell_list.html", grades=grades, grade_free=grade.unlinked(operating_branch()),
+                           orders=orders, q=q, view=view, view_arg=None if view == "active" else view,
                            views=list(VIEWS), counts=counts, status_counts=status_counts, closed_limit=CLOSED_LIMIT,
                            status=status, ord_type=ord_type, filters=VIEWS[view], status_keys=BS_STATUS_KEYS,
                            status_class=BS_STATUS_CLASS, type_keys=TYPE_KEYS, mat_keys=MAT_KEYS,
                            inv_status_keys=INV_STATUS_KEYS, can_edit=can(MENU, "edit"), can_cancel=can(MENU, "delete"),
                            can_price=can(MENU, "edit") and can(REGISTER, "approve"))
+
+
+# ---------- update 126: rice quality grading (camera grader on a Raspberry Pi) ----------
+@bp.route("/grades", methods=["GET", "POST"])
+@require(MENU)
+def grades():
+    from ..models import grade
+    branch = operating_branch()
+    new_key = None
+    if request.method == "POST":
+        action = request.form.get("action")
+        try:
+            if action == "key":                                   # a device key is a secret: Hardware Control's edit right
+                if not can("AT_HARDWARE", "edit"):
+                    abort(403)
+                new_key = (request.form.get("GRADER_ID"), grade.issue_key(branch, request.form.get("GRADER_ID"), current_user()["USER_ID"]))
+            elif action in ("attach", "detach"):
+                if not can(MENU, "edit"):
+                    abort(403)
+                if action == "attach":
+                    g = grade.attach(branch, request.form.get("GRADE_ID"), request.form.get("ORD_ID") or "", current_user()["USER_ID"])
+                    flash_ok("grAttached", id=g["GRADE_ID"], order=g["ORD_ID"])
+                else:
+                    grade.detach(branch, request.form.get("GRADE_ID"), current_user()["USER_ID"])
+                    flash_ok("grDetached")
+                if request.form.get("back") == "list":
+                    return _back_to_list()
+                return redirect(url_for("service_buysell.grades", _anchor="gr-results"))
+            else:
+                abort(400)
+        except ValidationError as error:
+            flash_error(error)
+            if request.form.get("back") == "list":
+                return _back_to_list()
+            return redirect(url_for("service_buysell.grades"))
+    rows = grade.recent(branch, 60)
+    orders = {o["ORD_ID"]: o for o in BuySellOrder.for_branch(branch, VIEWS["active"], bs.BUY)}
+    return render_template("service/grades.html", rows=rows, devices=grade.devices(branch), summary=grade.summary(branch),
+                           open_orders=list(orders.values())[:30], new_key=new_key, mat_name=mat_name, fmt_datetime=fmt_datetime,
+                           can_edit=can(MENU, "edit"), can_key=can("AT_HARDWARE", "edit"), free_hours=grade.UNLINKED_HOURS)
+
+
+@bp.route("/grades/<grade_id>/photo")
+@require(MENU)
+def grade_photo(grade_id):
+    from ..models import grade
+    found = grade.photo(grade_id, operating_branch())
+    if not found:
+        abort(404)
+    resp = current_app.response_class(found[0], mimetype=found[1])
+    resp.headers["Cache-Control"] = "private, max-age=86400"
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    return resp
+
+
+@bp.route("/grades/<grade_id>/report")
+@require(MENU)
+def grade_report(grade_id):
+    """Update 127: the result as a slip in the receipt format (pop-up content): Print, and Send LINE to the customer of
+    the buying order it is kept with."""
+    from ..models import grade
+    g = grade.get(grade_id, operating_branch())
+    if not g:
+        abort(404)
+    order, customer = grade.report_context(g)
+    return render_template("service/_grade_report.html", g=g, order=order, customer=customer, rows=grade.report_rows(g),
+                           tested=fmt_datetime(g["TEST_DATE"]), printed=fmt_datetime(now_utc()), mat_name=mat_name,
+                           address=current_app.config["LABEL_ADDRESS_TH"], address_en=current_app.config["LABEL_ADDRESS_EN"],
+                           tel=current_app.config["LABEL_TEL"], line_ok=bool(customer.get("LINE_USER_ID")),
+                           line_sent=fmt_datetime(g["LINE_DATE"]) if g.get("LINE_DATE") else None)
+
+
+@bp.route("/grades/line", methods=["POST"])
+@require(MENU)
+def grade_line():
+    """Send LINE in the result pop-up: the result as a card to the customer's LINE. Answers JSON."""
+    from ..models import grade, notify
+    if not can(MENU, "edit"):
+        abort(403)
+    g = grade.get(request.form.get("ids"), operating_branch())
+    if not g:
+        abort(404)
+    order, customer = grade.report_context(g)
+    if not order:
+        return jsonify({"ok": False, "message": t("grLineNoOrder")}), 422
+    if not customer.get("LINE_USER_ID"):
+        return jsonify({"ok": False, "message": t("lnNoUser")}), 422
+    doc = notify.send_grade(g, order, customer, request.form.get("PUBLIC_BASE"))
+    if doc.get("NOTIFY_FLG") != notify.SENT:
+        return jsonify({"ok": False, "message": t(notify.reason_key(doc.get("ERROR")))}), 422
+    grade.mark_line(g["GRADE_ID"], current_user()["USER_ID"])
+    return jsonify({"ok": True, "message": t("grLineSent")})
 
 
 def _back_to_list():

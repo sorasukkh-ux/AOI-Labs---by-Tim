@@ -9,6 +9,8 @@ Run it in a second terminal while the app runs (bash start.sh in the first). It
      reused next time while it still matches, so normally nothing changes,
   3. starts a virtual inverter for each and ONE gateway for all of them.
 Then ON / OFF / speed work on Hardware Control and the SCADA for every motor.
+Update 126: the branch's rice quality grader is simulated too (scripts/grader_sim.py): a made-up sample with a photo
+every 60 seconds (--grader-every N, 0 = off).
 
 Test commands (type, then Enter):  "1 load 120"  "2 jam"  "1 clear"  "2 fault"  "status"   (1, 2 ... = the motor number
 in the list printed at the start). Ctrl+C stops everything.
@@ -66,6 +68,39 @@ def prepare(branch, force=False, user="sim_all"):
     return out
 
 
+def prepare_graders(branch, force=False, user="sim_all"):
+    """Update 126: [(grader record, key)] of the branch's rice quality graders (same key handling as the machines)."""
+    from app import create_app
+    from app.models import grade
+    from app.models.automation import _hash
+    app = create_app()
+    keys, out = load_keys(), []
+    with app.app_context():
+        for g in grade.devices(branch):
+            if g.get("ACTIVE_FLG") is False:
+                continue
+            gid, key = g["GRADER_ID"], keys.get(g["GRADER_ID"])
+            if not (key and g.get("DEVICE_KEY_HASH") == _hash(key)):
+                if g.get("DEVICE_KEY_HASH") and g["online"] and not force:
+                    print("  %s: skipped - its key belongs to a grader that is online now (use --force to replace it)" % gid)
+                    continue
+                key = grade.issue_key(branch, gid, user)
+                keys[gid] = key
+            out.append((g, key))
+        save_keys(keys)
+    return out
+
+
+def start_graders(url, graders, every):
+    """One thread per grader sending a made-up sample every `every` seconds. Returns the stop event."""
+    import threading
+    import grader_sim
+    stop = threading.Event()
+    for g, key in graders:
+        threading.Thread(target=grader_sim.run, args=(url, g["GRADER_ID"], key), kwargs={"every": every, "stop": stop}, daemon=True).start()
+    return stop
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--branch", default="factory2")
@@ -73,13 +108,25 @@ def main():
     parser.add_argument("--force", action="store_true", help="also replace the key of a device that is online")
     parser.add_argument("--export", metavar="FILE", help="write a gateway file for the Raspberry Pi instead of simulating")
     parser.add_argument("--port", default="/dev/ttyUSB0", help="--export: the RS-485 port of the Pi")
+    parser.add_argument("--grader-every", type=float, default=60.0, help="seconds between the simulated grader's samples (0 = no grader)")
     args = parser.parse_args()
+    graders = prepare_graders(args.branch, args.force) if args.grader_every > 0 and not args.export else []
     machines = prepare(args.branch, args.force)
     selectors = [(m, k) for m, k in machines if m.get("MACHINE_TYPE") == "MILL_SELECTOR"]
     machines = [(m, k) for m, k in machines if m.get("MACHINE_TYPE") != "MILL_SELECTOR"]
     if not machines:
         print("No machine in use with remote control on %s (Hardware Control > Machine setup)." % args.branch)
-        return 1
+        if not graders:
+            return 1
+        print("Simulating the rice quality grader only (a sample every %.0f s). Ctrl+C stops it." % args.grader_every)
+        gstop = start_graders(args.url, graders, args.grader_every)
+        try:
+            while True:
+                time.sleep(3600)
+        except KeyboardInterrupt:
+            gstop.set()
+            print("stopped")
+        return 0
     if args.export:
         cfg = {"url": args.url, "machines": [{"machine": m["MACHINE_ID"], "key": key, "modbus": "rtu:%s:19200:E:1" % args.port,
                                                "slave": n + 1, "min_hz": m.get("SPEED_MIN_HZ") or 30, "max_hz": m.get("SPEED_MAX_HZ") or 50}
@@ -100,6 +147,9 @@ def main():
         {"machine": m["MACHINE_ID"], "key": key, "slave": 1, "min_hz": m.get("SPEED_MIN_HZ") or 30, "max_hz": m.get("SPEED_MAX_HZ") or 50,
          "rated_amp": m.get("RATED_AMP")} for m, key in machines]
         + [{"machine": m["MACHINE_ID"], "key": key, "kind": "selector", "position": m.get("SELECT_TO")} for m, key in selectors], simulate=True)
+    gstop = start_graders(args.url, graders, args.grader_every) if graders else None
+    for g, _key in graders:
+        print("  -  %s  rice quality grader (a made-up sample every %.0f s -> Buying/Selling Order List > Rice quality grading)" % (g["GRADER_ID"], args.grader_every))
     order = [m["MACHINE_ID"] for m, _k in machines]
     print('Test commands: "1 load 120", "2 jam", "1 clear", "2 fault", "status". Ctrl+C stops everything.')
     try:
@@ -130,6 +180,8 @@ def main():
             time.sleep(3600)
     except KeyboardInterrupt:
         stop.set()
+        if gstop:
+            gstop.set()
         print("stopped")
     return 0
 

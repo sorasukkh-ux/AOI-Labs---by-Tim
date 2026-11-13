@@ -1,0 +1,33 @@
+{# update 127 (Tim): the rice quality result as a slip in the receipt format. Shown in the pop-up; Print prints only the slip. #}
+<div class="receipt-wrap">
+  <div class="receipt" id="receipt" data-grade-report="{{ g.GRADE_ID }}">
+    <img class="rc-logo" src="{{ url_for('static', filename='img/logo.png') }}" alt="AOI">
+    <p class="rc-brand">AOI Labs</p>
+    <p class="rc-addr">{{ address }}<br>{{ address_en }}<br>Tel. {{ tel }}</p>
+    <p class="rc-title">{{ t('grReportTitle') }}</p>
+    <div class="rc-row"><span>{{ t('grReportNo') }}</span><span>{{ g.GRADE_ID }}{% if g.SAMPLE_NO %} &middot; {{ g.SAMPLE_NO }}{% endif %}</span></div>
+    {% if order %}<div class="rc-row"><span>{{ t('receiptOrderNo') }}</span><span>#{{ order.QR_ID or order.ORD_ID }}</span></div>
+    <div class="rc-row"><span>{{ t('receiptCustomer') }}</span><span>{{ customer.get('CUST_NAME', order.CUST_CODE) }}</span></div>{% endif %}
+    {% if g.MAT_CODE %}<div class="rc-row"><span>{{ t('colProduct') }}</span><span>{{ mat_name(g.MAT_CODE) }}</span></div>{% endif %}
+    <div class="rc-row"><span>{{ t('grTested') }}</span><span>{{ tested }}</span></div>
+    <p class="rc-items">{{ t('grReportItems') }}</p>
+    <table class="rc-table">
+      <thead><tr><th>{{ t('grReportItem') }}</th><th class="num">{{ t('grReportValue') }}</th></tr></thead>
+      <tbody>{% for label, value in rows %}<tr{% if label == t('grHead') %} class="rc-strong"{% endif %}><td>{{ label }}</td><td class="num">{{ value }}</td></tr>{% endfor %}</tbody>
+    </table>
+    {% if g.PHOTO_FLG %}<img class="rc-photo" src="{{ url_for('service_buysell.grade_photo', grade_id=g.GRADE_ID) }}" alt="{{ t('grPhoto') }}">{% endif %}
+    {% if g.NOTE %}<p class="rc-note">{{ g.NOTE }}</p>{% endif %}
+    <p class="rc-note">{{ t('grReportNote') }}</p>
+    <p class="rc-note">{{ t('grPrinted') }} {{ printed }} &middot; {{ g.GRADER_ID }}</p>
+  </div>
+  <div class="rc-actions">
+    <button type="button" class="action primary rc-print-btn" data-print-receipt>&#128424; {{ t('grPrint') }}</button>
+    {% if line_ok %}
+    <button type="button" class="action rc-line-btn" data-receipt-line="{{ url_for('service_buysell.grade_line') }}" data-ids="{{ g.GRADE_ID }}"
+            data-csrf="{{ csrf_token() }}">&#128172; {{ t('btnSendLine') }}</button>
+    {% else %}
+    <button type="button" class="action rc-line-btn" disabled title="{{ t('lnNoUser') if order else t('grLineNoOrder') }}">&#128172; {{ t('btnSendLine') }}</button>
+    {% endif %}
+  </div>
+  <p class="rc-line-status{% if line_sent %} ok{% endif %}" data-receipt-line-status{% if not line_sent and order and line_ok %} hidden{% endif %}>{% if line_sent %}{{ t('grLineSentAt', when=line_sent) }}{% elif not order %}{{ t('grLineNoOrder') }}{% elif not line_ok %}{{ t('lnNoUser') }}{% endif %}</p>
+</div>

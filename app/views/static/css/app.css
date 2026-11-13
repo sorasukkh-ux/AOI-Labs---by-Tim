@@ -1832,3 +1832,29 @@ body.leaflet-page { background: #e5e7eb; font-family: "Prompt", "IBM Plex Sans T
 .to-top:hover { opacity: 1; }
 @media print { .to-top, .quick-jump { display: none !important; } }
 .dash-card[id], .fmd-panel[id], section[id] { scroll-margin-top: 64px; }
+/* update 125: motor control process flow (Hardware Control) */
+.mf-wrap { overflow-x: auto; margin-top: 8px; } .mf-svg { width: 100%; min-width: 620px; height: auto; display: block; }
+.mf-box rect { stroke-width: 1.5; } .mf-pw rect { fill: #fbecd9; stroke: #b7791f; } .mf-ct rect { fill: #e0f3ec; stroke: #1f8a63; } .mf-mt rect { fill: #f1eee8; stroke: #6b7280; }
+.mf-t { font: 700 26px sans-serif; } .mf-s { font: 400 22px sans-serif; }
+.mf-pw .mf-t { fill: #5b3407; } .mf-pw .mf-s { fill: #8a5a12; } .mf-ct .mf-t { fill: #0c4a36; } .mf-ct .mf-s { fill: #157a57; } .mf-mt .mf-t { fill: #374151; } .mf-mt .mf-s { fill: #6b7280; }
+.mf-p { fill: none; stroke: #b7791f; stroke-width: 3; } .mf-c { fill: none; stroke: #1f9d6f; stroke-width: 3; stroke-dasharray: 9 8; }
+.mf-i { fill: none; stroke: #6b7280; stroke-width: 3; stroke-dasharray: 3 6; }
+.mf-ah-p { fill: #b7791f; } .mf-ah-c { fill: #1f9d6f; } .mf-l { font: 400 20px sans-serif; fill: #4b5563; }
+.mf-steps { margin: 12px 0 0; padding-left: 22px; line-height: 1.7; font-size: 14px; }
+.mf-seq-title { font-weight: 700; margin: 14px 0 0; }
+.mf-steps { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; list-style-position: inside; padding-left: 0; margin-top: 8px; }
+@media (max-width: 700px) { .mf-steps { grid-template-columns: 1fr; } }
+.mf-steps li { background: var(--surface-2, #f8fafc); border: 1px solid var(--border, #e5e7eb); border-radius: 10px; padding: 8px 12px; line-height: 1.5; }
+.mf-steps li b { margin-right: 6px; } .mf-steps li.mf-ready { background: #dcfce7; border-color: #86efac; }
+.mf-fail { margin: 10px 0 0; padding: 10px 12px; border-radius: 10px; background: #ffedd5; color: #9a3412; }
+/* update 126: rice quality grading */
+.gr-on { color: #166534; } .gr-attach select { flex: 1; min-width: 180px; width: auto; }
+.gr-thumb { width: 96px; height: 72px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border, #e5e7eb); display: block; }
+.gr-attach-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; } .gr-attach-row select { width: auto; min-width: 160px; flex: 1; } .gr-attach-row .action { width: auto; margin: 0; }
+.gr-key { border: 2px solid #f59e0b; background: #fffbeb; } .gr-key-text code { font-size: 16px; word-break: break-all; user-select: all; }
+.gr-how summary { cursor: pointer; font-size: 14px; } #gr-entry .badge { margin-left: 6px; }
+/* update 127: rice quality result slip (receipt format) */
+.receipt .rc-photo { display: block; width: 100%; max-width: 320px; height: auto; margin: 10px auto 4px; border: 1px solid #ccc; border-radius: 4px; }
+.receipt .rc-note { font-size: 11px; margin: 6px 0 0; line-height: 1.4; } .receipt .rc-table tr.rc-strong td { font-weight: 700; font-size: 14px; }
+.gr-report-btn { width: auto; margin: 0; white-space: nowrap; }
+.gr-variety { color: #166534; font-weight: 600; }

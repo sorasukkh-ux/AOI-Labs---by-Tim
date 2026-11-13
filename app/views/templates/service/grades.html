@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% from "_macros.html" import page_head %}
+{% macro pct(v) %}{{ v ~ '%' if v is not none else '-' }}{% endmacro %}
+{% block content %}
+{# update 126 (Tim): rice / paddy quality results sent by the camera grader on a Raspberry Pi #}
+<div id="tab-grades">
+{{ page_head(t('grTitle'), url_for('service_buysell.order_list')) }}
+<div class="card gap"><p class="desc-text">{{ t('grDesc') }}</p></div>
+
+<div class="co-stats">
+  <div class="card co-stat"><small>{{ t('grStatN', days=summary.days) }}</small><b id="gr-n">{{ summary.n }}</b></div>
+  <div class="card co-stat"><small>{{ t('grStatHead') }}</small><b>{{ pct(summary.head_rice) }}</b></div>
+  <div class="card co-stat"><small>{{ t('grStatBroken') }}</small><b>{{ pct(summary.broken) }}</b></div>
+  <div class="card co-stat"><small>{{ t('grStatMoisture') }}</small><b>{{ pct(summary.moisture) }}</b></div>
+</div>
+
+{% if new_key %}
+<div class="card mt14 gr-key" id="gr-new-key"><p class="card-title sub">&#128273; {{ t('grKeyTitle', id=new_key[0]) }}</p>
+  <p class="gr-key-text"><code id="gr-key-value">{{ new_key[1] }}</code></p>
+  <p class="cap-note">{{ t('grKeyNote') }}</p>
+  <p class="cap-note tight"><code>python3 scripts/grader_sim.py {{ new_key[0] }} {{ new_key[1] }} --every 30</code></p></div>
+{% endif %}
+
+<div class="card mt14" id="gr-devices">
+  <p class="card-title sub">{{ t('grDevices') }}</p>
+  <div class="inv-table-wrap"><table class="tv-table">
+    <thead><tr><th>{{ t('grDevice') }}</th><th>{{ t('colStatus') }}</th><th>{{ t('grLastSeen') }}</th><th></th></tr></thead>
+    <tbody>{% for d in devices %}
+    <tr><td><b>{{ d.GRADER_ID }}</b><br><small class="hint">{{ d.GRADER_NAME }}</small></td>
+      <td>{% if d.online %}<span class="badge approved">{{ t('grOnline') }}</span>{% elif d.DEVICE_KEY_HASH %}<span class="badge manual">{{ t('grOffline') }}</span>{% else %}<span class="badge neutral">{{ t('grNoKey') }}</span>{% endif %}</td>
+      <td>{{ fmt_datetime(d.LAST_SEEN) if d.LAST_SEEN else '-' }}</td>
+      <td>{% if can_key %}<form method="post" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="GRADER_ID" value="{{ d.GRADER_ID }}">
+        <button class="action small" type="submit" name="action" value="key" {% if d.DEVICE_KEY_HASH %}data-confirm="{{ t('grKeyConfirm') }}"{% endif %}>&#128273; {{ t('grKeyNew') }}</button></form>{% endif %}</td></tr>
+    {% else %}<tr><td colspan="4" class="hint center">{{ t('grNoDevice') }}</td></tr>{% endfor %}</tbody>
+  </table></div>
+  <details class="gr-how mt6"><summary>{{ t('grHowTitle') }}</summary>
+    <ol class="hint"><li>{{ t('grHow1') }}</li><li>{{ t('grHow2') }}</li><li>{{ t('grHow3') }}</li><li>{{ t('grHow4') }}</li></ol></details>
+</div>
+
+<div class="card mt14" id="gr-results">
+  <p class="card-title sub">{{ t('grResults') }}</p>
+  <p class="cap-note tight">{{ t('grResultsNote', hours=free_hours) }}</p>
+  <div class="inv-table-wrap"><table class="tv-table gr-table">
+    <thead><tr><th>{{ t('colDate') }}</th><th>{{ t('grSample') }}</th><th class="num">{{ t('grHead') }}</th><th class="num">{{ t('grWhole') }}</th><th class="num">{{ t('grBroken') }}</th>
+      <th class="num">{{ t('grChalky') }}</th><th class="num">{{ t('grMoisture') }}</th><th class="num">{{ t('grGrains') }}</th><th>{{ t('grPhoto') }}</th><th>{{ t('grOrder') }}</th><th></th></tr></thead>
+    <tbody>{% for g in rows %}
+    <tr data-grade="{{ g.GRADE_ID }}"><td>{{ fmt_datetime(g.TEST_DATE) }}<br><small class="hint">{{ g.GRADE_ID }} &middot; {{ g.GRADER_ID }}</small></td>
+      <td>{{ g.SAMPLE_NO or '-' }}{% if g.MAT_CODE %}<br><small class="hint">{{ mat_name(g.MAT_CODE) }}</small>{% endif %}{% if g.VARIETY %}<br><small class="gr-variety">{{ g.VARIETY }}{% if g.PURITY_PCT is not none %} {{ g.PURITY_PCT }}%{% endif %}</small>{% endif %}{% if g.NOTE %}<br><small class="hint">{{ g.NOTE }}</small>{% endif %}</td>
+      <td class="num"><b>{{ pct(g.HEAD_RICE_PCT) }}</b></td><td class="num">{{ pct(g.WHOLE_PCT) }}</td><td class="num">{{ pct(g.BROKEN_PCT) }}</td>
+      <td class="num">{{ pct(g.CHALKY_PCT) }}</td><td class="num">{{ pct(g.MOISTURE_PCT) }}</td><td class="num">{{ g.GRAINS if g.GRAINS is not none else '-' }}</td>
+      <td>{% if g.PHOTO_FLG %}<a href="{{ url_for('service_buysell.grade_photo', grade_id=g.GRADE_ID) }}" target="_blank" rel="noopener"><img class="gr-thumb" src="{{ url_for('service_buysell.grade_photo', grade_id=g.GRADE_ID) }}" alt="{{ t('grPhoto') }} {{ g.GRADE_ID }}" loading="lazy" width="96" height="72"></a>{% else %}-{% endif %}</td>
+      <td>{% if g.ORD_ID %}<a href="{{ url_for('service_buysell.order_list', q='AOI-' ~ g.ORD_ID, find=1) }}">{{ g.ORD_ID }}</a>
+        {% if can_edit %}<form method="post" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="GRADE_ID" value="{{ g.GRADE_ID }}">
+          <button class="action small" type="submit" name="action" value="detach" data-confirm="{{ t('grDetachConfirm') }}">{{ t('grDetach') }}</button></form>{% endif %}
+        {% elif can_edit and open_orders %}<form method="post" class="gr-attach-row"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="GRADE_ID" value="{{ g.GRADE_ID }}">
+          <select name="ORD_ID" aria-label="{{ t('grOrder') }}">{% for o in open_orders %}<option value="{{ o.ORD_ID }}">#{{ o.QR_ID }} &middot; {{ mat_name(o.MAT_CODE) }} {{ o.ORD_QTY|num }} kg</option>{% endfor %}</select>
+          <button class="action small" type="submit" name="action" value="attach">{{ t('grAttach') }}</button></form>
+        {% else %}<span class="hint">{{ t('grNotLinked') }}</span>{% endif %}</td>
+      <td><a class="action small gr-report-btn" href="{{ url_for('service_buysell.grade_report', grade_id=g.GRADE_ID) }}" data-popup>&#128424; {{ t('grReportBtn') }}</a>{% if g.LINE_DATE %}<br><small class="hint">&#128172; {{ t('grLineDone') }}</small>{% endif %}</td></tr>
+    {% else %}<tr><td colspan="11" class="hint center">{{ t('grNone') }}</td></tr>{% endfor %}</tbody>
+  </table></div>
+  <p class="cap-note">{{ t('grCaution') }}</p>
+</div>
+</div>
+{% endblock %}

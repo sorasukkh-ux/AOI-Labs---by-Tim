@@ -110,6 +110,31 @@ def receipt(title, orders_no, customer, date, lines, total, base=None, labels=No
                 row(lb.get("total", "รวม"), "%s THB" % total, "md", "bold")]}}
 
 
+def grade_report(title, head_rows, result_rows, note, base=None, strong=None):
+    """Update 127: the rice quality result as a Flex bubble in the look of the receipt. `head_rows` / `result_rows`:
+    [(label, value)] as texts (the first result row is shown bold)."""
+    cfg = current_app.config
+
+    def row(left, right, size="sm", weight="regular", color=INK):
+        return {"type": "box", "layout": "horizontal", "spacing": "sm", "contents": [
+            _text(left, size, weight, color, flex=4), _text(right, size, weight, color, flex=3, align="end")]}
+
+    head = [{"type": "box", "layout": "vertical", "contents": [_logo(base)], "paddingStart": "60px", "paddingEnd": "60px"}] if base else []
+    return {"type": "bubble", "size": "mega", "body": {"type": "box", "layout": "vertical", "spacing": "md", "paddingAll": "16px",
+            "contents": head + [
+                _text("AOI Labs", "lg", "bold", align="center"),
+                _text(cfg["LABEL_ADDRESS_TH"], "xxs", color=MUTED, align="center"),
+                _text("Tel. %s" % cfg["LABEL_TEL"], "xxs", color=MUTED, align="center"),
+                _text(title, "md", "bold", align="center"),
+                {"type": "separator", "color": LINE_GREY},
+                {"type": "box", "layout": "vertical", "spacing": "xs", "contents": [row(a, b) for a, b in head_rows]},
+                {"type": "separator", "color": LINE_GREY},
+                {"type": "box", "layout": "vertical", "spacing": "sm", "contents": [
+                    row(a, b, "md" if a == strong else "sm", "bold" if a == strong else "regular") for a, b in result_rows] or [_text("-")]},
+                {"type": "separator", "color": LINE_GREY},
+                _text(note, "xxs", color=MUTED)]}}
+
+
 def coupon_card(title, name, value, expire, note, qr_url, code, base, labels, theme="xmas"):
     """Update 96: the campaign coupon - festive header, value in THB, the customer, expiry, the QR to show at the counter."""
     head = [_logo(base)] if base else []

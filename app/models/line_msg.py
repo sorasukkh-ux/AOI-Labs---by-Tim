@@ -20,6 +20,7 @@ MESSAGES = (
     ("ML_LABEL", "lmName_ML_LABEL", "lmDefault_ML_LABEL", ORDER_PARAMS),          # update 47: + the QR picture
     ("LN_CARD", "lmName_LN_CARD", "lmDefault_LN_CARD", ("name", "code")),          # update 48: the customer card
     ("LN_RECEIPT", "lmName_LN_RECEIPT", "lmDefault_LN_RECEIPT", ("no", "name", "type", "total", "date")),   # update 62
+    ("LN_GRADE", "lmName_LN_GRADE", "lmDefault_LN_GRADE", ("no", "name", "head", "broken", "moisture", "date")),   # update 127
     ("LN_WELCOME", "lmName_LN_WELCOME", "lnrWelcome", ()),
     ("LN_WELCOME_BACK", "lmName_LN_WELCOME_BACK", "lnrWelcomeBack", ("name",)),
     ("LN_LINKED_TICKET", "lmName_LN_LINKED_TICKET", "lnrLinkedTicket", ("name", "no")),

@@ -128,5 +128,5 @@ if [ "${1:-}" = "sim" ]; then
   exit 0
 fi
 echo "== Starting the server. Open the address shown below (port 5000)."
-echo "   (to also simulate every motor: bash start.sh sim)"
+echo "   (to also simulate every motor and the rice quality grader: bash start.sh sim)"
 exec "$PY" run.py

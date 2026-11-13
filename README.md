@@ -340,6 +340,31 @@ are kept in `AOITS_SYSLOG` (14 days), the checks in `AOITS_HEALTH` (7 days).
 customer's LINE when "Also send to the customer's LINE" is ticked (shown for customers linked to LINE); "Send to LINE
 only" sends without printing. The same public https address is needed as for the queue QR (update 47).
 
+## Grading result slip and LINE (update 127, DB 1.75)
+
+Tim: a grading result must be printable in the same format as a receipt and shared with the customer by LINE.
+
+- Button **พิมพ์ / LINE** on every result (Rice quality grading page) and a slip link on the buying order card. It opens the result as a slip in the receipt format (`service/_grade_report.html`: mill header, slip no. = GRADE_ID, customer, order, material, tested date, table of results with head rice in bold, photo of the sample, note) with **Print** and **Send LINE**.
+- Send LINE (`POST /service/buysell/grades/line`, edit right): a Flex card `line_flex.grade_report` through `notify.send_grade`. It needs the result attached to a buying order and the customer linked to LINE. The text is the new message LN_GRADE in LINE Message Maintenance. LINE_DATE / LINE_USER are kept on the result and shown on the slip. The photo is on the printed slip only.
+- Optional fields from the grader: `variety` (VARIETY, text) and `purity` (PURITY_PCT). They are shown on the slip, the LINE card, the grading page and the order card when sent. The real grader can name a variety only after a model is trained on labelled grains; `scripts/grader_sim.py` makes one up.
+
+## Rice quality grader and its simulator (update 126, DB 1.74)
+
+AOI side of Tim's DIY grader (Raspberry Pi + camera). A grader is a small device of its own (AOIMS_GRADER, one per branch seeded: F1-GRADER, F2-GRADER) with a device key. It posts each sample to the device API:
+
+    POST /api/v1/graders/<GRADER_ID>/results   X-Device-Key: <key>
+         {"sample", "order" (optional buying order id or AOI-<id>), "material" (optional SKU), "moisture", "grains", "whole",
+          "broken", "head_rice", "chalky", "yellow", "avg_len", "avg_wid", "note", "photo" (base64 JPEG / PNG <= 400 KB), "time"}
+    GET  /api/v1/graders/<GRADER_ID>/orders    open buying orders (id, QR, material, kg - no customer data)
+
+Results are stored in AOITS_GRADE (photo in AOITS_GRADEPHOTO). Service > Buying/Selling Order List has a link to the new page **Rice quality grading** (`/service/buysell/grades`): the graders (online / offline, "New device key" - needs the edit right on Hardware Control; the key is shown once), 30-day averages and the latest results with photo; a result without an order can be attached to an open buying order (edit right), also directly on a buying order's card in the list, where attached results show head rice %, broken %, moisture and the photo. The numbers are not used for prices yet.
+
+**Simulators (no hardware needed).** `python3 scripts/grader_sim.py F2-GRADER <key> --every 30 [--link]` is a pretend grader: it makes up a tray of grains, draws it into a PNG photo and counts whole / broken grains the way the real one will (broken = shorter than 3/4 of a whole grain). `bash start.sh sim` now simulates the motors (virtual inverters + gateway, as before) AND the grader (a sample every 60 s, `--grader-every N`), with no key to copy. The real Pi grader will send the same message; only `make_sample` is replaced by the camera and OpenCV.
+
+## Motor control process flow (update 125, DB 1.73 unchanged)
+
+Hardware Control has a new card with Tim's design of the real control panel, drawn as SVG (`automation/_motor_flow.html`, Thai / English): Main switch -> Contactor KM0 (cut by the E-stop) -> Line reactor -> VFD 22 kW, which drives ONE motor at a time through Contactor KM1 / KM2 (interlocked) -> Overload OL1 / OL2 -> Motor 1 (30 HP) / Motor 2 (30 HP, new). Control: AOI (choose motor, start, stop) <-> Raspberry Pi -> Modbus RS485 to the VFD, relays to the KM1 / KM2 coils, reads the KM feedback contacts. Under it the switching sequence motor 1 -> motor 2 from Tim's whiteboard "AOI Two-Motor Switching" (7 steps: select in AOI, safety check, stop the VFD and wait for 0 Hz, open KM1 and confirm, close KM2 and confirm, load motor 2's parameter set, ready), the rule when a check fails (stop, both contactors open, fault shown, no auto-retry) and the hard-wired E-stop note. It documents the plan; the gateway (`scripts/aoi_gateway.py`, selector) already follows the same order.
+
 ## Quick jumps and "to top" on every long page (update 124, DB 1.73 unchanged)
 
 The sticky bar of quick jumps (chips to each section, ‹ › and ≡ when they do not fit) was only on the Administration pages and Hardware Control. It is now on every page that is longer than about 1.6 screens and has at least two sections, and every page longer than 1.4 screens gets a round ↑ button at the bottom right. The first chip is "↑ Top". Sections are found automatically (cards and panels with a title; a card of a one-column list counts, small tiles of a grid do not); a page can name a block itself with `data-qj-title` (SCADA diagram, user list, role details). The AI page and Price analysis keep their own chip labels - the bar is built from their chip row (now also Competitor analysis and Product transformation formulas) and replaces it. Sections swapped by the live refresh are found again by id. Not on embedded pages, the TV pages or print.
