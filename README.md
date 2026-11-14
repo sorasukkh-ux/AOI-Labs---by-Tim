@@ -340,6 +340,15 @@ are kept in `AOITS_SYSLOG` (14 days), the checks in `AOITS_HEALTH` (7 days).
 customer's LINE when "Also send to the customer's LINE" is ticked (shown for customers linked to LINE); "Send to LINE
 only" sends without printing. The same public https address is needed as for the queue QR (update 47).
 
+## Grade a sample: the result finds its order (update 128, DB 1.76)
+
+Tim: it must be clear how the operator maps a grader result to the right order.
+
+- **Main way - choose the order first.** Button **ตรวจตัวอย่าง** on every open buying order card. The branch's grader then waits for that order's sample for 15 minutes (`grade.set_target`: AOIMS_GRADER.TARGET_ORD / TARGET_USER / TARGET_DATE) and the next result it sends is kept with the order by itself (`save_result`), LINK_USER = the staff who pressed. The card shows a yellow "waiting" bar with **ยกเลิกการรอ**; the page refreshes itself every 5 s while waiting, so the result appears without a reload. Nothing has to be picked on the grader (the Pi needs no screen). `GET /api/v1/graders/<id>/orders` also returns `"target"` and a `results` count per order.
+- **By hand (a result sent without choosing first).** The dropdowns now say who and what: `#0005 · customer · material kg · time` (grading page) and `time · GR… · material · head rice` (order card), grouped "ชนิดตรงกัน" first and "⚠ ชนิดไม่ตรง" after. Attaching a sample of another material asks for confirmation (`select[data-diff-confirm]`, a few lines at the end of app.js).
+- **After attaching.** A sample of another material than the order is marked in red on the order card and the grading page (`grade.differs`). The order card shows the newest result; older ones fold under "ผลก่อนหน้า (n)".
+- **Simulator.** `grader_sim.py --every N` answers "ตรวจตัวอย่าง" within a few seconds with a sample of the order's material; `--link` only takes an open order that has no result yet.
+
 ## Grading result slip and LINE (update 127, DB 1.75)
 
 Tim: a grading result must be printable in the same format as a receipt and shared with the customer by LINE.

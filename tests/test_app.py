@@ -5627,3 +5627,87 @@ class Update127(Update126):
         from app.models import line_msg
         with self.app.app_context():
             self.assertIn("LN_GRADE", [m["MSG_ID"] for m in line_msg.all_messages("en")])
+
+
+class Update128(Update126):
+    """Grade a sample: the grader waits for the order the staff chose; a sample of another material is flagged."""
+
+    def test_api_and_screens(self):
+        pass
+
+    def test_keep_with_buying_order(self):
+        pass
+
+    def orders(self, key):
+        return self.client.get("/api/v1/graders/F2-GRADER/orders", headers={"X-Device-Key": key}).get_json()
+
+    def test_target_and_mismatch(self):
+        from datetime import timedelta
+        self.login("admin")
+        self.client.get("/lang/en")
+        ord_id = self.buy_order()
+        page = self.text("/service/buysell/")
+        self.assertIn("data-grade-target", page)
+        self.assertNotIn("data-live-refresh", page)
+        # no grader with a key yet
+        self.post("/service/buysell/grades", {"action": "target", "ORD_ID": ord_id}, "/service/buysell/grades")
+        self.assertEqual(self.orders(self.key())["target"], None)
+        key = self.key()
+        self.post("/service/buysell/grades", {"action": "target", "ORD_ID": ord_id, "back": "list"}, "/service/buysell/grades")
+        info = self.orders(key)
+        self.assertEqual(info["target"], ord_id)
+        self.assertEqual([o["results"] for o in info["orders"] if o["order"] == ord_id], [0])
+        page = self.text("/service/buysell/")
+        for part in ('data-grade-wait="%s"' % ord_id, "F2-GRADER is waiting for this order", 'data-live-refresh="5"', "Stop waiting"):
+            self.assertIn(part, page)
+        self.assertIn("is waiting for the sample of", self.text("/service/buysell/grades"))
+        # the next result, sent without an order, is kept with it; the wait ends
+        r = self.post_result(key, {"whole": 80, "broken": 20, "head_rice": 54.4}).get_json()
+        self.assertEqual(r["order"], ord_id)
+        with self.app.app_context():
+            g = col("AOITS_GRADE").find_one({"GRADE_ID": r["id"]})
+            self.assertEqual((g["LINK_USER"], g["MAT_CODE"]), ("admin", col("AOITS_ORDBUYSELL").find_one({"ORD_ID": ord_id})["MAT_CODE"]))
+        self.assertIsNone(self.orders(key)["target"])
+        self.assertIsNone(self.post_result(key, {"whole": 81, "broken": 19}).get_json()["order"])     # the one after it is free again
+        # stop waiting, and a wait that is too old
+        self.post("/service/buysell/grades", {"action": "target", "ORD_ID": ord_id}, "/service/buysell/grades")
+        self.post("/service/buysell/grades", {"action": "untarget", "ORD_ID": ord_id}, "/service/buysell/grades")
+        self.assertIsNone(self.orders(key)["target"])
+        self.post("/service/buysell/grades", {"action": "target", "ORD_ID": ord_id}, "/service/buysell/grades")
+        with self.app.app_context():
+            from app.models import grade
+            dev = col("AOIMS_GRADER").find_one({"GRADER_ID": "F2-GRADER"})
+            col("AOIMS_GRADER").update_one({"GRADER_ID": "F2-GRADER"}, {"$set": {"TARGET_DATE": dev["TARGET_DATE"] - timedelta(minutes=grade.TARGET_MINUTES + 1)}})
+        self.assertIsNone(self.orders(key)["target"])
+        self.assertIsNone(self.post_result(key, {"whole": 82, "broken": 18}).get_json()["order"])
+        # a sample of another material: flagged, and offered under "Other material"
+        with self.app.app_context():
+            own = col("AOITS_ORDBUYSELL").find_one({"ORD_ID": ord_id})["MAT_CODE"]
+        other = "PADDY_GL" if own != "PADDY_GL" else "PADDY"
+        free = self.post_result(key, {"whole": 60, "broken": 40, "material": other}).get_json()["id"]
+        page = self.text("/service/buysell/grades")
+        for part in ("Other material", "data-diff>", 'data-diff-confirm="', "Same material", "<ol class=\"gr-steps\">"):
+            self.assertIn(part, page)
+        self.assertNotIn("data-grade-diff", page)
+        self.post("/service/buysell/grades", {"action": "attach", "GRADE_ID": free, "ORD_ID": ord_id}, "/service/buysell/grades")
+        self.assertIn("data-grade-diff", self.text("/service/buysell/grades"))
+        page = self.text("/service/buysell/")
+        for part in ("data-grade-diff", "The sample is", "Earlier results (1)", '<details class="gr-older">'):
+            self.assertIn(part, page)
+        # the simulator follows the order: its material, and --link takes an order without a result only
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
+        import grader_sim
+        self.post("/service/buysell/grades", {"action": "target", "ORD_ID": ord_id}, "/service/buysell/grades")
+        sent = {}
+
+        def fake(base, path, k, body=None):
+            if body is None:
+                return self.orders(key)
+            sent.update(body)
+            return self.post_result(key, body).get_json()
+        from unittest import mock
+        with mock.patch.object(grader_sim, "call", fake), mock.patch("builtins.print"):
+            reply = grader_sim.send_one("", "F2-GRADER", key, 1, photo=False)
+            self.assertEqual((reply["order"], sent["material"], "order" in sent), (ord_id, own, False))
+            reply = grader_sim.send_one("", "F2-GRADER", key, 2, link=True, photo=False)
+            self.assertIsNone(reply["order"])                                             # the only open order has results

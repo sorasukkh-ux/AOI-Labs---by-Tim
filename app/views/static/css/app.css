@@ -1858,3 +1858,11 @@ body.leaflet-page { background: #e5e7eb; font-family: "Prompt", "IBM Plex Sans T
 .receipt .rc-note { font-size: 11px; margin: 6px 0 0; line-height: 1.4; } .receipt .rc-table tr.rc-strong td { font-weight: 700; font-size: 14px; }
 .gr-report-btn { width: auto; margin: 0; white-space: nowrap; }
 .gr-variety { color: #166534; font-weight: 600; }
+/* update 128: grading - the grader waits for an order's sample, a sample of another material, older results */
+.gr-wait { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 8px 0; padding: 8px 12px; border-radius: 10px; background: var(--warn-bg, #fff7e6); color: var(--warn-text, #8a5a00); font-weight: 600; }
+.gr-wait { width: 100%; box-sizing: border-box; } .gr-wait span { flex: 1 1 200px; min-width: 0; white-space: normal; } .gr-wait .action { width: auto; margin: 0; }
+.gr-target { display: inline-block; margin: 6px 6px 0 0; } .gr-target .action { width: auto; }
+.gr-diff { color: #b91c1c; font-weight: 700; display: inline-block; }
+.gr-who { display: block; color: #6b7280; }
+.gr-older { margin: 2px 0 6px; width: 100%; } .gr-older summary { cursor: pointer; color: #6b7280; font-size: .9em; }
+.gr-steps { margin: 6px 0 8px 20px; padding: 0; color: #374151; } .gr-steps li { margin: 2px 0; }

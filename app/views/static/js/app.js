@@ -624,3 +624,14 @@
     if (out) r.addEventListener("input", function () { out.textContent = r.value; });
   });
 })();
+
+// update 128: attaching a grading result to an order of another material asks first (select[data-diff-confirm],
+// options marked data-diff). Set just before the click is handled, so the usual data-confirm pop-up shows it.
+document.addEventListener("click", function (event) {
+  var button = event.target.closest && event.target.closest("button[value=attach]");
+  var select = button && button.form && button.form.querySelector("select[data-diff-confirm]");
+  if (!select) return;
+  var option = select.options[select.selectedIndex];
+  if (option && option.hasAttribute("data-diff")) button.setAttribute("data-confirm", select.getAttribute("data-diff-confirm"));
+  else button.removeAttribute("data-confirm");
+}, true);

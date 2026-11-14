@@ -134,6 +134,7 @@ def order_list():
     from ..models import grade                               # update 126: rice quality results of the camera grader
     grades = grade.for_orders([o["ORD_ID"] for o in orders if o["ORD_TYPE"] == bs.BUY])
     return render_template("service/buysell_list.html", grades=grades, grade_free=grade.unlinked(operating_branch()),
+                           grade_wait=grade.waiting(operating_branch()), grade_differs=grade.differs,
                            orders=orders, q=q, view=view, view_arg=None if view == "active" else view,
                            views=list(VIEWS), counts=counts, status_counts=status_counts, closed_limit=CLOSED_LIMIT,
                            status=status, ord_type=ord_type, filters=VIEWS[view], status_keys=BS_STATUS_KEYS,
@@ -156,10 +157,16 @@ def grades():
                 if not can("AT_HARDWARE", "edit"):
                     abort(403)
                 new_key = (request.form.get("GRADER_ID"), grade.issue_key(branch, request.form.get("GRADER_ID"), current_user()["USER_ID"]))
-            elif action in ("attach", "detach"):
+            elif action in ("attach", "detach", "target", "untarget"):
                 if not can(MENU, "edit"):
                     abort(403)
-                if action == "attach":
+                if action == "target":                            # update 128: the grader waits for this order's sample
+                    dev, order = grade.set_target(branch, request.form.get("ORD_ID"), current_user()["USER_ID"], request.form.get("GRADER_ID"))
+                    flash_ok("grTargetSet", grader=dev["GRADER_ID"], id=order.get("QR_ID") or order["ORD_ID"])
+                elif action == "untarget":
+                    grade.clear_target(branch, request.form.get("ORD_ID"))
+                    flash_ok("grTargetOff")
+                elif action == "attach":
                     g = grade.attach(branch, request.form.get("GRADE_ID"), request.form.get("ORD_ID") or "", current_user()["USER_ID"])
                     flash_ok("grAttached", id=g["GRADE_ID"], order=g["ORD_ID"])
                 else:
@@ -177,7 +184,18 @@ def grades():
             return redirect(url_for("service_buysell.grades"))
     rows = grade.recent(branch, 60)
     orders = {o["ORD_ID"]: o for o in BuySellOrder.for_branch(branch, VIEWS["active"], bs.BUY)}
+    linked = dict(orders)                                     # update 128: who and what each order is, to pick the right one
+    for g in rows:
+        if g.get("ORD_ID") and g["ORD_ID"] not in linked:
+            linked[g["ORD_ID"]] = BuySellOrder.find(g["ORD_ID"], branch) or {"ORD_ID": g["ORD_ID"]}
+    names = {}
+    for o in linked.values():
+        code = o.get("CUST_CODE")
+        if code not in names:
+            names[code] = (Customer.find(code) or {}).get("CUST_NAME", code) if code else ""
+        o["cust_name"] = names[code]
     return render_template("service/grades.html", rows=rows, devices=grade.devices(branch), summary=grade.summary(branch),
+                           linked=linked, waiting=grade.waiting(branch), differs=grade.differs,
                            open_orders=list(orders.values())[:30], new_key=new_key, mat_name=mat_name, fmt_datetime=fmt_datetime,
                            can_edit=can(MENU, "edit"), can_key=can("AT_HARDWARE", "edit"), free_hours=grade.UNLINKED_HOURS)
 

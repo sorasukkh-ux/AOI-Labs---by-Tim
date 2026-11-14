@@ -8,7 +8,14 @@ The grader photographs a thin layer of grains, counts whole and broken ones and 
           "chalky": 3.1, "yellow": 0.8, "avg_len": 7.2, "avg_wid": 2.1, "note": "...",
           "variety": "ขาวดอกมะลิ 105" (optional, the variety recognised), "purity": 96.5 (optional, % of grains of it),
           "photo": "<base64 JPEG or PNG, at most 400 KB>" (optional), "time": ISO 8601 (optional)}
-    GET  /api/v1/graders/<GRADER_ID>/orders    the open buying orders of the branch (to pick one on the Pi)
+    GET  /api/v1/graders/<GRADER_ID>/orders    the open buying orders of the branch (to pick one on the Pi) and
+                                               "target": the order the staff are waiting a sample for (update 128)
+
+Update 128 - how a result finds its order (Tim: the operator must be able to map them correctly):
+  1. the staff press "Grade a sample" on the buying order (set_target): the branch's grader waits for that order for
+     TARGET_MINUTES and the next result it sends is kept with it - nothing to pick on the grader;
+  2. or the grader sends the order's id itself ("order");
+  3. or the staff attach a free result by hand (attach) - a sample of another material than the order asks first.
 
 Graders are their own small registry (AOIMS_GRADER: one device key each) - not machines: nothing to start or stop.
 A result (AOITS_GRADE, photo in AOITS_GRADEPHOTO) is kept with a buying order: sent with the order's id, or attached
@@ -30,6 +37,7 @@ from ..timeutil import now_utc
 DEV, COL, PHOTO = "AOIMS_GRADER", "AOITS_GRADE", "AOITS_GRADEPHOTO"
 PHOTO_MAX = 400 * 1024
 UNLINKED_HOURS = 72                # a result can be attached to an order for this long
+TARGET_MINUTES = 15                # update 128: how long a grader waits for the sample of the order the staff chose
 MATERIALS = tuple(c for c in var.ALL if var.kind_of(c) in (var.PADDY, var.RICE))
 # field of the request -> (stored field, low, high, places)
 NUMBERS = {"moisture": ("MOISTURE_PCT", 0, 50, 1), "whole": ("WHOLE_PCT", 0, 100, 1), "broken": ("BROKEN_PCT", 0, 100, 1),
@@ -146,20 +154,64 @@ def save_result(dev, body):
         if when > now_utc() + timedelta(minutes=10) or when < now_utc() - timedelta(days=7):
             raise ValidationError("grErrTime")
     photo, mime = _photo(body.get("photo"))
-    order = None
+    order, by_staff = None, None
     if body.get("order"):
         order = _buy_order(dev["BRANCH_ID"], str(body["order"]))
+    elif target_of(dev):                                     # update 128: the order the staff are waiting a sample for
+        order = BuySellOrder.find(dev["TARGET_ORD"], dev["BRANCH_ID"])
+        by_staff = dev.get("TARGET_USER") if order else None
     doc = dict(values, GRADE_ID="GR%06d" % Counter.next("GRADE"), BRANCH_ID=dev["BRANCH_ID"], GRADER_ID=dev["GRADER_ID"],
                SAMPLE_NO=clean_text(body.get("sample"), 30) or None, MAT_CODE=material or (order or {}).get("MAT_CODE"),
                GRAINS=None if grains is None else int(grains), NOTE=clean_text(body.get("note"), 200) or None,
                VARIETY=clean_text(body.get("variety"), 40) or None,          # update 127: the variety the grader recognised, as text
-               PHOTO_FLG=bool(photo), ORD_ID=order["ORD_ID"] if order else None, LINK_USER="device:" + dev["GRADER_ID"] if order else None,
+               PHOTO_FLG=bool(photo), ORD_ID=order["ORD_ID"] if order else None, LINK_USER=(by_staff or "device:" + dev["GRADER_ID"]) if order else None,
                LINK_DATE=now_utc() if order else None, TEST_DATE=when, REGIST_DATE=now_utc())
     col(COL).insert_one(dict(doc))
     if photo:
         col(PHOTO).insert_one({"GRADE_ID": doc["GRADE_ID"], "MIME": mime, "DATA": base64.b64encode(photo).decode("ascii"), "REGIST_DATE": now_utc()})
     seen(dev)
+    if order and dev.get("TARGET_ORD") == order["ORD_ID"]:   # the awaited sample has come
+        col(DEV).update_one({"GRADER_ID": dev["GRADER_ID"]}, {"$set": {"TARGET_ORD": None}})
     return doc
+
+
+# ---------- update 128: "Grade a sample" - the grader waits for the sample of one order ----------
+def target_of(dev):
+    """The order this grader is waiting a sample for (None when nobody asked, or it was too long ago)."""
+    when = dev.get("TARGET_DATE")
+    if dev.get("TARGET_ORD") and when and now_utc() - when <= timedelta(minutes=TARGET_MINUTES):
+        return dev["TARGET_ORD"]
+    return None
+
+
+def set_target(branch_id, ord_id, ope_user, grader_id=None):
+    """The staff are about to grade the sample of this buying order. Returns (grader, order)."""
+    order = _buy_order(branch_id, ord_id or "")
+    if order["ORD_STATUS"] not in (OPEN, PREPARED, UNPAID):
+        raise ValidationError("grErrOrderClosed")
+    found = [d for d in devices(branch_id) if d.get("ACTIVE_FLG") is not False and d.get("DEVICE_KEY_HASH")
+             and (not grader_id or d["GRADER_ID"] == grader_id.strip().upper())]
+    if not found:
+        raise ValidationError("grErrNoGrader")
+    dev = next((d for d in found if d["online"]), found[0])
+    col(DEV).update_one({"GRADER_ID": dev["GRADER_ID"]},
+                        {"$set": {"TARGET_ORD": order["ORD_ID"], "TARGET_USER": ope_user, "TARGET_DATE": now_utc()}})
+    return dev, order
+
+
+def clear_target(branch_id, ord_id):
+    col(DEV).update_many({"BRANCH_ID": branch_id, "TARGET_ORD": ord_id}, {"$set": {"TARGET_ORD": None}})
+
+
+def waiting(branch_id):
+    """{ORD_ID: {"grader", "until"}} of the orders a grader is waiting a sample for now."""
+    return {d["TARGET_ORD"]: {"grader": d["GRADER_ID"], "until": d["TARGET_DATE"] + timedelta(minutes=TARGET_MINUTES)}
+            for d in devices(branch_id) if target_of(d)}
+
+
+def differs(g, order):
+    """The sample is of another material than the order (a likely wrong match)."""
+    return bool(g and order and g.get("MAT_CODE") and order.get("MAT_CODE") and g["MAT_CODE"] != order["MAT_CODE"])
 
 
 def _buy_order(branch_id, ord_id):
@@ -230,11 +282,10 @@ def detach(branch_id, grade_id, ope_user):
 
 def open_orders(branch_id):
     """For the grader's screen: the buying orders still in work (no customer data)."""
-    out = []
-    for o in BuySellOrder.for_branch(branch_id, (OPEN, PREPARED, UNPAID), BUY)[:30]:
-        out.append({"order": o["ORD_ID"], "qr": o.get("QR_ID"), "material": o.get("MAT_CODE"), "kg": o.get("ORD_QTY"),
-                    "registered": o["REGIST_DATE"].isoformat()})
-    return out
+    orders = BuySellOrder.for_branch(branch_id, (OPEN, PREPARED, UNPAID), BUY)[:30]
+    have = for_orders([o["ORD_ID"] for o in orders])
+    return [{"order": o["ORD_ID"], "qr": o.get("QR_ID"), "material": o.get("MAT_CODE"), "kg": o.get("ORD_QTY"),
+             "registered": o["REGIST_DATE"].isoformat(), "results": len(have.get(o["ORD_ID"], []))} for o in orders]
 
 
 def summary(branch_id, days=30):

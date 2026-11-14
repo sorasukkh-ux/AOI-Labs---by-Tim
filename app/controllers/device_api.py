@@ -132,4 +132,4 @@ def grader_orders(grader_id):
     if not dev:
         return _denied()
     grade.seen(dev)
-    return jsonify({"ok": True, "orders": grade.open_orders(dev["BRANCH_ID"])})
+    return jsonify({"ok": True, "orders": grade.open_orders(dev["BRANCH_ID"]), "target": grade.target_of(dev)})

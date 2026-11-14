@@ -37,8 +37,15 @@
     <ol class="hint"><li>{{ t('grHow1') }}</li><li>{{ t('grHow2') }}</li><li>{{ t('grHow3') }}</li><li>{{ t('grHow4') }}</li></ol></details>
 </div>
 
-<div class="card mt14" id="gr-results">
+<div class="card mt14" id="gr-results"{% if waiting %} data-live data-live-refresh="5"{% endif %}>
   <p class="card-title sub">{{ t('grResults') }}</p>
+  {# update 128: how a result finds its order - the staff choose the order first, the grader's next result goes to it #}
+  <ol class="gr-steps"><li>{{ t('grStep1') }}</li><li>{{ t('grStep2') }}</li><li>{{ t('grStep3') }}</li></ol>
+  {% for ord_id, w in waiting.items() %}{% set o = linked.get(ord_id, {}) %}
+  <form method="post" class="gr-wait" data-grade-wait="{{ ord_id }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="ORD_ID" value="{{ ord_id }}">
+    <span>&#9203; {{ t('grWaitingFor', grader=w.grader, id=o.get('QR_ID', ord_id), name=o.get('cust_name', ''), time=fmt_time(w.until)) }}</span>
+    {% if can_edit %}<button class="action small" type="submit" name="action" value="untarget">{{ t('grTargetCancel') }}</button>{% endif %}</form>
+  {% endfor %}
   <p class="cap-note tight">{{ t('grResultsNote', hours=free_hours) }}</p>
   <div class="inv-table-wrap"><table class="tv-table gr-table">
     <thead><tr><th>{{ t('colDate') }}</th><th>{{ t('grSample') }}</th><th class="num">{{ t('grHead') }}</th><th class="num">{{ t('grWhole') }}</th><th class="num">{{ t('grBroken') }}</th>
@@ -49,11 +56,17 @@
       <td class="num"><b>{{ pct(g.HEAD_RICE_PCT) }}</b></td><td class="num">{{ pct(g.WHOLE_PCT) }}</td><td class="num">{{ pct(g.BROKEN_PCT) }}</td>
       <td class="num">{{ pct(g.CHALKY_PCT) }}</td><td class="num">{{ pct(g.MOISTURE_PCT) }}</td><td class="num">{{ g.GRAINS if g.GRAINS is not none else '-' }}</td>
       <td>{% if g.PHOTO_FLG %}<a href="{{ url_for('service_buysell.grade_photo', grade_id=g.GRADE_ID) }}" target="_blank" rel="noopener"><img class="gr-thumb" src="{{ url_for('service_buysell.grade_photo', grade_id=g.GRADE_ID) }}" alt="{{ t('grPhoto') }} {{ g.GRADE_ID }}" loading="lazy" width="96" height="72"></a>{% else %}-{% endif %}</td>
-      <td>{% if g.ORD_ID %}<a href="{{ url_for('service_buysell.order_list', q='AOI-' ~ g.ORD_ID, find=1) }}">{{ g.ORD_ID }}</a>
+      <td>{% if g.ORD_ID %}{% set o = linked.get(g.ORD_ID, {}) %}<a href="{{ url_for('service_buysell.order_list', q='AOI-' ~ g.ORD_ID, find=1) }}">#{{ o.get('QR_ID', g.ORD_ID) }}</a>
+        <small class="gr-who">{{ o.get('cust_name', '') }}{% if o.get('MAT_CODE') %} &middot; {{ mat_name(o.MAT_CODE) }}{% endif %}</small>
+        {% if differs(g, o) %}<small class="gr-diff" data-grade-diff>&#9888; {{ t('grDiff') }}</small>{% endif %}
         {% if can_edit %}<form method="post" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="GRADE_ID" value="{{ g.GRADE_ID }}">
           <button class="action small" type="submit" name="action" value="detach" data-confirm="{{ t('grDetachConfirm') }}">{{ t('grDetach') }}</button></form>{% endif %}
         {% elif can_edit and open_orders %}<form method="post" class="gr-attach-row"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="GRADE_ID" value="{{ g.GRADE_ID }}">
-          <select name="ORD_ID" aria-label="{{ t('grOrder') }}">{% for o in open_orders %}<option value="{{ o.ORD_ID }}">#{{ o.QR_ID }} &middot; {{ mat_name(o.MAT_CODE) }} {{ o.ORD_QTY|num }} kg</option>{% endfor %}</select>
+          <select name="ORD_ID" aria-label="{{ t('grOrder') }}" data-diff-confirm="{{ t('grDiffConfirm') }}">
+            {% for same in (true, false) %}{% set ns = namespace(n=0) %}{% for o in open_orders %}{% if differs(g, o) != same %}{% set ns.n = ns.n + 1 %}{% endif %}{% endfor %}
+            {% if ns.n %}<optgroup label="{{ t('grSame') if same else t('grOther') }}">{% for o in open_orders %}{% if differs(g, o) != same %}
+              <option value="{{ o.ORD_ID }}"{% if not same %} data-diff{% endif %}>#{{ o.QR_ID }} &middot; {{ o.cust_name }} &middot; {{ mat_name(o.MAT_CODE) }} {{ o.ORD_QTY|num }} kg &middot; {{ fmt_time(o.REGIST_DATE) }}</option>
+            {% endif %}{% endfor %}</optgroup>{% endif %}{% endfor %}</select>
           <button class="action small" type="submit" name="action" value="attach">{{ t('grAttach') }}</button></form>
         {% else %}<span class="hint">{{ t('grNotLinked') }}</span>{% endif %}</td>
       <td><a class="action small gr-report-btn" href="{{ url_for('service_buysell.grade_report', grade_id=g.GRADE_ID) }}" data-popup>&#128424; {{ t('grReportBtn') }}</a>{% if g.LINE_DATE %}<br><small class="hint">&#128172; {{ t('grLineDone') }}</small>{% endif %}</td></tr>

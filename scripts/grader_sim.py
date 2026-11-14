@@ -3,7 +3,9 @@ real grader is built. It uses only the Python standard library.
 
     python3 scripts/grader_sim.py F2-GRADER <device key>              one sample now
     python3 scripts/grader_sim.py F2-GRADER <device key> --every 30   a new sample every 30 seconds
-    python3 scripts/grader_sim.py F2-GRADER <device key> --link       keep each sample with an open buying order
+    python3 scripts/grader_sim.py F2-GRADER <device key> --link       keep each sample with an open buying order that has none yet
+
+With --every it also answers "Grade a sample" pressed on a buying order within a few seconds (update 128).
 
 Options: --url http://127.0.0.1:5000 (default)  --count N (stop after N samples)  --no-photo  --material PADDY_HM
 The device key is issued on Service > Buying/Selling Order List > Rice quality grading (shown once), or use
@@ -99,15 +101,19 @@ def make_sample(material=None, quality=None, rng=random, photo=True, w=320, h=24
 
 
 def send_one(base, grader, key, number, material=None, link=False, photo=True, rng=random):
+    # update 128: the order the staff chose with "Grade a sample" comes first (AOI keeps the result with it by itself);
+    # --link: else an open order that has no result yet. The sample is of the order's material.
+    info = call(base, "/api/v1/graders/%s/orders" % grader, key)
+    orders, order = info.get("orders") or [], None
+    pick = next((o for o in orders if o["order"] == info.get("target")), None)
+    if not pick and link:
+        pick = order = next((o for o in orders if not o.get("results")), None)
+    if pick and pick.get("material") in VARIETIES:
+        material = pick["material"]
     body = make_sample(material, rng=rng, photo=photo)
     body.update(sample="SIM-%04d" % number, note="simulated sample")
-    if link:
-        orders = call(base, "/api/v1/graders/%s/orders" % grader, key).get("orders") or []
-        if orders:
-            pick = orders[0]
-            body["order"] = pick["order"]
-            if pick.get("material") in VARIETIES:
-                body["material"] = pick["material"]
+    if order:
+        body["order"] = order["order"]
     reply = call(base, "/api/v1/graders/%s/results" % grader, key, body)
     shown = {k: v for k, v in body.items() if k != "photo"}
     print("sample %s -> %s   %s" % (body["sample"], reply, shown), flush=True)
@@ -121,10 +127,16 @@ def run(base, grader, key, every=0.0, count=None, material=None, link=False, pho
         send_one(base, grader, key, n, material, link, photo)
         if not every or (count and n >= count):
             break
-        if stop:
-            stop.wait(every)
-        else:
-            time.sleep(every)
+        # wait for the next round, but answer "Grade a sample" (a target order) within a few seconds
+        until = time.time() + every
+        while time.time() < until and not (stop and stop.is_set()):
+            pause = min(3.0, max(0.1, until - time.time()))
+            if stop:
+                stop.wait(pause)
+            else:
+                time.sleep(pause)
+            if call(base, "/api/v1/graders/%s/orders" % grader, key).get("target"):
+                break
     return n
 
 
