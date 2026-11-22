@@ -10,7 +10,7 @@ COLLECTIONS = {
     # ---- masters ----
     "AOIMS_MATERIAL": [(["MAT_CODE"], True)],
     "AOIMS_UOM": [(["UOM_CODE"], True)],
-    "AOIMS_CUSTOMER": [(["CUST_CODE"], True), (["MOBILE_NO"], False), (["CUST_NAME"], False)],
+    "AOIMS_CUSTOMER": [(["CUST_CODE"], True), (["MOBILE_NO"], False), (["CUST_NAME"], False), (["BIRTH_MMDD"], False)],
     "AOIMS_LOC": [(["BRANCH_ID", "LOC_ID"], True)],
     "AOIMS_SYSPARAM": [(["BRANCH_ID"], True)],
     "AOIMS_PRICE": [(["BRANCH_ID", "MAT_CODE"], True)],
@@ -70,6 +70,9 @@ COLLECTIONS = {
     "AOIMS_GRADER": [(["GRADER_ID"], True), (["BRANCH_ID"], False)],                                 # update 126
     "AOITS_GRADE": [(["GRADE_ID"], True), (["BRANCH_ID", "TEST_DATE"], False), (["ORD_ID"], False)],
     "AOITS_GRADEPHOTO": [(["GRADE_ID"], True)],
+    "AOIMS_CHARLINE": [(["LINE_ID"], True), (["BRANCH_ID"], False)],                                 # update 131
+    "AOITS_CHARLINE_TELE": [(["LINE_ID", "TEL_DATE"], False)],
+    "AOILOG_CHARLINE": [(["LINE_ID", "LOG_DATE"], False)],
     # ---- technical (not in the DB structure workbook): running numbers for order and customer codes ----
     "AOISYS_COUNTER": [(["COUNTER_KEY"], True)],
 }

@@ -139,9 +139,9 @@ def coupon_card(title, name, value, expire, note, qr_url, code, base, labels, th
     """Update 96: the campaign coupon - festive header, value in THB, the customer, expiry, the QR to show at the counter."""
     head = [_logo(base)] if base else []
     return {"type": "bubble", "size": "mega",
-            "header": {"type": "box", "layout": "vertical", "backgroundColor": "#0369A1" if theme == "songkran" else "#B91C1C",
+            "header": {"type": "box", "layout": "vertical", "backgroundColor": {"songkran": "#0369A1", "bday": "#DB2777"}.get(theme, "#B91C1C"),
                        "paddingAll": "14px", "contents": [
-                _text(("💦 " if theme == "songkran" else "🎄 ") + title, "md", "bold", "#FFFFFF"), _text(labels["coupon"], "xs", color="#FDE68A")]},
+                _text({"songkran": "💦 ", "bday": "🎂 "}.get(theme, "🎄 ") + title, "md", "bold", "#FFFFFF"), _text(labels["coupon"], "xs", color="#FDE68A")]},
             "body": {"type": "box", "layout": "vertical", "spacing": "md", "paddingAll": "16px", "contents": head + [
                 {"type": "box", "layout": "baseline", "contents": [
                     _text(value, "3xl", "bold", "#15803D", flex=0), _text(" THB", "md", "bold", "#15803D", flex=0)]},

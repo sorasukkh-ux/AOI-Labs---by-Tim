@@ -161,6 +161,42 @@ def hardware_live():
     return jsonify({"ok": True, "machines": out, "can_command": can(HARDWARE, "approve")})
 
 
+# ---------- update 131: husk furnace and charcoal briquette line ----------
+@bp.route("/charline", methods=["GET", "POST"])
+@require(HARDWARE)
+def charline_screen():
+    from ..models import charline
+    branch = operating_branch()
+    if request.method == "POST":
+        action, line_id = request.form.get("action"), request.form.get("LINE_ID")
+        if action in ("want", "stopall"):
+            if not can(HARDWARE, "approve"):
+                abort(403)
+            if action == "stopall":
+                return _run(lambda: charline.stop_all(branch, line_id, _user_id()) and None, "clStoppedAll", "automation.charline_screen")
+            unit, on = (request.form.get("UNIT") or "").upper(), request.form.get("ON") == "1"
+
+            def go():
+                charline.want(branch, line_id, unit, on, _user_id())
+                return {"unit": t("clUnit_" + unit), "state": t("clOn" if on else "clOff")}
+            return _run(go, "clWantSaved", "automation.charline_screen")
+        if action in ("settings", "key"):
+            if not can(HARDWARE, "edit"):
+                abort(403)
+            if action == "key":
+                def issue():
+                    session["device_key"] = {"id": (line_id or "").upper(), "key": charline.issue_key(branch, line_id or "", _user_id())}
+                return _run(issue, None, "automation.charline_screen")
+            return _run(lambda: charline.save_settings(branch, line_id, request.form, _user_id()) and None, "clSettingsSaved",
+                        "automation.charline_screen")
+        abort(400)
+    found = charline.lines(branch)
+    return render_template("automation/charline.html", lines=[{"line": ln, "view": charline.view(ln), "chart": charline.chart(ln),
+                                                               "events": charline.events(branch, ln["LINE_ID"], 25)} for ln in found],
+                           new_key=session.pop("device_key", None), setting=charline.setting, settings=charline.SETTINGS,
+                           fmt_datetime=fmt_datetime, can_command=can(HARDWARE, "approve"), can_edit=can(HARDWARE, "edit"))
+
+
 # ---------- SCADA (update 31) ----------
 @bp.route("/scada")
 @require(SCADA)
@@ -517,6 +553,50 @@ def ai_competitor():
                            periods=co.PERIODS, ai=co.last_ai(branch), ai_md=co.light_md, ai_job=co.ai_state(branch), ai_ready=co.ai_ready(), fresh=co.FRESH_DAYS,
                            today=now_local().date().isoformat(), can_edit=can(AI_MENU, "edit"), to_local=to_local,
                            edit=co.get(request.args.get("edit")))
+
+
+@bp.route("/ai/check", methods=["GET", "POST"])
+@require(AI_MENU)
+def ai_check():
+    """Update 135 (Tim, "7 คาถากันตาย"): rule 3 - the gain in baht against the numbers before AOI; rule 7 - exams for
+    the grader (against hand grading, golden set re-graded per program version) and for the price signals (back-test)."""
+    from ..models import evaluate as ev, grade, variety as var
+    requested = request.values.get("branch")
+    branch = pick_maintenance_branch(requested)
+    if not branch or (requested and requested != branch):
+        abort(403)
+    if request.method == "POST":
+        action = request.form.get("action")
+        if not can(AI_MENU, "edit"):
+            abort(403)
+        anchor = {"kpi": "ck-kpi", "check": "ck-grader", "uncheck": "ck-grader", "price": "ck-price"}.get(action, "ck-kpi")
+        try:
+            if action == "kpi":
+                ev.save_kpi(branch, request.form, _user_id())
+                flash_ok("kpiSaved")
+            elif action == "check":
+                flash_ok("exCheckSaved", id=ev.save_check(branch, request.form, _user_id()))
+            elif action == "uncheck":
+                ev.delete_check(branch, request.form.get("GRADE_ID"))
+                flash_ok("exCheckDeleted")
+            elif action == "price":
+                code = request.form.get("CODE") if request.form.get("CODE") in var.TRADED else None
+                if not code:
+                    abort(400)
+                doc = ev.price_exam(branch, code, _user_id())
+                flash_ok("exPriceDone", n=doc["N"])
+            else:
+                abort(400)
+        except ValidationError as error:
+            flash_error(error)
+        return redirect(url_for("automation.ai_check", branch=branch, _anchor=anchor))
+    checked = {c["GRADE_ID"] for c in ev.checks(branch, 1000)}
+    recent = [g for g in grade.recent(branch, 40) if g["GRADE_ID"] not in checked]
+    return render_template("automation/check.html", branch=branch, branches=maintainable_branches(), kpi=ev.kpi_rows(branch),
+                           checks=ev.checks(branch), score=ev.grader_score(branch), recent=recent, measures=ev.MEASURES,
+                           grader_exams=ev.exams(branch, "GRADER"), price_exams=ev.exams(branch, "PRICE"), traded=var.TRADED,
+                           tol=ev.TOL, ready_n=ev.READY_N, ready_mae=ev.READY_MAE, horizon=ev.HORIZON,
+                           can_edit=can(AI_MENU, "edit"))
 
 
 @bp.route("/ai/formulas", methods=["GET", "POST"])

@@ -93,6 +93,11 @@
       {% if grade_differs(g, order) %}<span class="gr-diff" data-grade-diff>&#9888; {{ t('grDiffFull', sample=mat_name(g.MAT_CODE), order=material) }}</span>{% endif %}
       <small class="hint">{{ g.GRADE_ID }} &middot; {{ fmt_time(g.TEST_DATE) }}{% if g.LINE_DATE %} &middot; &#128172; {{ t('grLineDone') }}{% endif %}</small></p>
     {% endfor %}
+    {% set avg = grade_average(order_grades) %}
+    {% if avg %}<p class="bs-note gr-avg" data-grade-avg>{{ t('grAvg', n=avg.n) }}:
+      {% if avg.HEAD_RICE_PCT is not none %}<b>{{ t('grHead') }} {{ avg.HEAD_RICE_PCT }}%</b>{% endif %}
+      {% if avg.BROKEN_PCT is not none %}&middot; {{ t('grBroken') }} {{ avg.BROKEN_PCT }}%{% endif %}
+      {% if avg.MOISTURE_PCT is not none %}&middot; {{ t('grMoisture') }} {{ avg.MOISTURE_PCT }}%{% endif %}</p>{% endif %}
     {% if order_grades|length > 1 %}<details class="gr-older"><summary>{{ t('grOlder', n=order_grades|length - 1) }}</summary>
     {% for g in order_grades[1:] %}
     <p class="bs-note gr-on" data-grade="{{ g.GRADE_ID }}">&#128300; {{ t('grLabel') }}:
@@ -107,16 +112,25 @@
       <small class="hint">{{ g.GRADE_ID }} &middot; {{ fmt_time(g.TEST_DATE) }}{% if g.LINE_DATE %} &middot; &#128172; {{ t('grLineDone') }}{% endif %}</small></p>
     {% endfor %}</details>{% endif %}
     {# update 128: "Grade a sample" - the grader's next result is kept with this order #}
-    {% set gw = grade_wait.get(order.ORD_ID) %}
-    {% if gw %}
+    {# update 130: a branch can have several graders - choose the order AND the grader; each grader holds one order #}
+    {% set on = grade_wait.get(order.ORD_ID, []) %}
+    {% for gw in on %}
     <form method="post" action="{{ url_for('service_buysell.grades') }}" class="gr-wait" data-grade-wait="{{ order.ORD_ID }}">
-      {{ hidden() }}<input type="hidden" name="back" value="list"><input type="hidden" name="ORD_ID" value="{{ order.ORD_ID }}">
+      {{ hidden() }}<input type="hidden" name="back" value="list"><input type="hidden" name="ORD_ID" value="{{ order.ORD_ID }}"><input type="hidden" name="GRADER_ID" value="{{ gw.grader }}">
       <span>&#9203; {{ t('grWaiting', grader=gw.grader, time=fmt_time(gw.until)) }}</span>
       {% if editable %}<button class="action small" type="submit" name="action" value="untarget">{{ t('grTargetCancel') }}</button>{% endif %}
     </form>
-    {% elif editable %}
-    <form method="post" action="{{ url_for('service_buysell.grades') }}" class="inline-form gr-target">
+    {% endfor %}
+    {% set chosen = on|map(attribute='grader')|list %}
+    {% set free = grade_devs|rejectattr('GRADER_ID', 'in', chosen)|list %}
+    {% if editable and (free or not grade_devs) %}
+    <form method="post" action="{{ url_for('service_buysell.grades') }}" class="gr-target{% if grade_devs|length > 1 %} gr-target-pick{% endif %}">
       {{ hidden() }}<input type="hidden" name="back" value="list"><input type="hidden" name="ORD_ID" value="{{ order.ORD_ID }}">
+      {% if grade_devs|length > 1 %}
+      <select name="GRADER_ID" aria-label="{{ t('grDevice') }}" data-grade-pick>
+        {% for d in (free|rejectattr('busy')|list) + (free|selectattr('busy')|list) %}<option value="{{ d.GRADER_ID }}">{{ d.GRADER_ID }} &middot; {{ d.GRADER_NAME }} &middot; {{ t('grOnline') if d.online else t('grOffline') }}{% if d.busy %} &middot; {{ t('grBusy', id=d.busy_qr) }}{% endif %}</option>{% endfor %}
+      </select>
+      {% elif free %}<input type="hidden" name="GRADER_ID" value="{{ free[0].GRADER_ID }}">{% endif %}
       <button class="action small" type="submit" name="action" value="target" data-grade-target>&#128300; {{ t('grTarget') }}</button>
     </form>
     {% endif %}

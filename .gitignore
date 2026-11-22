@@ -12,3 +12,6 @@ venv/
 gateways.json
 pi.json
 backups/
+grader.json
+grader_queue/
+grader_scans/

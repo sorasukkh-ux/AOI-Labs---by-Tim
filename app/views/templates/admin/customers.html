@@ -82,6 +82,21 @@
     <div class="field-row mb0">
       <label class="field-label" for="cust-distance">{{ t('fieldDistance') }}</label><input type="number" min="0" step="0.1" id="cust-distance" name="DISTANCE_KM" value="{{ values.get('DISTANCE_KM')|plain }}">
     </div>
+    {# update 133: birth date (optional) and the marketing consent (PDPA) for birthday cards #}
+    <div class="two-col field-row mt14 mb0" id="cust-birth-row">
+      <div><label class="field-label" for="cust-birth">{{ t('bdField') }}</label><input type="date" id="cust-birth" name="BIRTH_DATE" value="{{ values.get('BIRTH_DATE') or '' }}" autocomplete="bday">
+        {% if values.get('BIRTH_DATE') and zodiac_text(values.get('BIRTH_DATE')) %}<p class="cap-note tight bd-zodiac" id="cust-zodiac">{{ zodiac_text(values.get('BIRTH_DATE')) }}</p>{% endif %}</div>
+      <div><label class="checkline bd-consent" for="cust-mkt"><input type="checkbox" id="cust-mkt" name="MKT_CONSENT" value="1"{% if values.get('MKT_CONSENT') in (true, '1', 'on') %} checked{% endif %}><span>{{ t('bdConsent') }}</span></label>
+        {% if customer and customer.MKT_CONSENT and customer.MKT_CONSENT_DATE and mode != 'new' %}<p class="cap-note tight">{{ t('bdConsentSince', date=fmt_datetime(customer.MKT_CONSENT_DATE)) }}</p>{% endif %}</div>
+    </div>
+    {# update 134: for the fengshuiX Bazi reading in the birthday card (gender is required by the API, time optional) #}
+    <div class="two-col field-row mb0" id="cust-bazi-row">
+      <div><label class="field-label" for="cust-gender">{{ t('bdGender') }}</label><select id="cust-gender" name="GENDER">
+        <option value="">{{ t('bdGenderNone') }}</option>
+        <option value="male"{% if values.get('GENDER') == 'male' %} selected{% endif %}>{{ t('bdMale') }}</option>
+        <option value="female"{% if values.get('GENDER') == 'female' %} selected{% endif %}>{{ t('bdFemale') }}</option></select></div>
+      <div><label class="field-label" for="cust-btime">{{ t('bdTime') }}</label><input type="time" id="cust-btime" name="BIRTH_TIME" value="{{ values.get('BIRTH_TIME') or '' }}"></div>
+    </div>
     </fieldset>
     {% if mode != 'view' %}
     <div class="two-col mt14" id="cust-edit-actions">

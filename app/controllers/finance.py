@@ -284,6 +284,54 @@ def marketing():
                            valid_to=day(promo.get("VALID_TO")), can_edit=can(MARKETING, "edit"))
 
 
+# ---------- Birthday cards (update 133) ----------
+@bp.route("/birthday", methods=["GET", "POST"])
+@require(MARKETING)
+def birthday():
+    """Marketing > Birthday: the branch's birthday card settings, the coming birthdays and the cards sent."""
+    from ..models import birthday as bd
+    branch = _branch_or_403()
+    if request.method == "POST":
+        if not can(MARKETING, "edit"):
+            abort(403)
+        if request.form.get("action") == "apitest":          # update 134: one call to the fengshuiX API, raw answer shown
+            from ..models import bazi_api
+            import json as _json
+            try:
+                birth = bd.parse(request.form.get("T_DATE"))
+                result = bazi_api.call(birth, request.form.get("T_GENDER"), bd.parse_time(request.form.get("T_TIME")), end_user="aoi-test") \
+                    if birth else {"ok": False, "error": "bdErrDate", "text": "", "answer": None}
+            except ValidationError as error:
+                flash_error(error)
+                return redirect(url_for("finance.birthday", branch=branch, _anchor="bd-api"))
+            rows = bd.upcoming(30)
+            return render_template("finance/birthday.html", branch=branch, branches=maintainable_branches(), cfg=bd.settings(branch),
+                                   rows=rows, today_rows=[r for r in rows if r["left"] == 0], sent=bd.sent(branch), counts=bd.counts(),
+                                   due_n=len(bd.due()), fmt_date=fmt_date, can_edit=True, hour=bd_hour(), api_on=bazi_api.configured(),
+                                   api_endpoint=bazi_api.endpoint(), test=dict(result, raw=_json.dumps(result.get("answer"), ensure_ascii=False, indent=1)[:4000]
+                                                                               if result.get("answer") is not None else ""), form=request.form)
+        if request.form.get("action") == "run":
+            results = bd.run(browser_origin=request.form.get("PUBLIC_BASE") or None, ope_user=_user_id())
+            flash_ok("bdRunDone", sent=sum(1 for r in results if r["status"] == "sent"),
+                     failed=sum(1 for r in results if r["status"] == "error"), skipped=sum(1 for r in results if r["status"] == "skipped"))
+            return redirect(url_for("finance.birthday", branch=branch, _anchor="bd-sent"))
+        return _run(lambda: bd.save_settings(branch, request.form, _user_id()), "bdSaved", "finance.birthday", branch=branch)
+    rows = bd.upcoming(30)
+    return render_template("finance/birthday.html", branch=branch, branches=maintainable_branches(), cfg=bd.settings(branch),
+                           rows=rows, today_rows=[r for r in rows if r["left"] == 0], sent=bd.sent(branch), counts=bd.counts(),
+                           due_n=len(bd.due()), fmt_date=fmt_date, can_edit=can(MARKETING, "edit"), hour=bd_hour(),
+                           api_on=__import__("app.models.bazi_api", fromlist=["x"]).configured(),
+                           api_endpoint=__import__("app.models.bazi_api", fromlist=["x"]).endpoint(), test=None, form={})
+
+
+def bd_hour():
+    import os
+    try:
+        return max(0, min(23, int(os.environ.get("AOI_BDAY_HOUR", "8"))))
+    except ValueError:
+        return 8
+
+
 # ---------- Investment & Break-even (draft, update 27) ----------
 INVEST = "FN_INVEST"
 INVEST_TABS = ("capex", "budget", "breakeven")

@@ -70,15 +70,21 @@ def issue(camp, cust_code, form, ope_user, browser_origin=None):
         raise ValidationError("cpErrDate", field="expire")
     if to_local(expire).date() < today_local():
         raise ValidationError("cpnErrExpire")
+    coupon = create(camp["BRANCH_ID"], customer["CUST_CODE"], value, expire, form.get("CPN_NOTE"), camp["CAMP_ID"], ope_user)
+    send(coupon, browser_origin)
+    return get(coupon["COUPON_ID"])
+
+
+def create(branch_id, cust_code, value, expire, note, camp_id, ope_user):
+    """A new active coupon (update 133: also the birthday coupon, CAMP_ID "BDAY")."""
     doc = {"COUPON_ID": "CPN" + "".join(secrets.choice(ALPHA) for _ in range(8)),
            "CODE": "".join(secrets.choice(string.ascii_letters + string.digits) for _ in range(10)),
-           "CAMP_ID": camp["CAMP_ID"], "BRANCH_ID": camp["BRANCH_ID"], "CUST_CODE": customer["CUST_CODE"],
-           "VALUE": round_half_up(value, 2), "EXPIRE_DATE": expire, "NOTE": clean_text(form.get("CPN_NOTE"), 80),
+           "CAMP_ID": camp_id, "BRANCH_ID": branch_id, "CUST_CODE": cust_code,
+           "VALUE": round_half_up(value, 2), "EXPIRE_DATE": expire, "NOTE": clean_text(note, 80),
            "STATUS": ACTIVE, "LINE_SENT_DATE": None, "LINE_ERROR": None,
            "USED_DATE": None, "USED_USER": None, "USED_ORD_ID": None, "USED_ORD_TYPE": None, "USED_AMOUNT": None, "FORFEIT": None}
     doc.update(audit_new(ope_user))
     col(COL).insert_one(dict(doc))
-    send(get(doc["COUPON_ID"]), browser_origin)
     return get(doc["COUPON_ID"])
 
 

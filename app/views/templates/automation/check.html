@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% from "_macros.html" import page_head, branch_picker %}
+{% macro n2(v, unit='') %}{{ ('{:,.2f}'.format(v) ~ unit) if v is not none else '-' }}{% endmacro %}
+{% block content %}
+{# update 135 (Tim, "7 คาถากันตาย"): rule 3 - the gain in baht against the numbers before AOI; rule 7 - exams for the AI parts #}
+<div id="tab-check" class="auto-page">
+{{ page_head(t('ckTitle'), url_for('automation.ai_screen')) }}
+<div class="card gap"><p class="desc-text">{{ t('ckDesc') }}</p></div>
+<div class="card branch-pick-card">{{ branch_picker('automation.ai_check', branch, branches, 'ck-branch-select') }}</div>
+
+{# ---------- Rule 3 ---------- #}
+<div class="card mt14" id="ck-kpi" data-qj-title="{{ t('kpiTitle') }}">
+  <div class="card-head"><p class="card-title sub">&#128176; {{ t('kpiTitle') }}</p>
+    <span class="badge {{ 'approved' if kpi.total > 0 else ('blocked' if kpi.total < 0 else 'neutral') }} ck-total" id="kpi-total">{{ t('kpiTotal', thb='{:+,.0f}'.format(kpi.total)) }}</span></div>
+  <p class="cap-note tight">{{ t('kpiDesc', days=kpi.work_days) }}</p>
+  {% if kpi.missing %}<p class="cap-note ck-warn" id="kpi-missing">&#9888; {{ t('kpiMissing', n=kpi.missing) }}</p>{% endif %}
+  <form method="post" id="kpi-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="branch" value="{{ branch }}"><input type="hidden" name="action" value="kpi">
+    <fieldset class="plain" {% if not can_edit %}disabled{% endif %}>
+    <div class="inv-table-wrap"><table class="tv-table ck-table">
+      <thead><tr><th>{{ t('kpiMeasure') }}</th><th>{{ t('kpiBefore') }}</th><th>{{ t('kpiNow') }}</th><th>{{ t('kpiRate') }}</th><th class="num">{{ t('kpiGain') }}</th></tr></thead>
+      <tbody>{% for r in kpi.rows %}
+      <tr data-kpi="{{ r.key }}"><td><b>{{ t('kpi_' ~ r.key) }}</b><br><small class="hint">{{ t(r.unit) }} &middot; {{ t('kpiHigher' if r.higher else 'kpiLower') }}</small></td>
+        <td><input type="number" step="any" name="BASE_{{ r.key }}" value="{{ r.base|plain if r.base is not none else '' }}" aria-label="{{ t('kpiBefore') }}">
+          <input type="text" name="NOTE_{{ r.key }}" value="{{ r.note or '' }}" maxlength="100" placeholder="{{ t('kpiNotePh') }}" aria-label="{{ t('kpiNotePh') }}">
+          {% if r.base_date %}<small class="hint">{{ fmt_date(r.base_date) }}</small>{% endif %}</td>
+        <td>{% if r.auto %}<b>{{ n2(r.now) }}</b><br><small class="hint">{{ t('kpiAuto') }}</small>
+          {% else %}<input type="number" step="any" name="NOW_{{ r.key }}" value="{{ r.now|plain if r.now is not none else '' }}" aria-label="{{ t('kpiNow') }}">{% endif %}
+          {% if r.change_pct is not none %}<br><small class="{{ 'co-gap good' if (r.change_pct > 0) == r.higher else 'co-gap bad' }}">{{ '%+.1f'|format(r.change_pct) }}%</small>{% endif %}</td>
+        <td><input type="number" step="any" min="0" name="RATE_{{ r.key }}" value="{{ r.rate|plain }}" aria-label="{{ t('kpiRate') }}"></td>
+        <td class="num">{% if r.gain is not none %}<b class="{{ 'co-gap good' if r.gain >= 0 else 'co-gap bad' }}">{{ '{:+,.0f}'.format(r.gain) }}</b>{% else %}-{% endif %}</td></tr>
+      {% endfor %}</tbody>
+    </table></div>
+    <div class="two-col field-row mt6">
+      <div><label class="field-label" for="kpi-days">{{ t('kpiWorkDays') }}</label><input type="number" min="1" max="31" step="1" id="kpi-days" name="WORK_DAYS" value="{{ kpi.work_days }}" required></div>
+      <div class="ck-save">{% if can_edit %}<button class="action primary" type="submit" id="kpi-save">{{ t('btnSave') }}</button>{% endif %}</div>
+    </div>
+    </fieldset>
+  </form>
+  <p class="cap-note">{{ t('kpiNote') }}</p>
+</div>
+
+{# ---------- Rule 7: grader ---------- #}
+<div class="card mt14" id="ck-grader" data-qj-title="{{ t('exGraderTitle') }}">
+  <div class="card-head"><p class="card-title sub">&#128300; {{ t('exGraderTitle') }}</p>
+    <span class="badge {{ 'approved' if score.ready else 'pending' }}" id="ex-ready">{{ t('exReady' if score.ready else 'exNotReady') }}</span></div>
+  <p class="cap-note tight">{{ t('exGraderDesc', tol=tol|plain, n=ready_n, mae=ready_mae|plain) }}</p>
+  <div class="inv-table-wrap"><table class="tv-table" id="ex-score">
+    <thead><tr><th>{{ t('exMeasure') }}</th><th class="num">{{ t('exN') }}</th><th class="num">{{ t('exMae') }}</th><th class="num">{{ t('exBias') }}</th><th class="num">{{ t('exWithin', tol=tol|plain) }}</th></tr></thead>
+    <tbody>{% for field, hand in measures %}{% set s = score.measures[field] %}
+    <tr><td>{{ t('exM_' ~ field) }}</td><td class="num">{{ s.n }}</td><td class="num">{{ s.mae if s.mae is not none else '-' }}</td>
+      <td class="num">{{ '%+.2f'|format(s.bias) if s.bias is not none else '-' }}</td><td class="num">{{ (s.within|int ~ '%') if s.within is not none else '-' }}</td></tr>{% endfor %}</tbody>
+  </table></div>
+  {% if can_edit %}
+  <form method="post" class="mt14" id="ex-check-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="branch" value="{{ branch }}"><input type="hidden" name="action" value="check">
+    <p class="card-title sub">{{ t('exAddCheck') }}</p>
+    {% if recent %}
+    <div class="field-row"><label class="field-label" for="ex-grade">{{ t('exResult') }}</label><select id="ex-grade" name="GRADE_ID">
+      {% for g in recent %}<option value="{{ g.GRADE_ID }}">{{ fmt_datetime(g.TEST_DATE) }} &middot; {{ g.GRADE_ID }} &middot; {{ g.SAMPLE_NO or '-' }} &middot; {{ t('grWhole') }} {{ g.WHOLE_PCT if g.WHOLE_PCT is not none else '-' }}%</option>{% endfor %}</select></div>
+    <div class="ck-hand">{% for field, hand in measures %}
+      <div><label class="field-label" for="ex-{{ hand }}">{{ t('exM_' ~ field) }} %</label><input type="number" min="0" max="100" step="0.1" id="ex-{{ hand }}" name="{{ hand }}"></div>{% endfor %}
+    </div>
+    <div class="field-row"><label class="checkline" for="ex-golden"><input type="checkbox" id="ex-golden" name="GOLDEN_FLG" value="1" checked><span>{{ t('exGolden') }}</span></label></div>
+    <button class="action primary" type="submit" id="ex-check-save">{{ t('btnSave') }}</button>
+    {% else %}<p class="hint">{{ t('exNoResult') }}</p>{% endif %}
+  </form>{% endif %}
+  {% if checks %}
+  <details class="mt14" id="ex-checks"><summary>{{ t('exChecks', n=checks|length) }}</summary>
+  <div class="inv-table-wrap"><table class="tv-table">
+    <thead><tr><th>{{ t('exResult') }}</th>{% for field, hand in measures %}<th class="num">{{ t('exM_' ~ field) }}<br><small>{{ t('exMachineHand') }}</small></th>{% endfor %}<th></th></tr></thead>
+    <tbody>{% for c in checks %}
+    <tr><td>{{ c.GRADE_ID }}{% if c.GOLDEN_FLG %} <span class="badge approved">{{ t('exGoldenBadge') }}</span>{% endif %}<br><small class="hint">{{ c.GRADER_ID }}{% if c.VERSION %} v{{ c.VERSION }}{% endif %} &middot; {{ c.SAMPLE_NO or '-' }}</small></td>
+      {% for field, hand in measures %}{% set m = c.g.get(field) %}{% set h = c.get(hand) %}
+      <td class="num">{% if h is not none %}{{ m if m is not none else '-' }} / {{ h }}{% if m is not none %}<br><small class="{{ 'co-gap good' if (m - h)|abs <= tol else 'co-gap bad' }}">{{ '%+.1f'|format(m - h) }}</small>{% endif %}{% else %}-{% endif %}</td>{% endfor %}
+      <td>{% if can_edit %}<form method="post" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="branch" value="{{ branch }}"><input type="hidden" name="action" value="uncheck"><input type="hidden" name="GRADE_ID" value="{{ c.GRADE_ID }}">
+        <button class="action small" type="submit" data-confirm="{{ t('exDeleteConfirm') }}">{{ t('exDelete') }}</button></form>{% endif %}</td></tr>{% endfor %}</tbody>
+  </table></div></details>{% endif %}
+  <p class="card-title sub mt14">{{ t('exGraderExams') }}</p>
+  <p class="cap-note tight">{{ t('exGraderExamHow') }}</p>
+  <div class="inv-table-wrap"><table class="tv-table" id="ex-grader-exams">
+    <thead><tr><th>{{ t('colDate') }}</th><th>{{ t('exVersion') }}</th><th class="num">{{ t('exN') }}</th>{% for field, hand in measures[:2] %}<th class="num">{{ t('exM_' ~ field) }} {{ t('exMae') }}</th>{% endfor %}<th class="num">{{ t('exWithin', tol=tol|plain) }}</th></tr></thead>
+    <tbody>{% for e in grader_exams %}
+    <tr><td>{{ fmt_datetime(e.EXAM_DATE) }}</td><td><b>{{ e.SUBJECT }} v{{ e.VERSION }}</b></td><td class="num">{{ e.N }}</td>
+      {% for field, hand in measures[:2] %}<td class="num">{{ e.SCORES[field].mae if e.SCORES[field].mae is not none else '-' }}</td>{% endfor %}
+      <td class="num">{{ (e.SCORES.BROKEN_PCT.within|int ~ '%') if e.SCORES.BROKEN_PCT.within is not none else '-' }}</td></tr>
+    {% else %}<tr><td colspan="6" class="hint center">{{ t('exNoExam') }}</td></tr>{% endfor %}</tbody>
+  </table></div>
+</div>
+
+{# ---------- Rule 7: price signals ---------- #}
+<div class="card mt14" id="ck-price" data-qj-title="{{ t('exPriceTitle') }}">
+  <p class="card-title sub">&#128200; {{ t('exPriceTitle') }}</p>
+  <p class="cap-note tight">{{ t('exPriceDesc', h=horizon) }}</p>
+  {% if can_edit %}
+  <form method="post" class="ck-price-form" id="ex-price-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="branch" value="{{ branch }}"><input type="hidden" name="action" value="price">
+    <select name="CODE" aria-label="SKU">{% for c in traded %}<option value="{{ c }}">{{ mat_name(c) }}</option>{% endfor %}</select>
+    <button class="action" type="submit" id="ex-price-run">{{ t('exPriceRun') }}</button>
+  </form>{% endif %}
+  <div class="inv-table-wrap"><table class="tv-table mt6" id="ex-price-exams">
+    <thead><tr><th>{{ t('colDate') }}</th><th>SKU</th><th>{{ t('exVersion') }}</th><th class="num">{{ t('exN') }}</th><th class="num">{{ t('exBuyHit') }}</th><th class="num">{{ t('exSellHit') }}</th><th class="num">{{ t('exUpPct') }}</th></tr></thead>
+    <tbody>{% for e in price_exams %}{% set s = e.SCORES %}
+    <tr><td>{{ fmt_datetime(e.EXAM_DATE) }}</td><td>{{ mat_name(e.SUBJECT) }}<br><small class="hint">{{ e.BASE }}</small></td><td>{{ e.VERSION }}</td><td class="num">{{ e.N }}</td>
+      <td class="num">{% if s.buy_hit is not none %}<b class="{{ 'co-gap good' if s.up_pct is not none and s.buy_hit > s.up_pct else 'co-gap bad' }}">{{ s.buy_hit|int }}%</b><br><small class="hint">{{ t('exTimes', n=s.buy_n) }}</small>{% else %}-{% endif %}</td>
+      <td class="num">{% if s.sell_hit is not none %}<b class="{{ 'co-gap good' if s.up_pct is not none and s.sell_hit > 100 - s.up_pct else 'co-gap bad' }}">{{ s.sell_hit|int }}%</b><br><small class="hint">{{ t('exTimes', n=s.sell_n) }}</small>{% else %}-{% endif %}</td>
+      <td class="num">{{ (s.up_pct|int ~ '%') if s.up_pct is not none else '-' }}</td></tr>
+    {% else %}<tr><td colspan="7" class="hint center">{{ t('exNoExam') }}</td></tr>{% endfor %}</tbody>
+  </table></div>
+  <p class="cap-note">{{ t('exPriceNote') }}</p>
+</div>
+</div>
+{% endblock %}

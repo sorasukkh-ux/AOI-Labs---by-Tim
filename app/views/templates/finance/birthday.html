@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% from "_macros.html" import page_head, branch_picker %}
+{% block content %}
+{# update 133 (Tim): birthday cards - a LINE coupon / greeting on the customer's birthday, with the Chinese zodiac line #}
+<div id="tab-birthday">
+{{ page_head(t('bdTitle'), url_for('finance.marketing', branch=branch)) }}
+<div class="card gap"><p class="desc-text">{{ t('bdDesc', hour=hour) }}</p></div>
+<div class="card branch-pick-card">{{ branch_picker('finance.birthday', branch, branches, 'bd-branch-select') }}</div>
+
+<div class="co-stats">
+  <div class="card co-stat"><small>{{ t('bdStatDate') }}</small><b id="bd-n-date">{{ counts.with_date }} / {{ counts.all }}</b></div>
+  <div class="card co-stat"><small>{{ t('bdStatConsent') }}</small><b id="bd-n-consent">{{ counts.consent }}</b></div>
+  <div class="card co-stat"><small>{{ t('bdStatToday') }}</small><b id="bd-n-today">{{ today_rows|length }}</b></div>
+  <div class="card co-stat"><small>{{ t('bdStatDue') }}</small><b id="bd-n-due">{{ due_n }}</b></div>
+</div>
+
+<div class="card mt14" id="bd-settings" data-qj-title="{{ t('bdSettings') }}">
+  <p class="card-title sub">{{ t('bdSettings') }}</p>
+  <form method="post" id="bd-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="branch" value="{{ branch }}">
+    <fieldset class="plain" {% if not can_edit %}disabled{% endif %}>
+    <div class="field-row"><label class="checkline" for="bd-on"><input type="checkbox" id="bd-on" name="BDAY_FLG" value="1"{% if cfg.BDAY_FLG %} checked{% endif %}><span>{{ t('bdOn') }}</span></label></div>
+    <div class="two-col field-row">
+      <div><label class="field-label" for="bd-value">{{ t('bdValue') }}</label><input type="number" min="0" max="5000" step="1" id="bd-value" name="BDAY_VALUE" value="{{ cfg.BDAY_VALUE|plain }}" required></div>
+      <div><label class="field-label" for="bd-days">{{ t('bdDays') }}</label><input type="number" min="1" max="90" step="1" id="bd-days" name="BDAY_DAYS" value="{{ cfg.BDAY_DAYS }}" required></div>
+    </div>
+    <p class="cap-note">{{ t('bdSettingsNote') }}</p>
+    {% if can_edit %}<button class="action primary" type="submit" id="bd-save">{{ t('btnSave') }}</button>{% endif %}
+    </fieldset>
+  </form>
+  {% if can_edit %}
+  <form method="post" class="mt6" id="bd-run-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="branch" value="{{ branch }}">
+    <input type="hidden" name="action" value="run"><input type="hidden" name="PUBLIC_BASE" data-public-base>
+    <button class="action" type="submit" id="bd-run" data-confirm="{{ t('bdRunConfirm', n=due_n) }}" {% if not due_n %}disabled{% endif %}>&#127874; {{ t('bdRun', n=due_n) }}</button>
+  </form>{% endif %}
+</div>
+
+<div class="card mt14" id="bd-api" data-qj-title="{{ t('bzTitle') }}">
+  <p class="card-title sub">&#128302; {{ t('bzTitle') }}</p>
+  {% if api_on %}<p class="cap-note tight"><span class="badge approved">{{ t('bzOn') }}</span> {{ t('bzOnNote', endpoint=api_endpoint) }}</p>
+  {% else %}<p class="cap-note tight"><span class="badge neutral">{{ t('bzOff') }}</span> {{ t('bzOffNote') }}</p>{% endif %}
+  <p class="cap-note">{{ t('bzNeedGender', n=counts.gender, total=counts.consent) }}</p>
+  {% if can_edit and api_on %}
+  <form method="post" class="bz-test" id="bz-test-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="branch" value="{{ branch }}"><input type="hidden" name="action" value="apitest">
+    <div class="three-col field-row">
+      <div><label class="field-label" for="bz-date">{{ t('bdField') }}</label><input type="date" id="bz-date" name="T_DATE" value="{{ form.get('T_DATE', '') }}" required></div>
+      <div><label class="field-label" for="bz-time">{{ t('bdTime') }}</label><input type="time" id="bz-time" name="T_TIME" value="{{ form.get('T_TIME', '') }}"></div>
+      <div><label class="field-label" for="bz-gender">{{ t('bdGender') }}</label><select id="bz-gender" name="T_GENDER">
+        <option value="male"{% if form.get('T_GENDER') == 'male' %} selected{% endif %}>{{ t('bdMale') }}</option>
+        <option value="female"{% if form.get('T_GENDER') == 'female' %} selected{% endif %}>{{ t('bdFemale') }}</option></select></div>
+    </div>
+    <button class="action" type="submit" id="bz-test" data-confirm="{{ t('bzTestConfirm') }}">{{ t('bzTest') }}</button>
+  </form>
+  {% endif %}
+  {% if test %}
+  <div class="bz-result" id="bz-result">
+    {% if test.ok %}<p><span class="badge approved">{{ t('bzTestOk') }}</span> {{ test.text }}</p>
+    {% else %}<p><span class="badge blocked">{{ t(test.error) }}</span> {{ test.get('detail') or '' }}</p>{% endif %}
+    {% if test.raw %}<details{% if not test.ok %} open{% endif %}><summary>{{ t('bzRaw') }}</summary><pre class="bz-raw">{{ test.raw }}</pre></details>{% endif %}
+  </div>{% endif %}
+</div>
+
+<div class="card mt14" id="bd-upcoming" data-qj-title="{{ t('bdUpcoming') }}">
+  <p class="card-title sub">{{ t('bdUpcoming') }}</p>
+  <div class="inv-table-wrap"><table class="tv-table">
+    <thead><tr><th>{{ t('bdColDay') }}</th><th>{{ t('custNameLabel') }}</th><th>{{ t('bdColZodiac') }}</th><th>{{ t('bdColReady') }}</th></tr></thead>
+    <tbody>{% for r in rows %}
+    <tr data-bday="{{ r.c.CUST_CODE }}"{% if r.left == 0 %} class="bd-today"{% endif %}>
+      <td>{{ r.day.strftime('%d/%m') }}<br><small class="hint">{{ t('bdToday') if r.left == 0 else t('bdInDays', n=r.left) }} &middot; {{ t('bdAge', n=r.age) }}</small></td>
+      <td><a href="{{ url_for('admin_customers.customer_view', code=r.c.CUST_CODE) }}">{{ r.c.CUST_NAME }}</a><br><small class="hint">{{ r.c.CUST_CODE }}</small></td>
+      <td>{{ r.zodiac }}</td>
+      <td>{% if r.c.BDAY_SENT_YEAR == r.day.year %}<span class="badge approved">{{ t('bdSentBadge') }}</span>
+        {% elif r.ready %}<span class="badge approved">{{ t('bdReady') }}</span>
+        {% elif not r.c.MKT_CONSENT %}<span class="badge neutral">{{ t('bdNoConsent') }}</span>
+        {% else %}<span class="badge manual">{{ t('bdNoLine') }}</span>{% endif %}</td></tr>
+    {% else %}<tr><td colspan="4" class="hint center">{{ t('bdNone') }}</td></tr>{% endfor %}</tbody>
+  </table></div>
+  <p class="cap-note">{{ t('bdZodiacNote') }}</p>
+</div>
+
+<div class="card mt14" id="bd-sent" data-qj-title="{{ t('bdSent') }}">
+  <p class="card-title sub">{{ t('bdSent') }}</p>
+  <div class="inv-table-wrap"><table class="tv-table">
+    <thead><tr><th>{{ t('colDate') }}</th><th>{{ t('custNameLabel') }}</th><th>{{ t('bdColCoupon') }}</th><th>LINE</th></tr></thead>
+    <tbody>{% for s in sent %}
+    <tr><td>{{ fmt_datetime(s.c.BDAY_SENT_DATE) }}</td>
+      <td>{{ s.c.CUST_NAME }}<br><small class="hint">{{ s.c.CUST_CODE }}</small></td>
+      <td>{% if s.coupon %}{{ s.coupon.VALUE|num }} THB &middot; {{ s.coupon.COUPON_ID }}<br><small class="hint">{{ t('cpnSt_' ~ s.state) }}</small>{% else %}<small class="hint">{{ t('bdGreetingOnly') }}</small>{% endif %}
+        {% if s.c.BDAY_FORTUNE %}<br><small class="bz-fortune">&#128302; {{ s.c.BDAY_FORTUNE }}</small>{% elif s.c.BDAY_FORTUNE_ERROR %}<br><small class="hint">&#128302; {{ t(s.c.BDAY_FORTUNE_ERROR) if s.c.BDAY_FORTUNE_ERROR.startswith('bzErr') else s.c.BDAY_FORTUNE_ERROR }}</small>{% endif %}</td>
+      <td>{% if s.c.BDAY_ERROR %}<span class="badge blocked">{{ t(s.c.BDAY_ERROR) }}</span>{% else %}<span class="badge approved">{{ t('bdLineOk') }}</span>{% endif %}</td></tr>
+    {% else %}<tr><td colspan="4" class="hint center">{{ t('bdNoneSent') }}</td></tr>{% endfor %}</tbody>
+  </table></div>
+</div>
+</div>
+{% endblock %}

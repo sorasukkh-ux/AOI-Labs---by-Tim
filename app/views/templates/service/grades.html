@@ -24,15 +24,27 @@
 <div class="card mt14" id="gr-devices">
   <p class="card-title sub">{{ t('grDevices') }}</p>
   <div class="inv-table-wrap"><table class="tv-table">
-    <thead><tr><th>{{ t('grDevice') }}</th><th>{{ t('colStatus') }}</th><th>{{ t('grLastSeen') }}</th><th></th></tr></thead>
-    <tbody>{% for d in devices %}
-    <tr><td><b>{{ d.GRADER_ID }}</b><br><small class="hint">{{ d.GRADER_NAME }}</small></td>
-      <td>{% if d.online %}<span class="badge approved">{{ t('grOnline') }}</span>{% elif d.DEVICE_KEY_HASH %}<span class="badge manual">{{ t('grOffline') }}</span>{% else %}<span class="badge neutral">{{ t('grNoKey') }}</span>{% endif %}</td>
+    <thead><tr><th>{{ t('grDevice') }}</th><th>{{ t('colStatus') }}</th><th>{{ t('grChosen') }}</th><th>{{ t('grLastSeen') }}</th><th></th></tr></thead>
+    <tbody>{% for d in devices %}{% set off = d.ACTIVE_FLG is sameas false %}
+    <tr data-grader="{{ d.GRADER_ID }}"{% if off %} class="gr-off"{% endif %}><td><b>{{ d.GRADER_ID }}</b>
+      {% if can_key %}<form method="post" class="gr-dev-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="GRADER_ID" value="{{ d.GRADER_ID }}">
+        <input type="text" name="GRADER_NAME" value="{{ d.GRADER_NAME }}" maxlength="60" aria-label="{{ t('grDevName') }}">
+        <input type="hidden" name="ACTIVE_FLG" value="{{ '0' if off else '1' }}">
+        <button class="action small" type="submit" name="action" value="device">{{ t('btnSave') }}</button></form>
+      {% else %}<br><small class="hint">{{ d.GRADER_NAME }}</small>{% endif %}</td>
+      <td>{% if off %}<span class="badge neutral">{{ t('grNotUsed') }}</span>{% elif d.online %}<span class="badge approved">{{ t('grOnline') }}</span>{% elif d.DEVICE_KEY_HASH %}<span class="badge manual">{{ t('grOffline') }}</span>{% else %}<span class="badge neutral">{{ t('grNoKey') }}</span>{% endif %}</td>
+      <td>{% set bz = busy.get(d.GRADER_ID) %}{% if bz %}<b>#{{ bz.busy_qr }}</b> <small class="hint">{{ linked.get(bz.busy, {}).get('cust_name', '') }}</small>{% else %}-{% endif %}</td>
       <td>{{ fmt_datetime(d.LAST_SEEN) if d.LAST_SEEN else '-' }}</td>
       <td>{% if can_key %}<form method="post" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="GRADER_ID" value="{{ d.GRADER_ID }}">
-        <button class="action small" type="submit" name="action" value="key" {% if d.DEVICE_KEY_HASH %}data-confirm="{{ t('grKeyConfirm') }}"{% endif %}>&#128273; {{ t('grKeyNew') }}</button></form>{% endif %}</td></tr>
-    {% else %}<tr><td colspan="4" class="hint center">{{ t('grNoDevice') }}</td></tr>{% endfor %}</tbody>
+        {% if not off %}<button class="action small" type="submit" name="action" value="key" {% if d.DEVICE_KEY_HASH %}data-confirm="{{ t('grKeyConfirm') }}"{% endif %}>&#128273; {{ t('grKeyNew') }}</button>{% endif %}</form>
+        <form method="post" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="GRADER_ID" value="{{ d.GRADER_ID }}">
+        <input type="hidden" name="GRADER_NAME" value="{{ d.GRADER_NAME }}"><input type="hidden" name="ACTIVE_FLG" value="{{ '1' if off else '0' }}">
+        <button class="action small" type="submit" name="action" value="device" {% if not off %}data-confirm="{{ t('grStopConfirm', id=d.GRADER_ID) }}"{% endif %}>{{ t('grUse') if off else t('grStop') }}</button></form>{% endif %}</td></tr>
+    {% else %}<tr><td colspan="5" class="hint center">{{ t('grNoDevice') }}</td></tr>{% endfor %}</tbody>
   </table></div>
+  {% if can_key %}<form method="post" class="gr-add" id="gr-add"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="text" name="GRADER_NAME" maxlength="60" placeholder="{{ t('grAddHint') }}" aria-label="{{ t('grDevName') }}" required>
+    <button class="action small" type="submit" name="action" value="add">&#10133; {{ t('grAdd') }}</button></form>{% endif %}
   <details class="gr-how mt6"><summary>{{ t('grHowTitle') }}</summary>
     <ol class="hint"><li>{{ t('grHow1') }}</li><li>{{ t('grHow2') }}</li><li>{{ t('grHow3') }}</li><li>{{ t('grHow4') }}</li></ol></details>
 </div>
@@ -41,11 +53,11 @@
   <p class="card-title sub">{{ t('grResults') }}</p>
   {# update 128: how a result finds its order - the staff choose the order first, the grader's next result goes to it #}
   <ol class="gr-steps"><li>{{ t('grStep1') }}</li><li>{{ t('grStep2') }}</li><li>{{ t('grStep3') }}</li></ol>
-  {% for ord_id, w in waiting.items() %}{% set o = linked.get(ord_id, {}) %}
-  <form method="post" class="gr-wait" data-grade-wait="{{ ord_id }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="ORD_ID" value="{{ ord_id }}">
+  {% for ord_id, ws in waiting.items() %}{% set o = linked.get(ord_id, {}) %}{% for w in ws %}
+  <form method="post" class="gr-wait" data-grade-wait="{{ ord_id }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="ORD_ID" value="{{ ord_id }}"><input type="hidden" name="GRADER_ID" value="{{ w.grader }}">
     <span>&#9203; {{ t('grWaitingFor', grader=w.grader, id=o.get('QR_ID', ord_id), name=o.get('cust_name', ''), time=fmt_time(w.until)) }}</span>
     {% if can_edit %}<button class="action small" type="submit" name="action" value="untarget">{{ t('grTargetCancel') }}</button>{% endif %}</form>
-  {% endfor %}
+  {% endfor %}{% endfor %}
   <p class="cap-note tight">{{ t('grResultsNote', hours=free_hours) }}</p>
   <div class="inv-table-wrap"><table class="tv-table gr-table">
     <thead><tr><th>{{ t('colDate') }}</th><th>{{ t('grSample') }}</th><th class="num">{{ t('grHead') }}</th><th class="num">{{ t('grWhole') }}</th><th class="num">{{ t('grBroken') }}</th>

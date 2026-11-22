@@ -34,9 +34,38 @@ def start_health(app):
     threading.Thread(target=loop, name="aoi-health", daemon=True).start()
 
 
+_bday_started = False
+
+
+def start_birthday(app):
+    """Update 133: today's birthday cards (LINE coupon / greeting), once a day from AOI_BDAY_HOUR (default 8)."""
+    global _bday_started
+    if _bday_started or app.config.get("TESTING"):
+        return
+    _bday_started = True
+
+    def loop():
+        from .controllers.finance import bd_hour
+        from .models import birthday
+        time.sleep(60)
+        while True:
+            try:
+                with app.app_context():
+                    if birthday.daily_due(bd_hour()):
+                        results = birthday.run()
+                        if results:
+                            app.logger.info("Birthday cards: %s", ", ".join("%s %s" % (r["code"], r["status"]) for r in results))
+            except Exception:                                   # never let the thread die
+                app.logger.exception("Birthday scheduler error")
+            time.sleep(15 * 60)
+
+    threading.Thread(target=loop, name="aoi-birthday", daemon=True).start()
+
+
 def start(app):
     global _started
     start_health(app)
+    start_birthday(app)
     if _started or app.config.get("TESTING") or not app.config.get("MARKET_AUTO"):
         return
     _started = True

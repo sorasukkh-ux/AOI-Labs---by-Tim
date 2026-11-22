@@ -5658,19 +5658,21 @@ class Update128(Update126):
         self.assertEqual(info["target"], ord_id)
         self.assertEqual([o["results"] for o in info["orders"] if o["order"] == ord_id], [0])
         page = self.text("/service/buysell/")
-        for part in ('data-grade-wait="%s"' % ord_id, "F2-GRADER is waiting for this order", 'data-live-refresh="5"', "Stop waiting"):
+        self.assertTrue(info["target_since"])
+        for part in ('data-grade-wait="%s"' % ord_id, "F2-GRADER has this order chosen", 'data-live-refresh="5"', ">Done<"):
             self.assertIn(part, page)
-        self.assertIn("is waiting for the sample of", self.text("/service/buysell/grades"))
-        # the next result, sent without an order, is kept with it; the wait ends
+        self.assertIn("Every result goes to this order", self.text("/service/buysell/grades"))
+        # update 129: every result sent without an order is kept with the chosen order, until Done
         r = self.post_result(key, {"whole": 80, "broken": 20, "head_rice": 54.4}).get_json()
         self.assertEqual(r["order"], ord_id)
         with self.app.app_context():
             g = col("AOITS_GRADE").find_one({"GRADE_ID": r["id"]})
             self.assertEqual((g["LINK_USER"], g["MAT_CODE"]), ("admin", col("AOITS_ORDBUYSELL").find_one({"ORD_ID": ord_id})["MAT_CODE"]))
-        self.assertIsNone(self.orders(key)["target"])
-        self.assertIsNone(self.post_result(key, {"whole": 81, "broken": 19}).get_json()["order"])     # the one after it is free again
-        # stop waiting, and a wait that is too old
-        self.post("/service/buysell/grades", {"action": "target", "ORD_ID": ord_id}, "/service/buysell/grades")
+        self.assertEqual(self.orders(key)["target"], ord_id)
+        self.assertEqual(self.post_result(key, {"whole": 82, "broken": 18, "head_rice": 55.6}).get_json()["order"], ord_id)
+        self.assertIn("Average of 2 samples", self.text("/service/buysell/"))
+        self.assertIn("Head rice 55.0%", self.text("/service/buysell/"))
+        # Done, and a choice that is too old
         self.post("/service/buysell/grades", {"action": "untarget", "ORD_ID": ord_id}, "/service/buysell/grades")
         self.assertIsNone(self.orders(key)["target"])
         self.post("/service/buysell/grades", {"action": "target", "ORD_ID": ord_id}, "/service/buysell/grades")
@@ -5692,7 +5694,7 @@ class Update128(Update126):
         self.post("/service/buysell/grades", {"action": "attach", "GRADE_ID": free, "ORD_ID": ord_id}, "/service/buysell/grades")
         self.assertIn("data-grade-diff", self.text("/service/buysell/grades"))
         page = self.text("/service/buysell/")
-        for part in ("data-grade-diff", "The sample is", "Earlier results (1)", '<details class="gr-older">'):
+        for part in ("data-grade-diff", "The sample is", "Earlier results (2)", '<details class="gr-older">'):
             self.assertIn(part, page)
         # the simulator follows the order: its material, and --link takes an order without a result only
         sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
@@ -5709,5 +5711,572 @@ class Update128(Update126):
         with mock.patch.object(grader_sim, "call", fake), mock.patch("builtins.print"):
             reply = grader_sim.send_one("", "F2-GRADER", key, 1, photo=False)
             self.assertEqual((reply["order"], sent["material"], "order" in sent), (ord_id, own, False))
+            self.post("/service/buysell/grades", {"action": "untarget", "ORD_ID": ord_id}, "/service/buysell/grades")
             reply = grader_sim.send_one("", "F2-GRADER", key, 2, link=True, photo=False)
             self.assertIsNone(reply["order"])                                             # the only open order has results
+
+
+class Update130(Update128):
+    """Several graders in a branch: the staff choose the order and the grader; each grader holds its own order."""
+
+    def test_target_and_mismatch(self):
+        pass
+
+    def test_two_graders(self):
+        self.login("admin")
+        self.client.get("/lang/en")
+        first = self.buy_order()
+        self.client.post("/service/buysell/new", data={"csrf_token": self.token("/service/milling/new"), "ORD_TYPE": "BY", "mode": "open",
+                                                         "CUST_CODE": "C261001001", "QTY_PADDY": "300"}, headers={"Accept": "application/json"})
+        with self.app.app_context():
+            from app.models.buysell_order import BuySellOrder
+            second = next(o["ORD_ID"] for o in BuySellOrder.for_branch("factory2", None, "BY") if o["ORD_ID"] != first)
+        key1 = self.key()
+        self.assertNotIn("data-grade-pick", self.text("/service/buysell/"))                 # one grader: nothing to pick
+        self.post("/service/buysell/grades", {"action": "add", "GRADER_NAME": ""}, "/service/buysell/grades")
+        self.post("/service/buysell/grades", {"action": "add", "GRADER_NAME": "Buying point 2"}, "/service/buysell/grades")
+        page = self.text("/service/buysell/grades")
+        for part in ('data-grader="F2-GRADER2"', "Buying point 2", "Add a grader", "Chosen order"):
+            self.assertIn(part, page)
+        self.assertNotIn("data-grade-pick", self.text("/service/buysell/"))                 # no key yet: not choosable
+        with self.app.app_context():
+            from app.models import grade
+            key2 = grade.issue_key("factory2", "F2-GRADER2", "test")
+        self.assertIn("data-grade-pick", self.text("/service/buysell/"))
+        # each grader its own order; the results go to the right one
+        self.post("/service/buysell/grades", {"action": "target", "ORD_ID": first, "GRADER_ID": "F2-GRADER"}, "/service/buysell/grades")
+        self.post("/service/buysell/grades", {"action": "target", "ORD_ID": second, "GRADER_ID": "F2-GRADER2"}, "/service/buysell/grades")
+        self.assertEqual(self.post_result(key1, {"whole": 80, "broken": 20}).get_json()["order"], first)
+        self.assertEqual(self.post_result(key2, {"whole": 70, "broken": 30}, "F2-GRADER2").get_json()["order"], second)
+        page = self.text("/service/buysell/")
+        self.assertIn("F2-GRADER2 has this order chosen", page)
+        self.assertIn("grading #", page)                                                    # the other grader is shown as busy
+        # Done on one grader only
+        self.post("/service/buysell/grades", {"action": "untarget", "ORD_ID": second, "GRADER_ID": "F2-GRADER2"}, "/service/buysell/grades")
+        self.assertIsNone(self.post_result(key2, {"whole": 71, "broken": 29}, "F2-GRADER2").get_json()["order"])
+        self.assertEqual(self.post_result(key1, {"whole": 81, "broken": 19}).get_json()["order"], first)
+        # out of use: its key stops, back in use: works again
+        self.post("/service/buysell/grades", {"action": "device", "GRADER_ID": "F2-GRADER2", "GRADER_NAME": "Point two", "ACTIVE_FLG": "0"},
+                  "/service/buysell/grades")
+        self.assertEqual(self.post_result(key2, {"whole": 71, "broken": 29}, "F2-GRADER2").status_code, 401)
+        self.assertIn("Point two", self.text("/service/buysell/grades"))
+        self.assertNotIn("data-grade-pick", self.text("/service/buysell/"))
+        self.post("/service/buysell/grades", {"action": "device", "GRADER_ID": "F2-GRADER2", "GRADER_NAME": "Point two", "ACTIVE_FLG": "1"},
+                  "/service/buysell/grades")
+        self.assertEqual(self.post_result(key2, {"whole": 71, "broken": 29}, "F2-GRADER2").status_code, 200)
+
+
+class Update131(Base):
+    """Husk furnace and charcoal briquette line: one controller, the rules, alarms, the screen, the simulator."""
+
+    P = "/automation/charline"
+
+    def key(self):
+        with self.app.app_context():
+            from app.models import charline
+            return charline.issue_key("factory2", "F2-CHAR", "test")
+
+    def state(self, key, run=(), hot=40, char=40, husk=70, dampers=("D1",), fault=None):
+        units = {u: {"run": u in run, "fault": (fault or {}).get(u, "")} for u in ("BLOWER", "FEED", "SCREW", "SPRAY", "MIXER", "EXTRUDER", "DRYER")}
+        return self.client.post("/api/v1/charlines/F2-CHAR/state", headers={"X-Device-Key": key},
+                                json={"units": units, "dampers": {d: True for d in dampers}, "hot_c": hot, "char_c": char, "husk_pct": husk})
+
+    def want(self, unit, on=True):
+        return self.post(self.P, {"action": "want", "LINE_ID": "F2-CHAR", "UNIT": unit, "ON": "1" if on else "0"}, self.P)
+
+    def line(self):
+        return next(r for r in self.db("AOIMS_CHARLINE") if r["LINE_ID"] == "F2-CHAR")
+
+    def wants(self):
+        return self.line()["WANT"]
+
+    def test_rules_and_screen(self):
+        self.login("admin")
+        self.client.get("/lang/en")
+        self.assertIn('id="cl-entry"', self.text("/automation/hardware"))
+        page = self.text(self.P)
+        for part in ("Husk furnace and charcoal line", "F2-CHAR", "No live data from the controller yet", "AOI is not the safety system",
+                     'data-cl-unit="FEED"', 'data-live-refresh="3"', "Start order: dryer, extruder, mixer"):
+            self.assertIn(part, page)
+        self.assertEqual(self.state("wrong").status_code, 401)
+        self.want("BLOWER")                                                    # no controller connected: nothing starts
+        self.assertFalse(self.wants().get("BLOWER"))
+        self.post(self.P, {"action": "key", "LINE_ID": "F2-CHAR"}, self.P)
+        self.assertIn('id="device-key"', self.text(self.P))
+        key = self.key()
+        self.assertEqual(self.client.post("/api/v1/charlines/F2-CHAR/state", headers={"X-Device-Key": key}, json={"hot_c": "x"}).status_code, 422)
+        r = self.state(key).get_json()
+        self.assertEqual(r["settings"], {"hot_set": 60, "hot_band": 3, "hot_max": 90, "char_max": 60, "auto": True})
+        self.assertFalse(any(r["out"].values()))
+        # furnace: the feed needs the blower running and a damper open, then follows the temperature
+        self.want("FEED")
+        self.assertFalse(self.wants().get("FEED"))
+        self.want("BLOWER")
+        self.want("D1")
+        r = self.state(key, dampers=()).get_json()
+        self.assertEqual((r["out"]["BLOWER"], r["dampers"]), (True, {"D1": True, "D2": False}))
+        self.state(key, run=("BLOWER",))
+        self.want("FEED")
+        self.assertTrue(self.wants()["FEED"])
+        self.assertTrue(self.state(key, run=("BLOWER",), hot=40).get_json()["out"]["FEED"])
+        self.assertTrue(self.state(key, run=("BLOWER", "FEED"), hot=61).get_json()["out"]["FEED"])       # inside the band: as it was
+        r = self.state(key, run=("BLOWER", "FEED"), hot=63.5).get_json()
+        self.assertEqual((r["out"]["FEED"], r["why"]["FEED"]), (False, "atTemp"))
+        self.assertFalse(self.state(key, run=("BLOWER",), hot=59).get_json()["out"]["FEED"])            # still inside: stays off
+        self.assertTrue(self.state(key, run=("BLOWER",), hot=56.5).get_json()["out"]["FEED"])
+        self.assertEqual(self.state(key, run=("BLOWER",), hot=56, dampers=()).get_json()["why"]["FEED"], "needDamper")
+        self.assertEqual(self.state(key, run=(), hot=56).get_json()["why"]["FEED"], "needBlower")
+        r = self.state(key, run=("BLOWER", "FEED"), hot=91).get_json()
+        self.assertEqual(r["why"]["FEED"], "hotMax")
+        # char: the screw only at or below the limit, the spray first when hotter (and until 5 degrees below)
+        self.state(key, run=("BLOWER",), hot=50)
+        self.want("SCREW")
+        self.assertTrue(self.state(key, run=("BLOWER",), char=60).get_json()["out"]["SCREW"])
+        r = self.state(key, run=("BLOWER", "SCREW"), char=72).get_json()
+        self.assertEqual((r["out"]["SCREW"], r["out"]["SPRAY"], r["why"]["SCREW"]), (False, True, "charHot"))
+        page = self.text(self.P)
+        for part in ('data-cl-alarm="charHot"', "Char at 72 °C, over 60 °C", "char hotter than the limit: water spray first", 'data-cl-row="SPRAY"'):
+            self.assertIn(part, page)
+        r = self.state(key, run=("BLOWER", "SPRAY"), char=57).get_json()
+        self.assertEqual((r["out"]["SCREW"], r["out"]["SPRAY"]), (True, True))
+        self.assertFalse(self.state(key, run=("BLOWER", "SPRAY", "SCREW"), char=54).get_json()["out"]["SPRAY"])
+        kinds = [e["KIND"] for e in self.db("AOILOG_CHARLINE")]
+        for kind in ("ALARM", "CLEAR", "WANT", "RUN", "STOP"):
+            self.assertIn(kind, kinds)
+        # briquettes: dryer, then extruder, then mixer
+        self.want("MIXER")
+        self.want("EXTRUDER")
+        self.assertFalse(self.wants().get("MIXER") or self.wants().get("EXTRUDER"))
+        self.want("DRYER")
+        self.state(key, run=("DRYER",))
+        self.want("EXTRUDER")
+        self.state(key, run=("DRYER", "EXTRUDER"))
+        self.want("MIXER")
+        r = self.state(key, run=("DRYER", "EXTRUDER", "MIXER")).get_json()
+        self.assertTrue(r["out"]["MIXER"] and r["out"]["EXTRUDER"] and r["out"]["DRYER"])
+        r = self.state(key, run=("EXTRUDER", "MIXER"), fault={"DRYER": "OL"}).get_json()          # the dryer trips: all three stop
+        self.assertEqual((r["out"]["DRYER"], r["out"]["EXTRUDER"], r["out"]["MIXER"], r["why"]["EXTRUDER"]), (False, False, False, "needNext"))
+        self.assertIn("Briquette dryer in fault OL", self.text(self.P))
+        self.post(self.P, {"action": "stopall", "LINE_ID": "F2-CHAR"}, self.P)
+        self.assertFalse(any(v for k, v in self.wants().items() if k not in ("D1", "D2")))
+        self.assertTrue(self.wants()["D1"])
+
+    def test_settings_alarm_line_and_simulator(self):
+        from unittest import mock
+        self.login("admin")
+        self.client.get("/lang/en")
+        key = self.key()
+        form = {"action": "settings", "LINE_ID": "F2-CHAR", "LINE_NAME": "Furnace A", "HOT_SET_C": "70", "HOT_BAND_C": "2", "HOT_MAX_C": "71",
+                "CHAR_MAX_C": "55", "HUSK_LOW_PCT": "20", "ALARM_TO": "C261001001", "AUTO_FLG": "0", "ACTIVE_FLG": "1"}
+        self.post(self.P, form, self.P)
+        self.assertEqual(self.line()["HOT_SET_C"], 60)          # limit not above set + band
+        self.post(self.P, dict(form, HOT_MAX_C="95", ALARM_TO="NOBODY"), self.P)
+        self.assertEqual(self.line()["HOT_SET_C"], 60)
+        self.post(self.P, dict(form, HOT_MAX_C="95"), self.P)
+        line = self.line()
+        self.assertEqual((line["HOT_SET_C"], line["CHAR_MAX_C"], line["ALARM_TO"], line["AUTO_FLG"], line["LINE_NAME"]), (70, 55, "C261001001", False, "Furnace A"))
+        with self.app.app_context():
+            col("AOIMS_CUSTOMER").update_one({"CUST_CODE": "C261001001"}, {"$set": {"LINE_USER_ID": "U" + "0123456789abcdef" * 2}})
+        with mock.patch.dict(os.environ, {"AOI_LINE_CHANNEL_TOKEN": "token"}), mock.patch("app.models.notify._push", return_value=None) as push:
+            self.state(key, char=80)
+            self.state(key, char=81)                                           # the same alarm is told once
+            self.assertEqual(push.call_count, 1)
+            self.assertIn("ถ่านร้อน 80 °C", push.call_args[0][1])
+        # continuous feed (automatic off): no pause at the set temperature
+        self.state(key, run=("BLOWER",), char=40)
+        for unit in ("BLOWER", "D2"):
+            self.post(self.P, {"action": "want", "LINE_ID": "F2-CHAR", "UNIT": unit, "ON": "1"}, self.P)
+        self.state(key, run=("BLOWER",), dampers=("D2",), char=40)
+        self.post(self.P, {"action": "want", "LINE_ID": "F2-CHAR", "UNIT": "FEED", "ON": "1"}, self.P)
+        self.assertTrue(self.state(key, run=("BLOWER", "FEED"), dampers=("D2",), hot=80, char=40).get_json()["out"]["FEED"])
+        # stopping the blower stops the feed too
+        self.post(self.P, {"action": "want", "LINE_ID": "F2-CHAR", "UNIT": "BLOWER", "ON": "0"}, self.P)
+        self.assertFalse(self.line()["WANT"]["FEED"])
+        # the simulator: heats while it burns, cools the char with the spray, never feeds without an answer
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
+        import charline_sim
+        sim = charline_sim.Line(rng=__import__("random").Random(3))
+        sim.apply({"ok": True, "out": {"BLOWER": True, "FEED": True}, "dampers": {"D1": True}})
+        for _ in range(40):
+            sim.step(2)
+        self.assertGreater(sim.hot, 70)
+        self.assertGreater(sim.char, 60)
+        sim.apply({"ok": True, "out": {"BLOWER": True, "SPRAY": True}, "dampers": {"D1": True}})
+        for _ in range(40):
+            sim.step(2)
+        self.assertLess(sim.char, 50)
+        sim.apply({"ok": True, "out": {"BLOWER": True, "FEED": True}})
+        sim.apply({"ok": False})
+        self.assertFalse(sim.run["FEED"])
+        self.assertEqual(self.state(key, **{"run": [u for u in sim.run if sim.run[u]]}).status_code, 200)
+        self.assertTrue(self.db("AOITS_CHARLINE_TELE"))
+
+
+class Update132(Update126):
+    """The real grader program (flatbed scanner + OpenCV) and its offline queue."""
+
+    def test_api_and_screens(self):
+        pass
+
+    def test_keep_with_buying_order(self):
+        pass
+
+    def picture(self, whole=40, broken=10, dpi=300):
+        import cv2
+        import numpy as np
+        rng, px = np.random.RandomState(5), dpi / 25.4
+        img = np.full((1500, 2000, 3), 18, np.uint8)
+        n = 0
+        for row in range(5):
+            for column in range(10):
+                length = 7.0 if n < whole else 3.5
+                n += 1
+                cv2.ellipse(img, (120 + column * 190, 150 + row * 280), (int(length * px / 2), int(2.1 * px / 2)),
+                            float(rng.uniform(0, 180)), 0, 360, (225, 230, 235), -1)
+        return img
+
+    def test_grader_program(self):
+        import tempfile
+        from datetime import timedelta
+        try:
+            import cv2                                                           # noqa: F401  (the Pi has it; skip where it is missing)
+        except ImportError:
+            self.skipTest("OpenCV not installed")
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
+        import aoi_grader
+        key = self.key()
+        self.login("admin")
+        ord_id = self.buy_order()
+        tmp = tempfile.mkdtemp()
+        cfg = dict(aoi_grader.DEFAULTS, grader="F2-GRADER", key=key, queue=os.path.join(tmp, "q"), scans=os.path.join(tmp, "s"))
+        values, marked = aoi_grader.analyse(self.picture(), cfg, "white")
+        self.assertEqual(values["grains"], 50)
+        self.assertAlmostEqual(values["avg_len"], 7.0, delta=0.25)
+        self.assertAlmostEqual(values["avg_wid"], 2.1, delta=0.2)
+        self.assertAlmostEqual(values["broken"], 100 * 10 * 3.5 / (40 * 7.0 + 10 * 3.5), delta=1.5)     # by area
+        self.assertEqual(marked.shape, (1500, 2000, 3))
+        with self.assertRaises(ValueError):
+            aoi_grader.analyse(255 - self.picture(), cfg, "white")               # bright background
+        online = {"on": False}
+
+        def send(c, path, body=None, timeout=20):
+            if not online["on"]:
+                return {"ok": False, "offline": True, "error": "no route"}
+            if body is None:
+                return self.client.get("/api/v1/graders/F2-GRADER/orders", headers={"X-Device-Key": key}).get_json()
+            r = self.post_result(key, body)
+            return r.get_json() if r.status_code == 200 else {"ok": False, "http": r.status_code, "body": r.get_data(as_text=True)}
+        said = []
+        # offline: the result waits in the queue
+        body = aoi_grader.grade(cfg, self.picture(), "white", 1, moisture=14.2, paddy_g=100, milled_g=66, send=send, say=said.append)
+        self.assertEqual((len(aoi_grader.waiting(cfg)), "order" in body), (1, False))
+        self.assertAlmostEqual(body["head_rice"], body["whole"] * 0.66, delta=0.06)
+        self.assertEqual(self.db("AOITS_GRADE"), [])
+        # an order is chosen AFTER that sample was graded: the late result must not land on it
+        self.post("/service/buysell/grades", {"action": "target", "ORD_ID": ord_id}, "/service/buysell/grades")
+        with self.app.app_context():
+            dev = col("AOIMS_GRADER").find_one({"GRADER_ID": "F2-GRADER"})
+            col("AOIMS_GRADER").update_one({"GRADER_ID": "F2-GRADER"}, {"$set": {"TARGET_DATE": dev["TARGET_DATE"] + timedelta(minutes=5)}})
+        online["on"] = True
+        self.assertEqual(aoi_grader.flush(cfg, send, said.append), (1, 0))
+        late = self.db("AOITS_GRADE")[0]
+        self.assertEqual((late["ORD_ID"], late["MOISTURE_PCT"], late["PHOTO_FLG"], late["GRAINS"]), (None, 14.2, True, 50))
+        # online with the order chosen before grading: kept with it; a refused result does not block the queue
+        with self.app.app_context():
+            col("AOIMS_GRADER").update_one({"GRADER_ID": "F2-GRADER"}, {"$set": {"TARGET_DATE": dev["TARGET_DATE"] - timedelta(minutes=2)}})
+        aoi_grader.enqueue(cfg, {"whole": 80, "broken": 40})
+        body = aoi_grader.grade(cfg, self.picture(), "paddy", 2, send=send, say=said.append)
+        self.assertEqual(body["order"], ord_id)
+        self.assertNotIn("chalky", body)
+        self.assertEqual(aoi_grader.waiting(cfg), [])
+        self.assertEqual(len(os.listdir(os.path.join(cfg["queue"], "rejected"))), 1)
+        self.assertEqual(sorted(g["ORD_ID"] or "" for g in self.db("AOITS_GRADE")), ["", ord_id])
+
+
+class Update133(Base):
+    """Customer birthdays: birth date + marketing consent, Chinese zodiac, the daily LINE birthday coupon / greeting."""
+
+    USER = "U" + "c" * 32
+
+    def cust(self, code="C261001001"):
+        return next(c for c in self.db("AOIMS_CUSTOMER") if c["CUST_CODE"] == code)
+
+    def test_zodiac(self):
+        from app.models import birthday as bd
+        from app.models.base import ValidationError
+        from datetime import date
+        self.assertEqual(bd.zodiac("1985-09-06"), {"year": 1985, "animal": "OX", "element": "WOOD"})
+        self.assertEqual(bd.zodiac("2026-02-03")["animal"], "SNAKE")                      # before Lichun: the year before
+        self.assertEqual(bd.zodiac("2026-02-04"), {"year": 2026, "animal": "HORSE", "element": "FIRE"})
+        self.assertEqual(bd.zodiac("2000-06-01"), {"year": 2000, "animal": "DRAGON", "element": "METAL"})
+        self.assertEqual(bd.parse("06/09/2528", today=date(2026, 11, 22)), "1985-09-06")   # Buddhist year
+        self.assertIsNone(bd.parse(""))
+        for bad in ("2026-02-30", "3000-01-01", "abc"):
+            with self.assertRaises(ValidationError):
+                bd.parse(bad, today=date(2026, 11, 22))
+        self.assertEqual(bd.birthday_in("2000-02-29", 2027), date(2027, 2, 28))
+        self.assertEqual(bd.age_on("1985-09-06", date(2026, 9, 6)), 41)
+        with self.app.test_request_context():
+            self.assertEqual(bd.zodiac_text("1985-09-06", "th"), "🐂 ปีฉลู ธาตุไม้")
+
+    def test_birthday_cards(self):
+        from unittest import mock
+        from datetime import date
+        from app.models import birthday as bd
+        self.login("admin")
+        self.client.get("/lang/en")
+        base = {"CUST_NAME": "อรุณ พงษ์ไพร", "MOBILE_NO": "081-234-5678", "ADDRESS": "45 หมู่ 2"}
+        self.post("/admin/customers/C261001001", dict(base, BIRTH_DATE="2026-13-01"), "/admin/customers/C261001001")
+        self.assertFalse(self.cust().get("BIRTH_DATE"))
+        self.post("/admin/customers/C261001001", dict(base, BIRTH_DATE="1985-11-22"), "/admin/customers/C261001001")
+        c = self.cust()
+        self.assertEqual((c["BIRTH_DATE"], c["BIRTH_MMDD"], c["MKT_CONSENT"], c["MKT_CONSENT_DATE"]), ("1985-11-22", "11-22", False, None))
+        self.assertIn("Year of the Ox", self.text("/admin/customers/C261001001"))
+        today = date(2026, 11, 22)
+        with self.app.app_context():
+            col("AOIMS_CUSTOMER").update_one({"CUST_CODE": "C261001001"}, {"$set": {"LINE_USER_ID": self.USER}})
+            self.assertEqual(bd.due(today), [])                                            # no consent: nothing
+        self.post("/admin/customers/C261001001", dict(base, BIRTH_DATE="1985-11-22", MKT_CONSENT="1"), "/admin/customers/C261001001")
+        self.assertTrue(self.cust()["MKT_CONSENT_DATE"])
+        with self.app.app_context():
+            self.assertEqual([x["CUST_CODE"] for x in bd.due(today)], ["C261001001"])
+            self.assertEqual(bd.run(today), [{"code": "C261001001", "status": "skipped"}])  # no branch has cards on
+        page = self.text("/finance/birthday?branch=factory2")
+        for part in ("Customer birthdays", "C261001001", "Year of the Ox", "Ready"):
+            self.assertIn(part, page)
+        self.assertIn("bd-entry", self.text("/finance/marketing?branch=factory2"))
+        url = "/finance/birthday?branch=factory2"
+        self.post(url, {"branch": "factory2", "BDAY_FLG": "1", "BDAY_VALUE": "9999", "BDAY_DAYS": "14"}, url)
+        self.assertFalse(bd_cfg(self, "factory2")["BDAY_FLG"])
+        self.post(url, {"branch": "factory2", "BDAY_FLG": "1", "BDAY_VALUE": "30", "BDAY_DAYS": "7"}, url)
+        self.assertEqual(bd_cfg(self, "factory2"), {"BDAY_FLG": True, "BDAY_VALUE": 30.0, "BDAY_DAYS": 7})
+        with mock.patch.dict(os.environ, {"AOI_LINE_CHANNEL_TOKEN": "token", "AOI_PUBLIC_URL": "https://aoi.example"}), \
+                mock.patch("app.models.notify._push", return_value=None) as push:
+            with self.app.test_request_context():
+                results = bd.run(today)
+                self.assertEqual(bd.run(today), [])                                         # once a year
+        self.assertEqual(results[0]["status"], "sent")
+        text, flex = push.call_args[0][1], push.call_args[0][3]
+        self.assertIn("สุขสันต์วันเกิด", text)
+        self.assertIn("ปีฉลู ธาตุไม้", text)
+        self.assertIn("30.00", text)
+        self.assertEqual(flex["header"]["backgroundColor"], "#DB2777")
+        coupon = self.db("AOITS_COUPON")[0]
+        self.assertEqual((coupon["CAMP_ID"], coupon["VALUE"], coupon["BRANCH_ID"], coupon["CUST_CODE"]), ("BDAY", 30.0, "factory2", "C261001001"))
+        with self.app.app_context():
+            from app.timeutil import to_local
+            self.assertEqual(to_local(coupon["EXPIRE_DATE"]).date(), date(2026, 11, 28))
+        c = self.cust()
+        self.assertEqual((c["BDAY_SENT_YEAR"], c["BDAY_COUPON_ID"], c["BDAY_BRANCH"], c["BDAY_ERROR"]), (2026, coupon["COUPON_ID"], "factory2", None))
+        self.assertIn(coupon["COUPON_ID"], self.text(url))
+        # value 0: the greeting text only, next year
+        self.post(url, {"branch": "factory2", "BDAY_FLG": "1", "BDAY_VALUE": "0", "BDAY_DAYS": "7"}, url)
+        with mock.patch.dict(os.environ, {"AOI_LINE_CHANNEL_TOKEN": "token"}), mock.patch("app.models.notify._push", return_value=None) as push:
+            with self.app.test_request_context():
+                self.assertEqual(bd.run(date(2027, 11, 22))[0]["status"], "sent")
+        self.assertIsNone(push.call_args[0][3])
+        self.assertEqual(len(self.db("AOITS_COUPON")), 1)
+        with self.app.test_request_context():
+            from app.models import line_msg
+            self.assertIn("LN_BIRTHDAY", [m["MSG_ID"] for m in line_msg.all_messages("en")])
+
+    def test_member_form_birthday(self):
+        from app.models import member_reg
+        with self.app.test_request_context():
+            customer, kind = member_reg.register("U" + "d" * 32, None, {"CONSENT": "1", "CUST_NAME": "Birthday Person", "MOBILE_NO": "0891112222",
+                                                                       "ADDRESS": "x", "BIRTH_DATE": "1990-03-15", "MKT_CONSENT": "1"})
+        self.assertEqual(kind, "new")
+        c = self.cust(customer["CUST_CODE"])
+        self.assertEqual((c["BIRTH_DATE"], c["BIRTH_MMDD"], c["MKT_CONSENT"]), ("1990-03-15", "03-15", True))
+
+
+def bd_cfg(test, branch):
+    with test.app.app_context():
+        from app.models import birthday
+        return birthday.settings(branch)
+
+
+class Update134(Update133):
+    """fengshuiX Bazi partner API: the birthday reading in the card, gender / birth time, the API test on the page."""
+
+    def test_zodiac(self):
+        pass
+
+    def test_member_form_birthday(self):
+        pass
+
+    def test_reading_parser(self):
+        from app.models import bazi_api
+        self.assertEqual(bazi_api.reading({"subject": {"gender": "male"}, "today": {"verdict": "วันนี้ดวงการเงินเด่น เหมาะเจรจาธุรกิจ"}}),
+                         "วันนี้ดวงการเงินเด่น เหมาะเจรจาธุรกิจ")
+        self.assertEqual(bazi_api.reading({"hours": [{"x": 1}, {"summary": "ช่วงเช้ามงคลสำหรับการเดินทาง"}]}), "ช่วงเช้ามงคลสำหรับการเดินทาง")
+        self.assertEqual(bazi_api.reading({"score": 7}), "")
+        self.assertTrue(bazi_api.reading({"summary": "ก" * 500}).endswith("…"))
+        self.assertEqual(bazi_api.idem_for("C1", 2026), bazi_api.idem_for("C1", 2026))
+        self.assertNotEqual(bazi_api.idem_for("C1", 2026), bazi_api.idem_for("C1", 2027))
+
+    def test_birthday_cards(self):
+        from unittest import mock
+        from datetime import date
+        from app.models import birthday as bd, bazi_api
+        self.login("admin")
+        self.client.get("/lang/en")
+        base = {"CUST_NAME": "อรุณ พงษ์ไพร", "MOBILE_NO": "081-234-5678", "ADDRESS": "45 หมู่ 2", "BIRTH_DATE": "1985-11-22", "MKT_CONSENT": "1"}
+        self.post("/admin/customers/C261001001", dict(base, GENDER="male", BIRTH_TIME="25:00"), "/admin/customers/C261001001")
+        self.assertFalse(self.cust().get("GENDER"))                                          # bad time: nothing saved
+        self.post("/admin/customers/C261001001", dict(base, GENDER="male", BIRTH_TIME="09:30"), "/admin/customers/C261001001")
+        c = self.cust()
+        self.assertEqual((c["GENDER"], c["BIRTH_TIME"]), ("male", "09:30"))
+        url = "/finance/birthday?branch=factory2"
+        self.assertIn("Not connected", self.text(url))
+        self.post(url, {"branch": "factory2", "BDAY_FLG": "1", "BDAY_VALUE": "0", "BDAY_DAYS": "7"}, url)
+        with self.app.app_context():
+            col("AOIMS_CUSTOMER").update_one({"CUST_CODE": "C261001001"}, {"$set": {"LINE_USER_ID": self.USER}})
+        calls = []
+
+        def fake(path, body, headers, timeout=15):
+            calls.append((path, body, headers))
+            return 200, {"success": True, "cost": 3, "data": {"subject": {"gender": "male"}, "day": {"verdict": "ดวงวันเกิดเด่นเรื่องการค้า"}}}
+        env = {"AOI_LINE_CHANNEL_TOKEN": "token", "AOI_BAZI_API_KEY": "bz_live_test", "AOI_BAZI_MAX_COST": "10"}
+        with mock.patch.dict(os.environ, env), mock.patch.object(bazi_api, "_post", side_effect=fake), \
+                mock.patch("app.models.notify._push", return_value=None) as push:
+            with self.app.test_request_context():
+                self.assertEqual(bd.run(date(2026, 11, 22))[0]["status"], "sent")
+            path, body, headers = calls[0]
+            self.assertEqual(path, "/api/v2/daily")
+            self.assertEqual(body, {"birth": {"date": "1985-11-22", "gender": "male", "time": "09:30"}, "lang": "th"})
+            self.assertEqual((headers["x-api-key"], headers["X-End-User"], headers["X-Max-Cost"]), ("bz_live_test", "C261001001", "10"))
+            self.assertEqual(headers["Idempotency-Key"], bazi_api.idem_for("C261001001", 2026))
+            text = push.call_args[0][1]
+            self.assertIn("ดวงวันเกิดเด่นเรื่องการค้า", text)
+            self.assertNotIn("อรุณ พงษ์ไพร", json_dumps(body))                                # no name to the API
+            page = self.text(url)
+            self.assertIn("Connected", page)
+            self.assertIn("ดวงวันเกิดเด่นเรื่องการค้า", page)
+            # the API test on the page shows the raw answer
+            r = self.client.post(url, data={"csrf_token": self.token(url), "branch": "factory2", "action": "apitest",
+                                            "T_DATE": "1985-03-15", "T_TIME": "09:30", "T_GENDER": "female"})
+            page = r.get_data(as_text=True)
+            self.assertIn("Reading received", page)
+            self.assertIn("&#34;cost&#34;: 3", page)
+        # API down: the card still goes, without a reading, and says why
+        with self.app.app_context():
+            col("AOIMS_CUSTOMER").update_one({"CUST_CODE": "C261001001"}, {"$set": {"BDAY_SENT_YEAR": None}})
+        with mock.patch.dict(os.environ, env), mock.patch.object(bazi_api, "_post", return_value=(None, None)), \
+                mock.patch("app.models.notify._push", return_value=None) as push:
+            with self.app.test_request_context():
+                self.assertEqual(bd.run(date(2026, 11, 22))[0]["status"], "sent")
+            self.assertNotIn("🔮", push.call_args[0][1])
+        self.assertEqual((self.cust()["BDAY_FORTUNE"], self.cust()["BDAY_FORTUNE_ERROR"]), (None, "bzErrNetwork"))
+
+
+def json_dumps(value):
+    import json
+    return json.dumps(value, ensure_ascii=False)
+
+
+class Update135(Update132):
+    """Rule 3: the gain in baht against the numbers before AOI. Rule 7: exams for the grader and the price signals."""
+
+    def test_grader_program(self):
+        pass
+
+    def test_kpi_baseline(self):
+        self.login("admin")
+        self.client.get("/lang/en")
+        url = "/automation/ai/check?branch=factory2"
+        page = self.text(url)
+        for part in ("Results in baht", "5 measure(s) have no", "Paddy milled per day", "ck-open"):
+            self.assertIn(part, page if part != "ck-open" else self.text("/automation/ai"))
+        form = {"branch": "factory2", "action": "kpi", "WORK_DAYS": "26",
+                "BASE_MILL_KG_DAY": "0", "RATE_MILL_KG_DAY": "0.5",
+                "BASE_STAFF_H_DAY": "3", "NOW_STAFF_H_DAY": "1", "RATE_STAFF_H_DAY": "44.6",
+                "BASE_CALLS_DAY": "20", "NOW_CALLS_DAY": "5", "RATE_CALLS_DAY": "3", "NOTE_CALLS_DAY": "counted 1 week in Dec"}
+        self.post(url, dict(form, WORK_DAYS="x"), url)
+        self.assertEqual(self.db("AOIMS_KPI"), [])
+        self.post(url, form, url)
+        with self.app.app_context():
+            from app.models import evaluate as ev
+            k = ev.kpi_rows("factory2")
+        rows = {r["key"]: r for r in k["rows"]}
+        self.assertEqual(rows["STAFF_H_DAY"]["gain"], round(2 * 44.6 * 26, 2))         # fewer hours = a gain
+        self.assertEqual(rows["CALLS_DAY"]["gain"], 15 * 3 * 26)
+        self.assertTrue(rows["MILL_KG_DAY"]["auto"])
+        self.assertEqual(k["missing"], 2)
+        self.assertAlmostEqual(k["total"], rows["STAFF_H_DAY"]["gain"] + rows["CALLS_DAY"]["gain"] + (rows["MILL_KG_DAY"]["gain"] or 0), places=2)
+        self.assertIn("counted 1 week in Dec", self.text(url))
+
+    def test_grader_exam(self):
+        import tempfile
+        try:
+            import cv2                                                           # noqa: F401
+        except ImportError:
+            self.skipTest("OpenCV not installed")
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
+        import aoi_grader
+        key = self.key()
+        self.login("admin")
+        self.client.get("/lang/en")
+        tmp = tempfile.mkdtemp()
+        cfg = dict(aoi_grader.DEFAULTS, grader="F2-GRADER", key=key, queue=os.path.join(tmp, "q"), scans=os.path.join(tmp, "s"))
+
+        def send(c, path, body=None, timeout=20):
+            h = {"X-Device-Key": key}
+            r = self.client.get("/api/v1/graders/F2-GRADER" + path, headers=h) if body is None else \
+                self.client.post("/api/v1/graders/F2-GRADER" + path, json=body, headers=h)
+            return r.get_json() if r.status_code == 200 else {"ok": False, "http": r.status_code, "body": r.get_data(as_text=True)}
+        body = aoi_grader.grade(cfg, self.picture(), "white", 1, send=send, say=lambda *_a: None)
+        self.assertEqual(body["version"], aoi_grader.VERSION)
+        self.assertTrue(os.path.exists(os.path.join(cfg["scans"], body["sample"] + ".jpg")))
+        g = self.db("AOITS_GRADE")[0]
+        self.assertEqual(g["VERSION"], aoi_grader.VERSION)
+        url = "/automation/ai/check?branch=factory2"
+        self.assertIn(g["GRADE_ID"], self.text(url))                                      # offered for a hand check
+        self.post(url, {"branch": "factory2", "action": "check", "GRADE_ID": g["GRADE_ID"]}, url)   # nothing typed
+        self.assertEqual(self.db("AOITS_GRADECHECK"), [])
+        self.post(url, {"branch": "factory2", "action": "check", "GRADE_ID": g["GRADE_ID"], "HAND_WHOLE": str(g["WHOLE_PCT"] - 1),
+                        "HAND_BROKEN": str(g["BROKEN_PCT"] + 3), "GOLDEN_FLG": "1"}, url)
+        with self.app.app_context():
+            from app.models import evaluate as ev
+            sc = ev.grader_score("factory2")
+        self.assertEqual((sc["measures"]["WHOLE_PCT"]["mae"], sc["measures"]["WHOLE_PCT"]["within"]), (1.0, 100))
+        self.assertEqual((sc["measures"]["BROKEN_PCT"]["bias"], sc["measures"]["BROKEN_PCT"]["within"]), (-3.0, 0))
+        self.assertFalse(sc["ready"])
+        self.assertIn("Not ready for pricing", self.text(url))
+        # the grader grades its kept scan again and sends the exam
+        said = []
+        reply = aoi_grader.exam(cfg, send, said.append)
+        self.assertTrue(reply["ok"])
+        self.assertEqual(reply["n"], 1)
+        self.assertEqual(reply["scores"]["WHOLE_PCT"]["mae"], 1.0)
+        exam = self.db("AOITS_AIEXAM")[0]
+        self.assertEqual((exam["KIND"], exam["SUBJECT"], exam["VERSION"]), ("GRADER", "F2-GRADER", aoi_grader.VERSION))
+        self.assertIn("F2-GRADER v" + aoi_grader.VERSION, self.text(url))
+        self.assertEqual(self.client.post("/api/v1/graders/F2-GRADER/exam", json={"version": "x", "results": []},
+                                          headers={"X-Device-Key": key}).status_code, 422)
+        self.assertEqual(self.client.get("/api/v1/graders/F2-GRADER/golden", headers={"X-Device-Key": "bad"}).status_code, 401)
+
+    def test_price_exam(self):
+        from unittest import mock
+        from datetime import date, timedelta
+        from app.models import price_signal as ps
+        self.login("admin")
+        self.client.get("/lang/en")
+        end = date(2026, 11, 22)
+        start = end - timedelta(days=500)
+        # a price going up then down, so the signals have something to be right or wrong about
+        pts = [((start + timedelta(days=i)).isoformat(), 15 + 3 * __import__("math").sin(i / 40.0)) for i in range(0, 501, 3)]
+        with mock.patch.object(ps, "sources", return_value={"NABC": pts}), mock.patch.object(ps, "export_check", return_value=None), \
+                mock.patch.object(ps, "base_of", return_value="NABC"):
+            with self.app.test_request_context():
+                from app.models import evaluate as ev
+                doc = ev.price_exam("factory2", "PADDY_HM", "admin", end=end)
+        s = doc["SCORES"]
+        self.assertGreater(doc["N"], 40)
+        self.assertEqual(s["buy_n"] + s["sell_n"] + s["hold_n"], doc["N"])
+        self.assertIsNotNone(s["up_pct"])
+        self.assertEqual(doc["VERSION"], "SMA 7/30")
+        page = self.text("/automation/ai/check?branch=factory2")
+        self.assertIn("Price signal exam", page)
+        self.assertIn("SMA 7/30", page)
+

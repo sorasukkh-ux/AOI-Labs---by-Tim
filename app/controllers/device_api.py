@@ -13,6 +13,7 @@ it is shown once). No browser session or CSRF token is used here.
 
     POST /api/v1/graders/<GRADER_ID>/results        rice quality result of the camera grader (update 126, models/grade.py)
     GET  /api/v1/graders/<GRADER_ID>/orders         the open buying orders, to pick one on the grader
+    POST /api/v1/charlines/<LINE_ID>/state          husk furnace + charcoal line: its state in, what may run out (update 131, models/charline.py)
 
 See scripts/grader_sim.py (a pretend grader), scripts/aoi_gateway.py (inverter by Modbus; --simulate starts the virtual inverter scripts/vfd_sim.py) and
 scripts/device_sim.py (simple start/stop machine) for working examples.
@@ -125,6 +126,29 @@ def grader_result(grader_id):
     return jsonify({"ok": True, "id": doc["GRADE_ID"], "order": doc["ORD_ID"]})
 
 
+@bp.route("/graders/<grader_id>/golden", methods=["GET"])
+def grader_golden(grader_id):
+    """Update 135: the grader's exam set (samples graded by hand, marked golden) - re-graded by aoi_grader.py --exam."""
+    from ..models import grade, evaluate
+    dev = grade.by_key(grader_id, _key())
+    if not dev:
+        return _denied()
+    return jsonify({"ok": True, "golden": evaluate.golden(dev["GRADER_ID"])})
+
+
+@bp.route("/graders/<grader_id>/exam", methods=["POST"])
+def grader_exam(grader_id):
+    from ..models import grade, evaluate
+    dev = grade.by_key(grader_id, _key())
+    if not dev:
+        return _denied()
+    try:
+        doc = evaluate.save_grader_exam(dev, request.get_json(silent=True))
+    except ValidationError as error:
+        return _error(error)
+    return jsonify({"ok": True, "exam": doc["EXAM_ID"], "n": doc["N"], "scores": doc["SCORES"]})
+
+
 @bp.route("/graders/<grader_id>/orders", methods=["GET"])
 def grader_orders(grader_id):
     from ..models import grade
@@ -132,4 +156,18 @@ def grader_orders(grader_id):
     if not dev:
         return _denied()
     grade.seen(dev)
-    return jsonify({"ok": True, "orders": grade.open_orders(dev["BRANCH_ID"]), "target": grade.target_of(dev)})
+    return jsonify({"ok": True, "orders": grade.open_orders(dev["BRANCH_ID"]), "target": grade.target_of(dev),
+                    "target_since": dev["TARGET_DATE"].isoformat() if grade.target_of(dev) else None})
+
+
+# ---------- update 131: husk furnace and charcoal briquette line (one controller per line) ----------
+@bp.route("/charlines/<line_id>/state", methods=["POST"])
+def charline_state(line_id):
+    from ..models import charline
+    line = charline.by_key(line_id, _key())
+    if not line:
+        return _denied()
+    try:
+        return jsonify(charline.report(line, request.get_json(silent=True)))
+    except ValidationError as error:
+        return _error(error)

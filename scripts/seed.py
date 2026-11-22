@@ -205,6 +205,8 @@ def seed(log=print, reset=False):
     _formula.seed_templates(db)
     from app.models import grade as _grade          # update 126: one rice quality grader (Raspberry Pi) per branch
     _grade.seed_devices(db, [b for b, _n in BRANCHES])
+    from app.models import charline as _charline          # update 131: husk furnace + charcoal line, one per branch
+    _charline.seed(db, [b for b, _n in BRANCHES])
     for branch_id, name in BRANCHES:
         add("AOIMS_SYSPARAM", {"BRANCH_ID": branch_id}, dict(MILL_SETTINGS, BRANCH_NAME=name))
         for variety in _var.VARIETIES:

@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% from "_macros.html" import page_head %}
+{% from "automation/_chart.html" import key_box %}
+{# update 131 (Tim's drawing AOI-GA-001 rev D, items 17-24): husk furnace + hot air to the silos, and the charcoal briquette line #}
+{% macro box(v, x, y, w, unit, title, no) %}
+{% set u = v.by.get(unit) %}
+<g class="cl-box {% if not u %}cl-plain{% elif u.fault %}cl-fault{% elif u.run %}cl-run{% elif u.want and u.why %}cl-held{% else %}cl-off{% endif %}" data-cl-unit="{{ unit }}">
+  <rect x="{{ x }}" y="{{ y }}" width="{{ w }}" height="74" rx="12"/>
+  <text x="{{ x + w / 2 }}" y="{{ y + 32 }}" text-anchor="middle" class="cl-t">{{ title }}</text>
+  <text x="{{ x + w / 2 }}" y="{{ y + 58 }}" text-anchor="middle" class="cl-s">({{ no }}){% if u %} &middot; {{ t('clFault') if u.fault else (t('clRunning') if u.run else (t('clHeld') if u.want and u.why else t('clStopped'))) }}{% endif %}</text></g>
+{% endmacro %}
+{% macro row(line, v, unit) %}
+{% set u = v.by[unit] %}
+<tr data-cl-row="{{ unit }}"><td><b>{{ t('clUnit_' ~ unit) }}</b>{% if u.auto %}<br><small class="hint">{{ t('clAuto') }}</small>{% endif %}</td>
+  <td>{% if u.fault %}<span class="badge blocked">{{ t('clFault') }} {{ u.fault }}</span>{% elif u.run %}<span class="badge approved">{{ t('clRunning') }}</span>{% elif u.want and u.why %}<span class="badge pending">{{ t('clHeld') }}</span>{% else %}<span class="badge neutral">{{ t('clStopped') }}</span>{% endif %}
+    {% if u.why %}<br><small class="cl-why">{{ t('clWhy_' ~ u.why, unit=t('clUnit_' ~ next_of.get(unit, unit))) }}</small>{% endif %}</td>
+  <td>{% if not u.auto and can_command %}<form method="post" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="want">
+    <input type="hidden" name="LINE_ID" value="{{ line.LINE_ID }}"><input type="hidden" name="UNIT" value="{{ unit }}">
+    {% if u.want %}<button class="action small danger" type="submit" name="ON" value="0" id="cl-off-{{ unit }}">{{ t('clStop') }}</button>
+    {% else %}<button class="action small primary" type="submit" name="ON" value="1" id="cl-on-{{ unit }}" data-confirm="{{ t('clStartConfirm', unit=t('clUnit_' ~ unit)) }}">{{ t('clStart') }}</button>{% endif %}</form>{% endif %}</td></tr>
+{% endmacro %}
+{% set next_of = {"MIXER": "EXTRUDER", "EXTRUDER": "DRYER"} %}
+{% block content %}
+<div id="tab-charline" class="auto-page" data-live-refresh="3">
+{{ page_head(t('clTitle'), url_for('automation.hardware')) }}
+<div class="card gap"><p class="desc-text">{{ t('clDesc') }}</p></div>
+{{ key_box(new_key) }}
+{% for item in lines %}{% set line = item.line %}{% set v = item.view %}{% set off = line.ACTIVE_FLG is sameas false %}
+<div class="card mt14" id="cl-live-{{ line.LINE_ID }}" data-live data-qj-title="{{ line.LINE_ID }}">
+  <div class="card-head"><div><p class="card-title">{{ line.LINE_NAME }}</p><small class="hint">{{ line.LINE_ID }}{% if line.LAST_SEEN %} &middot; {{ fmt_datetime(line.LAST_SEEN) }}{% endif %}</small></div>
+    {% if off %}<span class="badge neutral">{{ t('grNotUsed') }}</span>{% elif v.online %}<span class="badge approved" id="cl-online">{{ t('grOnline') }}</span>{% elif line.DEVICE_KEY_HASH %}<span class="badge manual">{{ t('grOffline') }}</span>{% else %}<span class="badge neutral">{{ t('grNoKey') }}</span>{% endif %}</div>
+  {% for key, text in v.alarms %}<p class="cl-alarm" data-cl-alarm="{{ key }}">&#9888; {{ text }}</p>{% endfor %}
+  <div class="co-stats cl-stats">
+    <div class="card co-stat"><small>{{ t('clHot') }}</small><b id="cl-hot">{{ v.hot ~ ' °C' if v.hot is not none else '-' }}</b><small class="hint">{{ t('clSetAt', c=setting(line, 'HOT_SET_C')|plain, band=setting(line, 'HOT_BAND_C')|plain) }}</small></div>
+    <div class="card co-stat{% if v.char is not none and v.char > setting(line, 'CHAR_MAX_C') %} cl-bad{% endif %}"><small>{{ t('clChar') }}</small><b id="cl-char">{{ v.char ~ ' °C' if v.char is not none else '-' }}</b><small class="hint">{{ t('clMaxAt', c=setting(line, 'CHAR_MAX_C')|plain) }}</small></div>
+    <div class="card co-stat{% if v.husk is not none and v.husk <= setting(line, 'HUSK_LOW_PCT') %} cl-bad{% endif %}"><small>{{ t('clHusk') }}</small><b id="cl-husk">{{ v.husk ~ ' %' if v.husk is not none else '-' }}</b><small class="hint">{{ t('clLowAt', pct=setting(line, 'HUSK_LOW_PCT')|plain) }}</small></div>
+  </div>
+  {% if not v.fresh %}<p class="cap-note" id="cl-nodata">{{ t('clNoData') }}</p>{% endif %}
+
+  <div class="mf-wrap"><svg class="mf-svg cl-svg" viewBox="0 0 1180 330" role="img" aria-label="{{ t('clTitle') }}">
+    <defs><marker id="cl-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="cl-ah"/></marker></defs>
+    <text x="10" y="24" class="cl-h">{{ t('clGroupHeat') }}</text>
+    <g class="cl-box cl-plain"><rect x="10" y="40" width="150" height="74" rx="12"/><text x="85" y="72" text-anchor="middle" class="cl-t">{{ t('clBin') }}</text><text x="85" y="98" text-anchor="middle" class="cl-s">(19){% if v.husk is not none %} &middot; {{ v.husk }} %{% endif %}</text></g>
+    {{ box(v, 200, 40, 170, 'FEED', t('clUnit_FEED'), 19) }}
+    {{ box(v, 410, 40, 220, 'BLOWER', t('clUnit_BLOWER'), 17) }}
+    <g class="cl-box cl-plain"><rect x="670" y="40" width="190" height="74" rx="12"/><text x="765" y="72" text-anchor="middle" class="cl-t">{{ t('clHeader') }}</text><text x="765" y="98" text-anchor="middle" class="cl-s">(18){% if v.hot is not none %} &middot; {{ v.hot }} °C{% endif %}</text></g>
+    {% for d in v.dampers %}
+    <g class="cl-box {{ 'cl-run' if d.open else 'cl-off' }}" data-cl-unit="{{ d.id }}"><rect x="910" y="{{ 8 + loop.index0 * 76 }}" width="260" height="64" rx="12"/>
+      <text x="1040" y="{{ 36 + loop.index0 * 76 }}" text-anchor="middle" class="cl-t">{{ t('clUnit_' ~ d.id) }}</text>
+      <text x="1040" y="{{ 60 + loop.index0 * 76 }}" text-anchor="middle" class="cl-s">{{ t('clOpen') if d.open else t('clClosed') }}</text></g>
+    <path class="cl-p" d="M860 77 L885 77 L885 {{ 40 + loop.index0 * 76 }} L908 {{ 40 + loop.index0 * 76 }}" marker-end="url(#cl-a)"/>
+    {% endfor %}
+    <path class="cl-p" d="M160 77 L198 77" marker-end="url(#cl-a)"/><path class="cl-p" d="M370 77 L408 77" marker-end="url(#cl-a)"/><path class="cl-p" d="M630 77 L668 77" marker-end="url(#cl-a)"/>
+    <text x="10" y="196" class="cl-h">{{ t('clGroupChar') }}</text>
+    <path class="cl-p cl-char" d="M520 114 L520 175 L105 175 L105 208" marker-end="url(#cl-a)"/><text x="530" y="150" class="cl-s">{{ t('clCharOut') }}</text>
+    {{ box(v, 10, 210, 190, 'SCREW', t('clUnit_SCREW'), 20) }}
+    {{ box(v, 240, 210, 170, 'SPRAY', t('clUnit_SPRAY'), 'T7' ~ (' ' ~ v.char ~ ' °C' if v.char is not none else '')) }}
+    {{ box(v, 450, 210, 170, 'MIXER', t('clUnit_MIXER'), 21) }}
+    {{ box(v, 660, 210, 170, 'EXTRUDER', t('clUnit_EXTRUDER'), 22) }}
+    {{ box(v, 870, 210, 150, 'DRYER', t('clUnit_DRYER'), 23) }}
+    <g class="cl-box cl-plain"><rect x="1060" y="210" width="110" height="74" rx="12"/><text x="1115" y="242" text-anchor="middle" class="cl-t">{{ t('clStore') }}</text><text x="1115" y="268" text-anchor="middle" class="cl-s">(24)</text></g>
+    <path class="cl-i" d="M200 247 L238 247"/><path class="cl-p" d="M105 284 L105 310 L535 310 L535 286" marker-end="url(#cl-a)"/>
+    <path class="cl-p" d="M620 247 L658 247" marker-end="url(#cl-a)"/><path class="cl-p" d="M830 247 L868 247" marker-end="url(#cl-a)"/><path class="cl-p" d="M1020 247 L1058 247" marker-end="url(#cl-a)"/>
+  </svg></div>
+  <p class="cl-legend"><span class="cl-dot cl-run"></span>{{ t('clRunning') }} <span class="cl-dot cl-held"></span>{{ t('clHeld') }} <span class="cl-dot cl-fault"></span>{{ t('clFault') }} <span class="cl-dot cl-off"></span>{{ t('clStopped') }}</p>
+
+  <div class="cl-groups">
+    <div><p class="card-title sub">{{ t('clGroupHeat') }}</p>
+      <div class="inv-table-wrap"><table class="tv-table cl-table"><tbody>
+        {{ row(line, v, 'BLOWER') }}{{ row(line, v, 'FEED') }}
+        {% for d in v.dampers %}<tr data-cl-row="{{ d.id }}"><td><b>{{ t('clUnit_' ~ d.id) }}</b></td>
+          <td><span class="badge {{ 'approved' if d.open else 'neutral' }}">{{ t('clOpen') if d.open else t('clClosed') }}</span>{% if d.want != d.open and v.fresh %}<br><small class="cl-why">{{ t('clMoving') }}</small>{% endif %}</td>
+          <td>{% if can_command %}<form method="post" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="want">
+            <input type="hidden" name="LINE_ID" value="{{ line.LINE_ID }}"><input type="hidden" name="UNIT" value="{{ d.id }}">
+            {% if d.want %}<button class="action small" type="submit" name="ON" value="0" id="cl-off-{{ d.id }}">{{ t('clClose') }}</button>
+            {% else %}<button class="action small primary" type="submit" name="ON" value="1" id="cl-on-{{ d.id }}">{{ t('clOpenBtn') }}</button>{% endif %}</form>{% endif %}</td></tr>{% endfor %}
+      </tbody></table></div>
+      <p class="cap-note tight">{{ t('clAutoOn') if line.AUTO_FLG is not sameas false else t('clAutoOff') }}</p></div>
+    <div><p class="card-title sub">{{ t('clGroupChar') }}</p>
+      <div class="inv-table-wrap"><table class="tv-table cl-table"><tbody>
+        {{ row(line, v, 'SCREW') }}{{ row(line, v, 'SPRAY') }}{{ row(line, v, 'DRYER') }}{{ row(line, v, 'EXTRUDER') }}{{ row(line, v, 'MIXER') }}
+      </tbody></table></div>
+      <p class="cap-note tight">{{ t('clOrderNote') }}</p></div>
+  </div>
+  {% if can_command %}<form method="post" class="mt6"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="LINE_ID" value="{{ line.LINE_ID }}">
+    <button class="action danger full" type="submit" name="action" value="stopall" id="cl-stopall" data-confirm="{{ t('clStopAllConfirm') }}">&#9209; {{ t('clStopAll') }}</button></form>{% endif %}
+</div>
+
+<div class="card mt14" id="cl-chart-{{ line.LINE_ID }}" data-live data-qj-title="{{ t('clChartTitle', hours=2) }}">
+  <p class="card-title sub">{{ t('clChartTitle', hours=2) }}</p>
+  {% set c = item.chart %}
+  {% if c %}<svg class="cl-chart" viewBox="0 0 {{ c.w }} {{ c.h }}" role="img" aria-label="{{ t('clChartTitle', hours=c.hours) }}">
+    {% for value, gy in c.grid %}<line class="cl-grid" x1="{{ c.x0 }}" x2="{{ c.x1 }}" y1="{{ gy }}" y2="{{ gy }}"/><text class="cl-axis" x="{{ c.x0 - 6 }}" y="{{ gy + 4 }}" text-anchor="end">{{ value }}</text>{% endfor %}
+    <line class="cl-setline" x1="{{ c.x0 }}" x2="{{ c.x1 }}" y1="{{ c.set_y }}" y2="{{ c.set_y }}"/>
+    <polyline class="cl-line-hot" points="{{ c.hot }}"/><polyline class="cl-line-char" points="{{ c.char }}"/>
+    <text class="cl-axis" x="{{ c.x0 }}" y="{{ c.h - 4 }}">-{{ c.hours }} h</text><text class="cl-axis" x="{{ c.x1 }}" y="{{ c.h - 4 }}" text-anchor="end">{{ t('clNow') }}</text>
+  </svg>
+  <p class="cl-legend"><span class="cl-dot cl-k-hot"></span>{{ t('clHot') }} <span class="cl-dot cl-k-char"></span>{{ t('clChar') }} <span class="cl-dot cl-k-set"></span>{{ t('clSetLine') }}</p>
+  {% else %}<p class="hint">{{ t('clChartNone') }}</p>{% endif %}
+</div>
+
+<details class="card mt14 setup-box" id="cl-setup-{{ line.LINE_ID }}">
+  <summary class="card-title sub">{{ t('clSettings') }}</summary>
+  {% if can_edit %}<form method="post" class="inv-form mt6" autocomplete="off"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="LINE_ID" value="{{ line.LINE_ID }}">
+    <div class="cl-set-grid">
+      <div><label class="field-label" for="cl-name">{{ t('clName') }}</label><input type="text" id="cl-name" name="LINE_NAME" value="{{ line.LINE_NAME }}" maxlength="60"></div>
+      {% for name, rng in settings.items() %}
+      <div><label class="field-label" for="cl-{{ name }}">{{ t('clSet_' ~ name) }}</label><input type="number" id="cl-{{ name }}" name="{{ name }}" value="{{ setting(line, name)|plain }}" min="{{ rng[0] }}" max="{{ rng[1] }}" step="0.5" required></div>
+      {% endfor %}
+      <div><label class="field-label" for="cl-alarm">{{ t('clAlarmTo') }}</label><input type="text" id="cl-alarm" name="ALARM_TO" value="{{ line.ALARM_TO or '' }}" maxlength="80" placeholder="C261001001"></div>
+      <div><label class="field-label" for="cl-auto">{{ t('clAutoLabel') }}</label><select id="cl-auto" name="AUTO_FLG"><option value="1"{% if line.AUTO_FLG is not sameas false %} selected{% endif %}>{{ t('clAutoYes') }}</option><option value="0"{% if line.AUTO_FLG is sameas false %} selected{% endif %}>{{ t('clAutoNo') }}</option></select></div>
+      <div><label class="field-label" for="cl-active">{{ t('colStatus') }}</label><select id="cl-active" name="ACTIVE_FLG"><option value="1"{% if not off %} selected{% endif %}>{{ t('grUse') }}</option><option value="0"{% if off %} selected{% endif %}>{{ t('grNotUsed') }}</option></select></div>
+    </div>
+    <p class="cap-note">{{ t('clAlarmNote') }}</p>
+    <button class="action primary" type="submit" name="action" value="settings" id="cl-save">{{ t('btnSave') }}</button>
+    <button class="action" type="submit" name="action" value="key" id="cl-key" formnovalidate {% if line.DEVICE_KEY_HASH %}data-confirm="{{ t('grKeyConfirm') }}"{% endif %}>&#128273; {{ t('grKeyNew') }}</button>
+  </form>{% endif %}
+  <ol class="hint cl-how"><li>{{ t('clHow1') }}</li><li>{{ t('clHow2') }}</li><li>{{ t('clHow3') }}</li></ol>
+</details>
+
+<div class="card mt14" id="cl-events-{{ line.LINE_ID }}" data-live data-qj-title="{{ t('mcEvents') }}">
+  <p class="card-title sub">{{ t('mcEvents') }}</p>
+  <div class="inv-table-wrap"><table class="tv-table"><tbody>
+    {% for e in item.events %}<tr{% if e.KIND == 'ALARM' %} class="cl-ev-alarm"{% endif %}><td>{{ fmt_datetime(e.LOG_DATE) }}</td><td>{{ t('clEv_' ~ e.KIND) }}</td><td>{{ e.NOTE }}</td><td><small class="hint">{{ e.OPE_USER }}</small></td></tr>
+    {% else %}<tr><td class="hint center">{{ t('clNoEvents') }}</td></tr>{% endfor %}
+  </tbody></table></div>
+</div>
+{% else %}<div class="card mt14"><p class="hint">{{ t('clNone') }}</p></div>{% endfor %}
+<div class="card mt14 cl-safety"><p class="card-title sub">&#9888; {{ t('clSafetyTitle') }}</p><p class="desc-text">{{ t('clSafety') }}</p></div>
+</div>
+{% endblock %}

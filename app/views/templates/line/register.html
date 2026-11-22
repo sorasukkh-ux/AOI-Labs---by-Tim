@@ -29,6 +29,10 @@
       <input id="reg-mobile" name="MOBILE_NO" value="{{ form.get('MOBILE_NO', '') }}" maxlength="20" required inputmode="tel" placeholder="0812345678" autocomplete="tel">
       <label for="reg-addr">ที่อยู่ (บ้านเลขที่ หมู่ ตำบล อำเภอ จังหวัด)</label>
       <textarea id="reg-addr" name="ADDRESS" rows="3" maxlength="200" required>{{ form.get('ADDRESS', '') }}</textarea>
+      <label for="reg-birth">วันเกิด (ไม่บังคับ)</label>
+      <input id="reg-birth" name="BIRTH_DATE" type="date" value="{{ form.get('BIRTH_DATE', '') }}" autocomplete="bday">
+      <label for="reg-gender">เพศ (ไม่บังคับ ใช้ทำคำทำนายวันเกิด)</label>
+      <select id="reg-gender" name="GENDER"><option value="">ไม่ระบุ</option><option value="male"{% if form.get('GENDER') == 'male' %} selected{% endif %}>ชาย</option><option value="female"{% if form.get('GENDER') == 'female' %} selected{% endif %}>หญิง</option></select>
       <fieldset class="reg-int"><legend>สนใจบริการ (เลือกได้หลายข้อ)</legend>
         <label><input type="checkbox" name="INT_ML" value="1"{% if form.get('INT_ML') %} checked{% endif %}> สีข้าว</label>
         <label><input type="checkbox" name="INT_SELL" value="1"{% if form.get('INT_SELL') %} checked{% endif %}> ขายข้าวเปลือกให้โรงสี</label>
@@ -36,6 +40,8 @@
       </fieldset>
       <label class="reg-consent"><input type="checkbox" name="CONSENT" value="1" required{% if form.get('CONSENT') %} checked{% endif %}>
         ยินยอมให้ AOI เก็บชื่อ เบอร์มือถือ และที่อยู่ เพื่อให้บริการ แจ้งสถานะคำสั่ง และส่งข่าวสาร/โปรโมชันทาง LINE (ยกเลิกได้โดยแจ้งพนักงาน)</label>
+      <label class="reg-consent"><input type="checkbox" name="MKT_CONSENT" value="1"{% if form.get('MKT_CONSENT') %} checked{% endif %}>
+        ยินยอมให้ใช้วันเกิดและเพศเพื่อส่งคำอวยพร คำทำนายวันเกิด (ส่งวันเกิดและเพศให้ fengshuiX ผู้ให้บริการดวงจีน โดยไม่ส่งชื่อหรือเบอร์โทร) และคูปองวันเกิดทาง LINE (ไม่บังคับ ยกเลิกได้ทุกเมื่อโดยแจ้งพนักงาน)</label>
       <button class="action primary reg-btn" type="submit" id="reg-submit">สมัครสมาชิก</button>
     </form>
   {% endif %}

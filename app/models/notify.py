@@ -374,8 +374,10 @@ def send_coupon(coupon, browser_origin=None):
     from . import campaign as cp
     from .tv import short_name
     from ..i18n import t_in
+    from . import birthday
     customer = Customer.find(coupon["CUST_CODE"]) or {}
-    camp = cp.get(coupon["CAMP_ID"]) or {}
+    is_bday = coupon["CAMP_ID"] == birthday.BDAY                 # update 133: the birthday coupon
+    camp = {"CAMP_NAME": t_in("th", "bdCardTitle"), "THEME": "bday"} if is_bday else (cp.get(coupon["CAMP_ID"]) or {})
     name = short_name(customer.get("CUST_NAME", "")) or coupon["CUST_CODE"]
     value = "{:,.2f}".format(coupon["VALUE"])
     expire = to_local(coupon["EXPIRE_DATE"]).strftime("%d/%m/%Y")
@@ -383,15 +385,16 @@ def send_coupon(coupon, browser_origin=None):
     seq = Counter.next("NT-" + coupon["COUPON_ID"])
     doc = {"NOTIFY_ID": "NT-%s-%02d" % (coupon["COUPON_ID"], seq), "ORD_ID": None, "ORD_TYPE": "CP",
            "CUST_CODE": coupon["CUST_CODE"], "NOTIFY_KIND": "coupon", "NOTIFY_DATETIME": None, "NOTIFY_FLG": UNSENT,
-           "NOTIFY_MESSAGE": t_in("th", "cpnLineText", name=name, value=value, expire=expire, camp=camp.get("CAMP_NAME", "")),
+           "NOTIFY_MESSAGE": birthday.message(customer, coupon["VALUE"], expire) if is_bday and customer else
+                             t_in("th", "cpnLineText", name=name, value=value, expire=expire, camp=camp.get("CAMP_NAME", "")),
            "ERROR": None, "REGIST_DATE": now, "LAST_UPDATE": now, "IMAGE_URL": None}
     qr = coupon_image_url(coupon["COUPON_ID"], browser_origin)
     if qr:
         doc["NOTIFY_FLEX"] = line_flex.coupon_card(camp.get("CAMP_NAME", ""), name, value, expire, coupon.get("NOTE"), qr,
                                                    coupon["COUPON_ID"], public_base(browser_origin),
-                                                   {"coupon": t_in("th", "cpnCardSub"), "for": t_in("th", "cpnCardFor"),
+                                                   {"coupon": t_in("th", "bdCardSub" if is_bday else "cpnCardSub"), "for": t_in("th", "cpnCardFor"),
                                                     "expire": t_in("th", "cpnCardExpire"), "how": t_in("th", "cpnCardHow")},
-                                                   cp.theme_of(camp))
+                                                   "bday" if is_bday else cp.theme_of(camp))
     else:
         doc["NOTIFY_FLEX"] = None
         doc["NOTIFY_FLG"], doc["ERROR"] = ERROR, "lnNoPublicUrl"
@@ -399,3 +402,15 @@ def send_coupon(coupon, browser_origin=None):
         return doc
     col(COL).insert_one(dict(doc))
     return send(doc)
+
+
+def send_text(cust_code, kind, text):
+    """Update 133: one plain text to a customer (e.g. the birthday greeting without a coupon), kept in AOITS_NOTIFY."""
+    now = now_utc()
+    seq = Counter.next("NT-%s-%s" % (kind.upper(), cust_code))
+    doc = {"NOTIFY_ID": "NT-%s-%s-%02d" % (kind.upper(), cust_code, seq), "ORD_ID": None, "ORD_TYPE": None,
+           "CUST_CODE": cust_code, "NOTIFY_KIND": kind, "NOTIFY_DATETIME": None, "NOTIFY_FLG": UNSENT,
+           "NOTIFY_MESSAGE": text, "ERROR": None, "REGIST_DATE": now, "LAST_UPDATE": now, "IMAGE_URL": None, "NOTIFY_FLEX": None}
+    col(COL).insert_one(dict(doc))
+    return send(doc)
+

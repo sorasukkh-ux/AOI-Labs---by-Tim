@@ -134,7 +134,8 @@ def order_list():
     from ..models import grade                               # update 126: rice quality results of the camera grader
     grades = grade.for_orders([o["ORD_ID"] for o in orders if o["ORD_TYPE"] == bs.BUY])
     return render_template("service/buysell_list.html", grades=grades, grade_free=grade.unlinked(operating_branch()),
-                           grade_wait=grade.waiting(operating_branch()), grade_differs=grade.differs,
+                           grade_wait=grade.waiting(operating_branch()), grade_differs=grade.differs, grade_average=grade.average,
+                           grade_devs=grade.choosable(operating_branch()),
                            orders=orders, q=q, view=view, view_arg=None if view == "active" else view,
                            views=list(VIEWS), counts=counts, status_counts=status_counts, closed_limit=CLOSED_LIMIT,
                            status=status, ord_type=ord_type, filters=VIEWS[view], status_keys=BS_STATUS_KEYS,
@@ -157,6 +158,17 @@ def grades():
                 if not can("AT_HARDWARE", "edit"):
                     abort(403)
                 new_key = (request.form.get("GRADER_ID"), grade.issue_key(branch, request.form.get("GRADER_ID"), current_user()["USER_ID"]))
+            elif action in ("add", "device"):                     # update 130: more graders in a branch
+                if not can("AT_HARDWARE", "edit"):
+                    abort(403)
+                if action == "add":
+                    dev = grade.add_device(branch, request.form.get("GRADER_NAME"), current_user()["USER_ID"])
+                    flash_ok("grAdded", id=dev["GRADER_ID"])
+                else:
+                    grade.update_device(branch, request.form.get("GRADER_ID"), request.form.get("GRADER_NAME"),
+                                        request.form.get("ACTIVE_FLG") == "1", current_user()["USER_ID"])
+                    flash_ok("grDeviceSaved")
+                return redirect(url_for("service_buysell.grades", _anchor="gr-devices"))
             elif action in ("attach", "detach", "target", "untarget"):
                 if not can(MENU, "edit"):
                     abort(403)
@@ -164,7 +176,7 @@ def grades():
                     dev, order = grade.set_target(branch, request.form.get("ORD_ID"), current_user()["USER_ID"], request.form.get("GRADER_ID"))
                     flash_ok("grTargetSet", grader=dev["GRADER_ID"], id=order.get("QR_ID") or order["ORD_ID"])
                 elif action == "untarget":
-                    grade.clear_target(branch, request.form.get("ORD_ID"))
+                    grade.clear_target(branch, request.form.get("ORD_ID"), request.form.get("GRADER_ID"))
                     flash_ok("grTargetOff")
                 elif action == "attach":
                     g = grade.attach(branch, request.form.get("GRADE_ID"), request.form.get("ORD_ID") or "", current_user()["USER_ID"])
@@ -196,6 +208,7 @@ def grades():
         o["cust_name"] = names[code]
     return render_template("service/grades.html", rows=rows, devices=grade.devices(branch), summary=grade.summary(branch),
                            linked=linked, waiting=grade.waiting(branch), differs=grade.differs,
+                           busy={d["GRADER_ID"]: d for d in grade.choosable(branch) if d["busy"]},
                            open_orders=list(orders.values())[:30], new_key=new_key, mat_name=mat_name, fmt_datetime=fmt_datetime,
                            can_edit=can(MENU, "edit"), can_key=can("AT_HARDWARE", "edit"), free_hours=grade.UNLINKED_HOURS)
 

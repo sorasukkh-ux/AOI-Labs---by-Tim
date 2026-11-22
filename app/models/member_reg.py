@@ -134,7 +134,8 @@ def register(user_id, leaf_id, form):
     leaf = get(leaf_id) if leaf_id else None
     source = leaf["LEAF_ID"] if leaf else None
     values = {"CUST_NAME": form.get("CUST_NAME"), "MOBILE_NO": form.get("MOBILE_NO"), "ADDRESS": form.get("ADDRESS"),
-              "MOBILE_CC": form.get("MOBILE_CC")}
+              "MOBILE_CC": form.get("MOBILE_CC"), "BIRTH_DATE": form.get("BIRTH_DATE"), "MKT_CONSENT": form.get("MKT_CONSENT"),
+              "GENDER": form.get("GENDER") or ""}
     checked = Customer._validate(values)                  # same rules as Customer Maintenance (required, mobile)
     digits = re.sub(r"\D", "", checked["MOBILE_NO"])
     found = line_link._by_phone(digits)
@@ -143,8 +144,14 @@ def register(user_id, leaf_id, form):
         customer = found[0]
         if customer.get("LINE_USER_ID") and customer["LINE_USER_ID"] != user_id:
             raise ValidationError("regErrPhoneTaken")
+        from . import birthday
+        bday = birthday.form_values(values, customer)            # update 133
+        if not bday.get("BIRTH_DATE") and customer.get("BIRTH_DATE"):
+            bday.update(BIRTH_DATE=customer["BIRTH_DATE"], BIRTH_MMDD=customer.get("BIRTH_MMDD"))
+        if not bday.get("GENDER") and customer.get("GENDER"):
+            bday["GENDER"] = customer["GENDER"]
         col(Customer.COL).update_one({"CUST_CODE": customer["CUST_CODE"]},
-                                     {"$set": {"INTERESTS": interests, "CONSENT_DATE": extra["CONSENT_DATE"]}})
+                                     {"$set": dict(bday, INTERESTS=interests, CONSENT_DATE=extra["CONSENT_DATE"])})
         line_link._link(customer, user_id, "LEAFLET")
         line_link._log("register", user_id, "linked by form", "reg_linked", customer["CUST_CODE"])
         return Customer.find(customer["CUST_CODE"]), "linked"

@@ -99,7 +99,9 @@ class Customer:
 
     @classmethod
     def create(cls, form, ope_user):
+        from . import birthday
         values = cls._validate(form)
+        values.update(birthday.form_values(form))              # update 133: birth date + marketing consent
         dup = cls.same_name(values["CUST_NAME"])
         if dup:
             raise ValidationError("custErrDupName", name=dup["CUST_NAME"], code=dup["CUST_CODE"])
@@ -118,7 +120,9 @@ class Customer:
         current = cls.find(code)
         if not current:
             raise ValidationError("custErrSelect")
+        from . import birthday
         values = cls._validate(form)
+        values.update(birthday.form_values(form, current))
         dup = cls.same_name(values["CUST_NAME"], current["CUST_CODE"])
         if dup:
             raise ValidationError("custErrDupName", name=dup["CUST_NAME"], code=dup["CUST_CODE"])

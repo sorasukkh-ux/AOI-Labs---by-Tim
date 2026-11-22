@@ -1866,3 +1866,38 @@ body.leaflet-page { background: #e5e7eb; font-family: "Prompt", "IBM Plex Sans T
 .gr-who { display: block; color: #6b7280; }
 .gr-older { margin: 2px 0 6px; width: 100%; } .gr-older summary { cursor: pointer; color: #6b7280; font-size: .9em; }
 .gr-steps { margin: 6px 0 8px 20px; padding: 0; color: #374151; } .gr-steps li { margin: 2px 0; }
+.gr-avg { color: #166534; width: 100%; }
+/* update 130: several graders in a branch */
+.gr-target-pick { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; width: 100%; margin: 6px 0 0; } .gr-target-pick select { flex: 1; min-width: 200px; width: auto; }
+.gr-dev-form, .gr-add { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 4px; } .gr-dev-form input[type=text], .gr-add input[type=text] { flex: 1; min-width: 160px; width: auto; }
+.gr-dev-form .action, .gr-add .action { width: auto; margin: 0; } .gr-add { margin-top: 10px; } .gr-off td { opacity: .6; }
+/* update 131: husk furnace + charcoal briquette line */
+.cl-svg { min-width: 760px; } .cl-box rect { stroke-width: 2; } .cl-t { font: 700 19px sans-serif; fill: #1f2937; } .cl-s { font: 400 15px sans-serif; fill: #4b5563; }
+.cl-h { font: 700 17px sans-serif; fill: #374151; }
+.cl-plain rect { fill: #f8fafc; stroke: #94a3b8; } .cl-off rect { fill: #f1f5f9; stroke: #94a3b8; } .cl-run rect { fill: #dcfce7; stroke: #16a34a; }
+.cl-held rect { fill: #fef3c7; stroke: #d97706; } .cl-fault rect { fill: #fee2e2; stroke: #dc2626; }
+.cl-p { fill: none; stroke: #64748b; stroke-width: 2.5; } .cl-char { stroke-dasharray: 7 6; } .cl-i { fill: none; stroke: #0ea5e9; stroke-width: 3; stroke-dasharray: 3 5; } .cl-ah { fill: #64748b; }
+.cl-legend { display: flex; gap: 6px 14px; flex-wrap: wrap; align-items: center; font-size: 13px; color: #4b5563; margin: 6px 0 0; }
+.cl-dot { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 4px; border: 1.5px solid #94a3b8; background: #f1f5f9; vertical-align: -1px; }
+.cl-dot.cl-run { background: #dcfce7; border-color: #16a34a; } .cl-dot.cl-held { background: #fef3c7; border-color: #d97706; } .cl-dot.cl-fault { background: #fee2e2; border-color: #dc2626; }
+.cl-dot.cl-k-hot { background: #dc2626; border-color: #dc2626; } .cl-dot.cl-k-char { background: #2563eb; border-color: #2563eb; } .cl-dot.cl-k-set { background: #fff; border: 1.5px dashed #6b7280; }
+.cl-groups { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; margin-top: 12px; } .cl-table td { vertical-align: middle; } .cl-table .action { width: auto; margin: 0; min-width: 84px; }
+.cl-why { color: #b45309; } .cl-alarm { background: #fee2e2; color: #991b1b; font-weight: 700; border-radius: 10px; padding: 8px 12px; margin: 8px 0 0; }
+.cl-stats { margin-top: 10px; } .cl-stats .co-stat.cl-bad b { color: #dc2626; }
+.cl-chart { width: 100%; height: auto; display: block; } .cl-grid { stroke: #e5e7eb; stroke-width: 1; } .cl-axis { font: 400 11px sans-serif; fill: #6b7280; }
+.cl-line-hot { fill: none; stroke: #dc2626; stroke-width: 2; } .cl-line-char { fill: none; stroke: #2563eb; stroke-width: 2; } .cl-setline { stroke: #6b7280; stroke-width: 1; stroke-dasharray: 5 4; }
+.cl-set-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; } .cl-how { margin: 10px 0 0 18px; padding: 0; } .cl-ev-alarm td { color: #991b1b; font-weight: 600; }
+.cl-safety { border-left: 4px solid #d97706; }
+@media (max-width: 720px) { .cl-groups { grid-template-columns: 1fr; } .cl-set-grid { grid-template-columns: 1fr 1fr; } }
+/* update 133: customer birthdays */
+.cp-entry-bd { background: linear-gradient(90deg, #db2777, #f59e0b); }
+.bd-zodiac { color: #9d174d; font-weight: 600; } .bd-consent { align-items: flex-start; margin-top: 22px; }
+tr.bd-today td { background: #fdf2f8; }
+/* update 134: fengshuiX Bazi API */
+.bz-raw { max-height: 320px; overflow: auto; font-size: 12px; background: #f8fafc; padding: 8px; border-radius: 8px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.bz-fortune { color: #6b21a8; } .bz-result { margin-top: 10px; }
+/* update 135: results in baht & AI exams */
+.ck-table input { width: 100%; min-width: 90px; margin-bottom: 4px; } .ck-total { font-size: 14px; } .ck-warn { color: #b45309; font-weight: 600; }
+.ck-save { display: flex; align-items: flex-end; } .ck-save .action { width: auto; }
+.ck-hand { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; margin-bottom: 8px; }
+.ck-price-form { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; } .ck-price-form select { flex: 1; min-width: 180px; width: auto; } .ck-price-form .action { width: auto; margin: 0; }

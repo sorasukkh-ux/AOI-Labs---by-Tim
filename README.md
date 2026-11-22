@@ -340,6 +340,72 @@ are kept in `AOITS_SYSLOG` (14 days), the checks in `AOITS_HEALTH` (7 days).
 customer's LINE when "Also send to the customer's LINE" is ticked (shown for customers linked to LINE); "Send to LINE
 only" sends without printing. The same public https address is needed as for the queue QR (update 47).
 
+## Results in baht & AI exams (update 135, DB 1.80)
+
+Two rules of "7 คาถากันตาย" (AI Expo Thailand). Page: AI > **วัดผลเป็นเงิน & ข้อสอบ AI** (`/automation/ai/check`, `models/evaluate.py`).
+
+- **Rule 3 - managers buy baht, not %:** five measures per branch (AOIMS_KPI) with the value before AOI (typed once; its date kept), the value now (paddy milled per day and net cash per month worked out by AOI from the last 30 days; staff paperwork hours, phone calls and money lost to mistakes typed) and baht per unit. The page shows the gain in THB per month and warns while "before" values are missing - write them down before go-live.
+- **Rule 7 - an exam before trusting a change:**
+  - *Grader:* staff grade a sample by hand and record it with the grader's result (AOITS_GRADECHECK). Live score per measure: average difference, bias, share within ±2 points; "ready for pricing" at 20+ samples with an average difference of 1.5 points or less for whole and broken. Samples marked as exam samples form the fixed set: `python3 scripts/aoi_grader.py --exam` on the Pi grades their kept raw scans (`grader_scans/`, 60 days, exam samples kept) with the current program and sends the score (`GET /api/v1/graders/<id>/golden`, `POST .../exam`), kept per program `VERSION` (AOITS_AIEXAM) - raise VERSION whenever the counting changes and compare.
+  - *Price signals:* back-test per SKU - every 7th day of the last 12 months, the signal from the prices known that day, scored on the price 30 days later, next to "price rose anyway"; kept with the SMA settings.
+
+## fengshuiX Bazi API: a personal reading in the birthday card (update 134, DB 1.79)
+
+Tim (AI Expo Thailand, อ.แบ๊ท's session): fengshuiX has a partner API at https://bazi.fengshuix.com (update 133 wrongly said there was none).
+
+- **`models/bazi_api.py`:** `POST {AOI_BAZI_ENDPOINT}` (default `/api/v2/daily`) with `{"birth": {"date", "time"?, "gender"}, "lang": "th"}`, headers `x-api-key` (`AOI_BAZI_API_KEY` in `.env`), `Idempotency-Key` (one per customer and year, so a retry is not charged twice), `X-End-User` = customer code (never a name or phone), optional `X-Max-Cost` (`AOI_BAZI_MAX_COST`).
+- **In the birthday card:** one call per customer per year, only with consent and a gender (the API needs it; birth time optional). The reading is added under the wishes (or where `{fortune}` is in LN_BIRTHDAY). API not set up, failing or unreadable: the card still goes with the zodiac line; the reason is kept and shown.
+- **The /daily answer is not documented in the partner guide**, so AOI takes the first readable text in `data` (summary, verdict, message ...). **Marketing > วันเกิดลูกค้า > ทดสอบ API** makes one call and shows the raw answer, to check it with the real key (a test key works only with fengshuiX's sample profiles).
+- Customer form and LINE member form: gender and birth time; the consent text now says the birth date and gender go to fengshuiX.
+
+## Customer birthdays: LINE wishes + coupon with the Chinese zodiac (update 133, DB 1.78)
+
+Tim's marketing idea after the fengshuiX Bazi workshop (fengshuiX has no API, so the zodiac is worked out inside AOI).
+
+- **Birth date and consent:** Customer Registration and the LINE member form take an optional birth date (a Buddhist year such as 2528 becomes 1985) and a separate tick "agrees to birthday wishes and coupons by LINE" (PDPA: nothing is sent without it; the consent time is kept). The customer page shows the zodiac year and element, e.g. 🐂 ปีฉลู ธาตุไม้.
+- **Zodiac (`models/birthday.py`):** animal and element of the birth year, the year starting at Lichun (about 4 February) as in Bazi. Not a full Bazi chart.
+- **Daily card:** every morning (`AOI_BDAY_HOUR`, default 8) the scheduler sends the customers whose birthday is today a LINE card: a pink birthday coupon (value and valid days per branch) or the greeting only when the value is 0. Only customers with consent and LINE, once a year, from the branch of their latest order; a branch with cards off sends nothing. 29 February birthdays get it on 28 February. The coupon is used at the counter like a campaign coupon and posted as an expense on close. The text is LN_BIRTHDAY on LINE Message Maintenance ({name} {zodiac} {age}).
+- **Marketing > วันเกิดลูกค้า** (`/finance/birthday`): settings (on/off, coupon value, valid days), counts, birthdays in the next 30 days with whether each card is ready, the cards sent with the coupon state, and "send today's cards now".
+
+## The real grader program: flatbed scanner, works offline (update 132, DB 1.77)
+
+Tim (after comparing with a commercial analyser): use a flatbed scanner instead of a camera, and keep results when the link is down.
+
+- **`scripts/aoi_grader.py`** - the program for the Raspberry Pi. It scans with any scanner Linux SANE supports (`scanimage`), counts the grains with OpenCV and sends the same message as the simulator. Set-up: `sudo apt install sane-utils python3-opencv python3-numpy`, then `python3 scripts/aoi_grader.py --init` (address, grader id, device key -> `grader.json`, not committed). Daily: `python3 scripts/aoi_grader.py`, Enter = scan. `--image file.png` grades a picture without a scanner.
+- **Measured:** grains, whole / broken % (broken = shorter than 3/4 of a whole grain, % by area), average length / width in mm from the scanner's dpi (no calibration), chalky and yellow % for milled rice (`--sample white`), moisture typed from the meter, and head rice % from a test-milled sample (`--paddy-g 100 --milled-g 66`). The photo sent to AOI is marked: green = whole, red = broken, yellow = touching grains (not measured). A bright background or too many touching grains is refused with the reason. **Not measured: the variety.** The chalky / yellow limits in `grader.json` are starting values to adjust against hand grading.
+- **Offline:** every result is written to `grader_queue/` first and sent from there, oldest first; with no connection it waits and goes out when the link is back or the program is restarted (`--flush` sends only). A result AOI refuses goes to `grader_queue/rejected/` so it does not block the others. AOI takes results up to 7 days old.
+- **Order:** when AOI can be reached, the order chosen with เลือกออเดอร์นี้เพื่อตรวจ is sent with the result. A result graded offline arrives not attached (attach by hand within 72 h). `grade.save_result` now uses the chosen order only for a sample graded after the order was chosen, so a late result never lands on the next customer's order.
+- OpenCV is needed on the Pi only, not by the AOI server (not in requirements.txt). No DB change.
+
+## Husk furnace and charcoal briquette line (update 131, DB 1.77)
+
+Tim: the husk-to-charcoal route of the general arrangement drawing (AOI-GA-001 rev D, items 17-24) must be controlled by AOI.
+
+- **Screen:** Hardware Control > **เตาแกลบและสายถ่านอัดแท่ง** (`/automation/charline`, `automation/charline.html`): live hot-air and char (T7) temperature and husk bin level, a flow picture of the two routes, Start / Stop per unit, dampers of silo 1 / 2, **หยุดทั้งสาย**, a 2-hour temperature chart, settings and the event list. It refreshes itself every 3 s. Starting / stopping needs the Hardware Control approve right (as for the machines); settings and the key need its edit right.
+- **One controller (a Raspberry Pi) per line, one device key** (`models/charline.py`, AOIMS_CHARLINE; F1-CHAR / F2-CHAR seeded). It reports `POST /api/v1/charlines/<LINE_ID>/state` and AOI answers what may run now.
+- **Rules (`charline.decide`):** the husk feed follows the hot-air temperature (set point ± band; needs the blower running and a damper open; stops at the hot-air limit) - the char screw runs only at or below the char limit (60 C), hotter: the water spray comes on first - mixer, extruder and dryer are interlocked (each runs only while the next one runs; start order dryer, extruder, mixer) - a unit in fault is off.
+- **Alarms** (hot char, hot air over the limit, a unit fault, husk bin low) go to the event list and to the LINE of the people in "แจ้งเตือนถึง" (customer codes linked to LINE).
+- **Safety:** AOI is not the safety system. The same rules must run inside the controller (AOI's answer carries the settings), and E-stop, overloads and the furnace over-temperature cut-out are hardwired (drawing note 4). The screen says so.
+- **Simulator:** `python3 scripts/charline_sim.py F2-CHAR <key>`; `bash start.sh sim` starts it too.
+
+## Several graders in a branch: choose the order and the grader (update 130, DB 1.76)
+
+Tim: today there is one grader, later there will be more - the staff select the order and the grader before grading.
+
+- **Grader registry on the grading page** (Hardware Control edit right): **เพิ่มเครื่องตรวจ** adds F2-GRADER2, F2-GRADER3 ... (`grade.add_device`, at most 20 per branch), rename, **เลิกใช้ / กลับมาใช้** (`grade.update_device`; a grader out of use: its key stops working and its chosen order is dropped). The table shows the order chosen on each grader.
+- **Order card:** with two or more graders in use (with a key) a dropdown of graders appears beside **เลือกออเดอร์นี้เพื่อตรวจ** - id, name, online / offline and "กำลังตรวจ #0004" when it holds another order; free graders first. With one grader nothing changes (no dropdown).
+- Each grader holds one order; several graders work on different orders at the same time, and the same order may be chosen on two graders. **ตรวจเสร็จ** ends the choice on that grader only. Choosing an order on a busy grader moves the grader to the new order.
+- `grade.waiting` now gives a list per order; `grade.choosable` = the graders that can be chosen. No DB change (the graders are rows of AOIMS_GRADER).
+
+## Choose the order, then grade as many times as needed (update 129, DB 1.76)
+
+Tim: before grading the order is selected first, grading maps to the selected order automatically, and one order can be graded several times.
+
+- The button on the buying order card is now **เลือกออเดอร์นี้เพื่อตรวจ**. The order stays the grader's chosen order: every result sent meanwhile is kept with it (update 128 ended the choice after one result). It ends with **ตรวจเสร็จ**, when another order is chosen, or by itself 15 minutes after the press.
+- An order with two or more results shows their average (head rice, broken, moisture: `grade.average`) under the newest result; the older results stay folded.
+- `GET /api/v1/graders/<id>/orders` also returns `target_since`; the simulator sends one sample per press and its periodic samples go to the chosen order while it is chosen.
+- No DB change.
+
 ## Grade a sample: the result finds its order (update 128, DB 1.76)
 
 Tim: it must be clear how the operator maps a grader result to the right order.

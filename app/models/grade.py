@@ -12,8 +12,9 @@ The grader photographs a thin layer of grains, counts whole and broken ones and 
                                                "target": the order the staff are waiting a sample for (update 128)
 
 Update 128 - how a result finds its order (Tim: the operator must be able to map them correctly):
-  1. the staff press "Grade a sample" on the buying order (set_target): the branch's grader waits for that order for
-     TARGET_MINUTES and the next result it sends is kept with it - nothing to pick on the grader;
+  1. the staff press "Grade a sample" on the buying order (set_target): the order is the grader's chosen order for
+     TARGET_MINUTES (or until "Done" / another order is chosen) and every result it sends meanwhile is kept with it
+     (update 129: an order can be graded several times) - nothing to pick on the grader;
   2. or the grader sends the order's id itself ("order");
   3. or the staff attach a free result by hand (attach) - a sample of another material than the order asks first.
 
@@ -157,21 +158,22 @@ def save_result(dev, body):
     order, by_staff = None, None
     if body.get("order"):
         order = _buy_order(dev["BRANCH_ID"], str(body["order"]))
-    elif target_of(dev):                                     # update 128: the order the staff are waiting a sample for
+    elif target_of(dev) and when >= dev["TARGET_DATE"] - timedelta(minutes=1):
+        # update 128: the order the staff chose. Update 132: only for a sample graded after it was chosen - a result
+        # that waited in an offline grader's queue is not put on whatever order is chosen when it finally arrives
         order = BuySellOrder.find(dev["TARGET_ORD"], dev["BRANCH_ID"])
         by_staff = dev.get("TARGET_USER") if order else None
     doc = dict(values, GRADE_ID="GR%06d" % Counter.next("GRADE"), BRANCH_ID=dev["BRANCH_ID"], GRADER_ID=dev["GRADER_ID"],
                SAMPLE_NO=clean_text(body.get("sample"), 30) or None, MAT_CODE=material or (order or {}).get("MAT_CODE"),
                GRAINS=None if grains is None else int(grains), NOTE=clean_text(body.get("note"), 200) or None,
                VARIETY=clean_text(body.get("variety"), 40) or None,          # update 127: the variety the grader recognised, as text
+               VERSION=clean_text(body.get("version"), 20) or None,          # update 135: the grader program version (exams)
                PHOTO_FLG=bool(photo), ORD_ID=order["ORD_ID"] if order else None, LINK_USER=(by_staff or "device:" + dev["GRADER_ID"]) if order else None,
                LINK_DATE=now_utc() if order else None, TEST_DATE=when, REGIST_DATE=now_utc())
     col(COL).insert_one(dict(doc))
     if photo:
         col(PHOTO).insert_one({"GRADE_ID": doc["GRADE_ID"], "MIME": mime, "DATA": base64.b64encode(photo).decode("ascii"), "REGIST_DATE": now_utc()})
-    seen(dev)
-    if order and dev.get("TARGET_ORD") == order["ORD_ID"]:   # the awaited sample has come
-        col(DEV).update_one({"GRADER_ID": dev["GRADER_ID"]}, {"$set": {"TARGET_ORD": None}})
+    seen(dev)             # update 129: the chosen order stays chosen - one order can be graded several times
     return doc
 
 
@@ -193,20 +195,86 @@ def set_target(branch_id, ord_id, ope_user, grader_id=None):
              and (not grader_id or d["GRADER_ID"] == grader_id.strip().upper())]
     if not found:
         raise ValidationError("grErrNoGrader")
-    dev = next((d for d in found if d["online"]), found[0])
+    # update 130: no grader named (a branch with one grader): one that is online and free first
+    dev = next((d for d in found if d["online"] and not target_of(d)), next((d for d in found if d["online"]), found[0]))
     col(DEV).update_one({"GRADER_ID": dev["GRADER_ID"]},
                         {"$set": {"TARGET_ORD": order["ORD_ID"], "TARGET_USER": ope_user, "TARGET_DATE": now_utc()}})
     return dev, order
 
 
-def clear_target(branch_id, ord_id):
-    col(DEV).update_many({"BRANCH_ID": branch_id, "TARGET_ORD": ord_id}, {"$set": {"TARGET_ORD": None}})
+def clear_target(branch_id, ord_id, grader_id=None):
+    """Done: the order is no longer chosen - on one grader, or on every grader that has it."""
+    q = {"BRANCH_ID": branch_id, "TARGET_ORD": ord_id}
+    if grader_id:
+        q["GRADER_ID"] = grader_id.strip().upper()
+    col(DEV).update_many(q, {"$set": {"TARGET_ORD": None}})
 
 
 def waiting(branch_id):
-    """{ORD_ID: {"grader", "until"}} of the orders a grader is waiting a sample for now."""
-    return {d["TARGET_ORD"]: {"grader": d["GRADER_ID"], "until": d["TARGET_DATE"] + timedelta(minutes=TARGET_MINUTES)}
-            for d in devices(branch_id) if target_of(d)}
+    """{ORD_ID: [{"grader", "name", "until"}]} - the orders chosen on a grader now (update 130: a branch can have
+    several graders, each with its own order)."""
+    out = {}
+    for d in devices(branch_id):
+        if target_of(d):
+            out.setdefault(d["TARGET_ORD"], []).append({"grader": d["GRADER_ID"], "name": d.get("GRADER_NAME"),
+                                                        "until": d["TARGET_DATE"] + timedelta(minutes=TARGET_MINUTES)})
+    return out
+
+
+# ---------- update 130: several graders in a branch ----------
+MAX_GRADERS = 20
+
+
+def choosable(branch_id):
+    """The graders an order can be chosen on (in use, with a key), each with "busy": the order chosen on it now."""
+    out = [d for d in devices(branch_id) if d.get("ACTIVE_FLG") is not False and d.get("DEVICE_KEY_HASH")]
+    for d in out:
+        d["busy"] = target_of(d)
+        order = BuySellOrder.find(d["busy"], branch_id) if d["busy"] else None
+        d["busy_qr"] = (order or {}).get("QR_ID") or d["busy"]
+    return out
+
+
+def add_device(branch_id, name, ope_user):
+    """One more grader of the branch: F2-GRADER2, F2-GRADER3 ... (the id is unique over all branches)."""
+    name = clean_text(name, 60)
+    if not name:
+        raise ValidationError("grErrName")
+    if col(DEV).count_documents({"BRANCH_ID": branch_id}) >= MAX_GRADERS:
+        raise ValidationError("grErrMany", n=MAX_GRADERS)
+    digits = "".join(ch for ch in branch_id if ch.isdigit()) or "1"
+    n = 1
+    while col(DEV).find_one({"GRADER_ID": "F%s-GRADER%s" % (digits, "" if n == 1 else n)}, NO_ID):
+        n += 1
+    doc = dict({"GRADER_ID": "F%s-GRADER%s" % (digits, "" if n == 1 else n), "BRANCH_ID": branch_id, "GRADER_NAME": name,
+                "DEVICE_KEY_HASH": None, "LAST_SEEN": None, "ACTIVE_FLG": True}, **audit_new(ope_user))
+    col(DEV).insert_one(dict(doc))
+    return doc
+
+
+def update_device(branch_id, grader_id, name, active, ope_user):
+    """Rename a grader / take it out of use (its key stops working and its chosen order is dropped) / back in use."""
+    dev = device(branch_id, grader_id)
+    if not dev:
+        raise ValidationError("grErrDevice")
+    values = dict({"ACTIVE_FLG": bool(active)}, **audit_update(ope_user))
+    if clean_text(name, 60):
+        values["GRADER_NAME"] = clean_text(name, 60)
+    if not active:
+        values["TARGET_ORD"] = None
+    col(DEV).update_one({"GRADER_ID": dev["GRADER_ID"]}, {"$set": values})
+    return device(branch_id, grader_id)
+
+
+def average(results):
+    """Update 129: the mean of an order's results (several samples of one delivery), None with fewer than two."""
+    if len(results) < 2:
+        return None
+    out = {"n": len(results)}
+    for field in ("HEAD_RICE_PCT", "BROKEN_PCT", "MOISTURE_PCT"):
+        have = [r[field] for r in results if r.get(field) is not None]
+        out[field] = round_half_up(sum(have) / len(have), 1) if have else None
+    return out
 
 
 def differs(g, order):

@@ -21,6 +21,15 @@ from .db import DatabaseUnavailable, init_db
 from .models.schema import ensure_indexes
 
 
+def _zodiac_text(birth):
+    """Update 133: '🐂 ปีฉลู ธาตุไม้' of a birth date in templates ('' when there is none or it is not a date)."""
+    from .models import birthday
+    try:
+        return birthday.zodiac_text(birth)
+    except (ValueError, TypeError, AttributeError):
+        return ""
+
+
 def create_app(overrides=None):
     app = Flask(__name__, template_folder="views/templates", static_folder="views/static")
     app.config.from_object(Config)
@@ -64,7 +73,8 @@ def create_app(overrides=None):
         mat_name=variety.mat_name, varieties=variety.VARIETIES, var_keys=variety.VAR_KEYS, default_priority=variety.DEFAULT_PRIORITY,
         phone_of=phone.of, phone_countries=phone.COUNTRIES, phone_default=phone.DEFAULT, variety_of=variety.variety_of,
         t=i18n.t, can=security.can, csrf_token=security.csrf_token, branch_label=branch_label,
-        fmt_datetime=timeutil.fmt_datetime, fmt_date=timeutil.fmt_date, fmt_time=timeutil.fmt_time)
+        fmt_datetime=timeutil.fmt_datetime, fmt_date=timeutil.fmt_date, fmt_time=timeutil.fmt_time,
+        zodiac_text=_zodiac_text)
 
     @app.context_processor
     def request_values():

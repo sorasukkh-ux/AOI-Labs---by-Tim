@@ -91,6 +91,37 @@ def prepare_graders(branch, force=False, user="sim_all"):
     return out
 
 
+def prepare_charlines(branch, force=False, user="sim_all"):
+    """Update 131: [(line record, key)] of the branch's husk furnace + charcoal lines (same key handling)."""
+    from app import create_app
+    from app.models import charline
+    from app.models.automation import _hash
+    app = create_app()
+    keys, out = load_keys(), []
+    with app.app_context():
+        for ln in charline.lines(branch):
+            if ln.get("ACTIVE_FLG") is False:
+                continue
+            lid, key = ln["LINE_ID"], keys.get(ln["LINE_ID"])
+            if not (key and ln.get("DEVICE_KEY_HASH") == _hash(key)):
+                if ln.get("DEVICE_KEY_HASH") and ln["online"] and not force:
+                    print("  %s: skipped - its key belongs to a controller that is online now (use --force to replace it)" % lid)
+                    continue
+                key = charline.issue_key(branch, lid, user)
+                keys[lid] = key
+            out.append((ln, key))
+        save_keys(keys)
+    return out
+
+
+def start_charlines(url, found, stop):
+    import threading
+    import charline_sim
+    for ln, key in found:
+        threading.Thread(target=charline_sim.run, args=(url, ln["LINE_ID"], key), kwargs={"stop": stop, "quiet": True}, daemon=True).start()
+        print("  -  %s  husk furnace + charcoal line (Hardware Control > Husk furnace and charcoal line)" % ln["LINE_ID"])
+
+
 def start_graders(url, graders, every):
     """One thread per grader sending a made-up sample every `every` seconds. Returns the stop event."""
     import threading
@@ -111,15 +142,17 @@ def main():
     parser.add_argument("--grader-every", type=float, default=60.0, help="seconds between the simulated grader's samples (0 = no grader)")
     args = parser.parse_args()
     graders = prepare_graders(args.branch, args.force) if args.grader_every > 0 and not args.export else []
+    charlines = prepare_charlines(args.branch, args.force) if not args.export else []
     machines = prepare(args.branch, args.force)
     selectors = [(m, k) for m, k in machines if m.get("MACHINE_TYPE") == "MILL_SELECTOR"]
     machines = [(m, k) for m, k in machines if m.get("MACHINE_TYPE") != "MILL_SELECTOR"]
     if not machines:
         print("No machine in use with remote control on %s (Hardware Control > Machine setup)." % args.branch)
-        if not graders:
+        if not graders and not charlines:
             return 1
         print("Simulating the rice quality grader only (a sample every %.0f s). Ctrl+C stops it." % args.grader_every)
         gstop = start_graders(args.url, graders, args.grader_every)
+        start_charlines(args.url, charlines, gstop)
         try:
             while True:
                 time.sleep(3600)
@@ -148,6 +181,7 @@ def main():
          "rated_amp": m.get("RATED_AMP")} for m, key in machines]
         + [{"machine": m["MACHINE_ID"], "key": key, "kind": "selector", "position": m.get("SELECT_TO")} for m, key in selectors], simulate=True)
     gstop = start_graders(args.url, graders, args.grader_every) if graders else None
+    start_charlines(args.url, charlines, stop)
     for g, _key in graders:
         print("  -  %s  rice quality grader (a made-up sample every %.0f s -> Buying/Selling Order List > Rice quality grading)" % (g["GRADER_ID"], args.grader_every))
     order = [m["MACHINE_ID"] for m, _k in machines]

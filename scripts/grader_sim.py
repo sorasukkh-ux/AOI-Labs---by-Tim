@@ -121,7 +121,7 @@ def send_one(base, grader, key, number, material=None, link=False, photo=True, r
 
 
 def run(base, grader, key, every=0.0, count=None, material=None, link=False, photo=True, stop=None):
-    n = 0
+    n, answered = 0, None
     while not (stop and stop.is_set()):
         n += 1
         send_one(base, grader, key, n, material, link, photo)
@@ -135,7 +135,9 @@ def run(base, grader, key, every=0.0, count=None, material=None, link=False, pho
                 stop.wait(pause)
             else:
                 time.sleep(pause)
-            if call(base, "/api/v1/graders/%s/orders" % grader, key).get("target"):
+            info = call(base, "/api/v1/graders/%s/orders" % grader, key)       # update 129: once per press, the order stays chosen
+            if info.get("target") and (info["target"], info.get("target_since")) != answered:
+                answered = (info["target"], info.get("target_since"))
                 break
     return n
 

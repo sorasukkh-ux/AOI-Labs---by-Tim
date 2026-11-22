@@ -6,6 +6,7 @@
 {{ page_head(t('tabHardware'), url_for('home.index', g='AT')) }}
 <div class="card gap"><p class="desc-text">{{ t('hwDesc') }}{% if can('AT_SCADA') %} <a href="{{ url_for('automation.scada') }}">{{ t('tabScada') }} &rarr;</a>{% endif %}</p></div>
 {{ key_box(new_key) }}
+<a class="card cp-entry mb14" id="cl-entry" href="{{ url_for('automation.charline_screen') }}">&#128293; <b>{{ t('clTitle') }}</b> <span class="hint">{{ t('clEntryNote') }}</span> &rarr;</a>
 
 <div class="mc-list" id="machine-list" data-live-url="{{ url_for('automation.hardware_live') }}"
      data-text='{{ {"status": {"R": t("mcRunning"), "I": t("mcIdle"), "F": t("mcFault"), "M": t("mcMaintenance"), "O": t("mcOffline")},
