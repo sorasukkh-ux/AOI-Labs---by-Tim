@@ -7,6 +7,7 @@ from flask import Blueprint, abort, current_app, jsonify, redirect, render_templ
 from ..i18n import t
 from ..models.base import ValidationError
 from ..models import buysell_order as bs
+from ..models import moisture
 from ..models.buysell_order import BuySellOrder
 from ..models.customer import Customer
 from ..models.inventory import Inventory
@@ -48,6 +49,8 @@ def _decorate(orders):
         order["lines_text"] = ", ".join("%s %s kg" % (l["name"], ("%.2f" % l["ORD_QTY"]).rstrip("0").rstrip("."))
                                         for l in order["lines"] if l["ORD_QTY"] > 0)
         order["can_maintain"] = BuySellOrder.can_maintain(order)
+        order["moist_lines"] = [l for l in order["lines"] if l.get("WEIGH_QTY") is not None and l.get("MOISTURE_PCT") is not None]   # update 137
+        order["moist_open"] = moisture.applies(order)
         registered = to_local(order["REGIST_DATE"])
         order["registered_text"] = fmt_time(registered) if registered.date() == today_local() else fmt_datetime(registered)
         milling = None
@@ -169,6 +172,14 @@ def grades():
                                         request.form.get("ACTIVE_FLG") == "1", current_user()["USER_ID"])
                     flash_ok("grDeviceSaved")
                 return redirect(url_for("service_buysell.grades", _anchor="gr-devices"))
+            elif action == "manual":                              # update 138: a miniLyzer (or other) report typed in
+                if not can(MENU, "edit"):
+                    abort(403)
+                g = grade.save_manual(branch, request.form, current_user()["USER_ID"])
+                flash_ok("grManualSaved", id=g["GRADE_ID"], order=g.get("ORD_ID") or "-")
+                if request.form.get("back") == "list":
+                    return _back_to_list()
+                return redirect(url_for("service_buysell.grades", _anchor="gr-results"))
             elif action in ("attach", "detach", "target", "untarget"):
                 if not can(MENU, "edit"):
                     abort(403)
@@ -320,6 +331,24 @@ def change_price(ord_id):
     return _back_to_list()
 
 
+@bp.route("/<ord_id>/moisture", methods=["POST"])
+@require(MENU, "edit")
+def set_moisture(ord_id):
+    """Update 137: the paddy moisture typed on an Open buying order; the paid kg are deducted to 15%."""
+    from ..models import moisture
+    order = BuySellOrder.find(ord_id, operating_branch())
+    if not order:
+        abort(404)
+    try:
+        pct = moisture.parse(request.form.get("MOISTURE"), required=True)
+        saved = moisture.apply(order, pct, "typed", current_user()["USER_ID"])
+    except ValidationError as error:
+        flash_error(error)
+    else:
+        flash_ok("mtSaved", id=order["QR_ID"], pct=pct, kg="%.2f" % saved["ORD_QTY"])
+    return _back_to_list()
+
+
 @bp.route("/<ord_id>/link", methods=["POST"])
 @require(MENU, "edit")
 def link(ord_id):
@@ -402,6 +431,9 @@ def check():
     ord_type = request.form.get("ORD_TYPE")
     try:
         items = BuySellOrder.parse_items(operating_branch(), ord_type, request.form, can(REGISTER, "approve"))
+        if ord_type == bs.BUY:                               # update 137: the paid kg after the paddy moisture
+            from ..models import moisture
+            items = moisture.deduct_items(items, moisture.parse(request.form.get("MOISTURE")))
     except ValidationError as error:
         return _json_error(error)
     lines = BuySellOrder.stock_check(operating_branch(), items) if ord_type == bs.SELL else items

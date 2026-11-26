@@ -6041,7 +6041,9 @@ class Update133(Base):
         with self.app.app_context():
             self.assertEqual([x["CUST_CODE"] for x in bd.due(today)], ["C261001001"])
             self.assertEqual(bd.run(today), [{"code": "C261001001", "status": "skipped"}])  # no branch has cards on
-        page = self.text("/finance/birthday?branch=factory2")
+        from unittest import mock
+        with mock.patch("app.models.birthday.today_local", return_value=today):     # the 30-day list is from today
+            page = self.text("/finance/birthday?branch=factory2")
         for part in ("Customer birthdays", "C261001001", "Year of the Ox", "Ready"):
             self.assertIn(part, page)
         self.assertIn("bd-entry", self.text("/finance/marketing?branch=factory2"))
@@ -6280,3 +6282,158 @@ class Update135(Update132):
         self.assertIn("Price signal exam", page)
         self.assertIn("SMA 7/30", page)
 
+
+class Update136(Base):
+    """Server: backup and restore of the AOI collections (scripts/backup.py)."""
+
+    def test_backup_restore(self):
+        import tempfile
+        from datetime import datetime, timezone
+        from scripts import backup
+        folder = tempfile.mkdtemp()
+        with self.app.app_context():
+            from app.db import get_db
+            db = get_db()
+            before = {n: db[n].count_documents({}) for n in backup.names(db)}
+            self.assertIn("AOIMS_CUSTOMER", before)
+            path, cols, docs = backup.backup(db, folder, now=datetime(2026, 12, 5, 23, 0))
+            self.assertTrue(path.endswith("db-20261205-230000.json.gz"))
+            self.assertEqual(cols, len(before))
+            self.assertEqual(docs, sum(before.values()))
+            db["AOIMS_CUSTOMER"].delete_many({})
+            db["AOITS_TEST"].insert_one({"X": 1, "WHEN": datetime(2026, 12, 6, tzinfo=timezone.utc)})
+            backup.restore(db, path)
+            self.assertEqual(db["AOIMS_CUSTOMER"].count_documents({}), before["AOIMS_CUSTOMER"])
+            c = db["AOIMS_CUSTOMER"].find_one({"CUST_CODE": "C261001001"})
+            self.assertIsInstance(c["REGIST_DATE"], datetime)                              # dates come back as dates
+            self.assertEqual(db["AOITS_TEST"].count_documents({}), 1)                       # not in the file: untouched
+            # old backups are pruned, the new one stays
+            old = os.path.join(folder, "db-20261101-230000.json.gz")
+            open(old, "w").close()
+            os.utime(old, (0, 0))
+            backup.backup(db, folder, now=datetime(2026, 12, 6, 23, 0))
+            self.assertFalse(os.path.exists(old))
+            self.assertTrue(os.path.exists(path))
+
+
+
+class Update137(Update126):
+    """Paddy moisture: weight deducted to 15% on a buying order - typed on the Buy table, on the list, or from a meter."""
+
+    def test_api_and_screens(self):
+        pass
+
+    def test_keep_with_buying_order(self):
+        pass
+
+    def found(self, ord_id):
+        with self.app.app_context():
+            from app.models.buysell_order import BuySellOrder
+            return BuySellOrder.find(ord_id)
+
+    def test_moisture(self):
+        from app.models import moisture
+        self.assertEqual(moisture.paid_kg(1000, 14.0), 1000)
+        self.assertEqual(moisture.paid_kg(1000, 15.0), 1000)
+        self.assertEqual(moisture.paid_kg(1000, 20.0), 941.176)
+        self.login("admin")
+        self.client.get("/lang/en")
+        self.assertIn('name="MOISTURE"', self.text("/service/milling/new"))
+        # typed on the Buy table
+        r = self.client.post("/service/buysell/new", data={"csrf_token": self.token("/service/milling/new"), "ORD_TYPE": "BY", "mode": "open",
+                                                             "CUST_CODE": "C261001001", "QTY_PADDY": "1000", "MOISTURE": "20"},
+                             headers={"Accept": "application/json"})
+        ord_id = r.get_json()["ids"][0]
+        o = self.found(ord_id)
+        line = o["ORD_ITEMS"][0]
+        self.assertEqual((line["WEIGH_QTY"], line["ORD_QTY"], o["MOISTURE_PCT"]), (1000, 941.176, 20.0))
+        self.assertAlmostEqual(o["ORD_AMOUNT"], round(941.176 * line["PRICING_UINT"], 2), places=2)
+        bad = self.client.post("/service/buysell/new", data={"csrf_token": self.token("/service/milling/new"), "ORD_TYPE": "BY", "mode": "open",
+                                                               "CUST_CODE": "C261001001", "QTY_PADDY": "10", "MOISTURE": "70"},
+                               headers={"Accept": "application/json"})
+        self.assertEqual(bad.status_code, 422)
+        page = self.text("/service/buysell/")
+        self.assertIn("data-moisture", page)
+        self.assertIn("weighed 1,000", page)
+        # typed on the list: always from the weighed kg (no double deduction); 14% = no deduction
+        self.post("/service/buysell/%s/moisture" % ord_id, {"MOISTURE": "17"}, "/service/buysell/")
+        self.assertEqual(self.found(ord_id)["ORD_ITEMS"][0]["ORD_QTY"], 976.471)
+        self.post("/service/buysell/%s/moisture" % ord_id, {"MOISTURE": "14"}, "/service/buysell/")
+        self.assertEqual(self.found(ord_id)["ORD_QTY"], 1000)
+        self.assertIn("weighed", self.text("/service/buysell/billing?ids=" + ord_id))
+        # a meter (a device on Rice Quality Grading) sends the reading for the chosen order
+        key = self.key()
+        self.post("/service/buysell/grades", {"action": "target", "ORD_ID": ord_id, "GRADER_ID": "F2-GRADER"}, "/service/buysell/grades")
+        self.assertEqual(self.post_result(key, {"moisture": 18.5}).status_code, 200)
+        self.assertEqual(self.found(ord_id)["ORD_ITEMS"][0]["ORD_QTY"], 958.824)
+        self.assertEqual(self.found(ord_id)["MOISTURE_SRC"], "device:F2-GRADER")
+        # once received (Prepared) nothing changes any more
+        with self.app.app_context():
+            from app.db import get_db
+            get_db()["AOITS_ORDBUYSELL"].update_one({"ORD_ID": ord_id}, {"$set": {"ORD_STATUS": "P"}})
+        self.assertEqual(self.post_result(key, {"moisture": 25}).status_code, 200)
+        self.assertEqual(self.found(ord_id)["ORD_ITEMS"][0]["ORD_QTY"], 958.824)
+        self.post("/service/buysell/%s/moisture" % ord_id, {"MOISTURE": "25"}, "/service/buysell/")
+        self.assertEqual(self.found(ord_id)["ORD_ITEMS"][0]["ORD_QTY"], 958.824)
+
+    def test_meter_script(self):
+        import tempfile
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
+        import aoi_moisture
+        self.assertEqual(aoi_moisture.reading("No.12  MOIST 17.8 %  RICE"), 17.8)
+        self.assertEqual(aoi_moisture.reading("18,2"), 18.2)
+        self.assertIsNone(aoi_moisture.reading("TEMP 0 C"))
+        cfg = dict(aoi_moisture.DEFAULTS, grader="F2-GRADER", key="k", queue=tempfile.mkdtemp())
+        sent = []
+        self.assertEqual(aoi_moisture.send(cfg, 17.8, post=lambda c, p, b: {"ok": False, "offline": True}, say=lambda *a: None), (0, 1))
+        self.assertEqual(aoi_moisture.send(cfg, 18.0, post=lambda c, p, b: sent.append(b) or {"ok": True, "id": "GR1"}, say=lambda *a: None), (2, 0))
+        self.assertEqual([b["moisture"] for b in sent], [17.8, 18.0])
+
+
+class Update138(Update126):
+    """Variety breakdown (miniLyzer report): device API, typed on the grading page, report / LINE rows."""
+
+    def test_api_and_screens(self):
+        pass
+
+    def test_keep_with_buying_order(self):
+        pass
+
+    def test_varieties(self):
+        from app.models import grade
+        rows = grade.parse_varieties("หอมสยาม1 153\nข้าวหอมมะลิ, 77\nพันธุ์อื่น 52 เมล็ด\nกข.79 14 4.4%")
+        self.assertEqual([r["NAME"] for r in rows], ["หอมสยาม1", "ข้าวหอมมะลิ", "พันธุ์อื่น", "กข.79"])
+        self.assertEqual(rows[0]["PCT"], 51.7)          # 153 / 296
+        self.assertEqual(rows[3]["PCT"], 4.4)
+        self.assertEqual(grade.parse_varieties("ปทุมธานี 1 13")[0]["NAME"], "ปทุมธานี 1")
+        for bad in ("หอมสยาม1", "a, 60, 70\nb, 40, 50"):
+            with self.assertRaises(Exception):
+                grade.parse_varieties(bad)
+        key = self.key()
+        body = {"varieties": [{"name": "หอมสยาม1", "grains": 153}, {"name": "ข้าวหอมมะลิ", "grains": 77},
+                              {"name": "พันธุ์อื่น", "grains": 52}, {"name": "กข.79", "grains": 14},
+                              {"name": "ปทุมธานี 1", "grains": 13}, {"name": "พิษณุโลก80", "grains": 9}]}
+        r = self.post_result(key, body)
+        self.assertEqual(r.status_code, 200)
+        g = [x for x in self.db("AOITS_GRADE") if x["GRADE_ID"] == r.get_json()["id"]][0]
+        self.assertEqual((g["VARIETY"], g["PURITY_PCT"], g["GRAINS"]), ("หอมสยาม1", 48.1, 318))
+        self.assertEqual(self.post_result(key, {"varieties": [{"name": "x", "grains": "a"}]}).status_code, 422)
+        # typed on the grading page, kept with an order
+        self.login("admin")
+        self.client.get("/lang/en")
+        ord_id = self.buy_order()
+        page = self.text("/service/buysell/grades")
+        self.assertIn('id="gr-manual"', page)
+        self.post("/service/buysell/grades", {"action": "manual", "ORD_ID": ord_id, "SOURCE": "miniLyzer", "SAMPLE_NO": "135137_0d4e9",
+                                              "VARIETIES": "หอมสยาม1 153\nข้าวหอมมะลิ 77\nพันธุ์อื่น 52\nกข.79 14\nปทุมธานี 1 13\nพิษณุโลก80 9"},
+                  "/service/buysell/grades")
+        m = [x for x in self.db("AOITS_GRADE") if x.get("GRADER_ID") == "MANUAL"]
+        self.assertEqual(len(m), 1)
+        self.assertEqual((m[0]["ORD_ID"], m[0]["PURITY_PCT"], m[0]["SOURCE"], len(m[0]["VARIETIES"])), (ord_id, 48.1, "miniLyzer", 6))
+        self.assertIn("data-grade-varieties", self.text("/service/buysell/grades"))
+        self.assertIn("ข้าวหอมมะลิ 24.2%", self.text("/service/buysell/"))
+        report = self.text("/service/buysell/grades/%s/report" % m[0]["GRADE_ID"])
+        self.assertIn("พิษณุโลก80 (9)", report)
+        self.assertIn("2.8%", report)
+        self.post("/service/buysell/grades", {"action": "manual", "VARIETIES": ""}, "/service/buysell/grades")
+        self.assertEqual(len([x for x in self.db("AOITS_GRADE") if x.get("GRADER_ID") == "MANUAL"]), 1)

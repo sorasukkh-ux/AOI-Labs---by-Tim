@@ -412,6 +412,11 @@ class BuySellOrder:
         if not customer:
             raise ValidationError("alertCustInfoRequired")
         items = cls.parse_items(branch_id, ord_type, form, can_override)
+        moist = None
+        if ord_type == BUY:                                  # update 137: paddy moisture, weight deducted to 15%
+            from . import moisture
+            moist = moisture.parse(form.get("MOISTURE"))
+            items = moisture.deduct_items(items, moist)
         link = cls.resolve_milling(branch_id, form.get("LINK_ML"), customer["CUST_CODE"]) if ord_type == SELL else None
         inbound = None
         if close and ord_type == BUY:                        # checked before anything is saved
@@ -423,6 +428,9 @@ class BuySellOrder:
                   "PRICING_UINT": item["price"], "ORD_AMOUNT": item["amount"], "UNIT_PRICE": item["price"],
                   "OWN_KG": 0, "DISC_PCT": 0, "REF_INV_LOC": None, "LIST_PRICE": item["list_price"],
                   "PRICE_OVR_FLG": item["override"]} for n, item in enumerate(items)]
+        for line, item in zip(lines, items):
+            if "weighed" in item:
+                line.update({"WEIGH_QTY": item["weighed"], "MOISTURE_PCT": item["moisture"]})
         ord_id, qr_id = cls._new_ids(ord_type)
         order = {"ORD_ID": ord_id, "BRANCH_ID": branch_id, "ORD_TYPE": ord_type, "CUST_CODE": customer["CUST_CODE"],
                  "ORD_STATUS": OPEN, "QR_ID": qr_id, "UOM_CODE": "KG", "REMARK": None,
@@ -430,6 +438,8 @@ class BuySellOrder:
                  "LINK_ML_ID": link["ORD_ID"] if link else None}
         order.update(cls._header(lines))
         order.update(cls.override_fields(items, form, ope_user))       # update 78: a price typed by hand
+        if moist is not None and any("weighed" in i for i in items):
+            order.update({"MOISTURE_PCT": moist, "MOISTURE_SRC": "typed", "MOISTURE_USER": ope_user, "MOISTURE_DATE": now_utc()})
         order.update(audit_new(ope_user))
         col(cls.COL).insert_one(dict(order))
         cls._log(ord_id)

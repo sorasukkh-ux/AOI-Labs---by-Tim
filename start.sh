@@ -20,8 +20,22 @@ if [ -z "$PY" ]; then
   sudo apt-get update -qq && sudo apt-get install -y -qq python3-pip >/dev/null
   PY=$(command -v python3)
 fi
+# update 136: on a plain Ubuntu 24.04 server the system Python refuses pip ("externally managed"): AOI then gets its
+# own virtual environment in .venv (made once, used from then on - also by the system service)
+if [ -x .venv/bin/python ]; then
+  PY="$(pwd)/.venv/bin/python"
+fi
 echo "== Installing Python packages ($PY)"
-"$PY" -m pip install --quiet --disable-pip-version-check -r requirements.txt
+if ! "$PY" -m pip install --quiet --disable-pip-version-check -r requirements.txt 2>/tmp/aoi-pip.log; then
+  if grep -q "externally-managed" /tmp/aoi-pip.log && [ ! -x .venv/bin/python ]; then
+    echo "== This Python is managed by the system: making AOI's own environment in .venv"
+    python3 -m venv .venv || { echo "Install it first:  sudo apt install -y python3-venv"; exit 1; }
+    PY="$(pwd)/.venv/bin/python"
+    "$PY" -m pip install --quiet --disable-pip-version-check -r requirements.txt
+  else
+    cat /tmp/aoi-pip.log; exit 1
+  fi
+fi
 
 if [ ! -f .env ]; then
   cp .env.example .env
@@ -43,6 +57,75 @@ for NAME in AOI_LINE_CHANNEL_TOKEN AOI_LINE_CHANNEL_SECRET AOI_LINE_OA_ID; do
     echo "== Added an empty ${NAME}= line to .env (fill it in to use LINE)"
   fi
 done
+
+# update 136: run AOI as a system service on the server (starts at boot, restarts after a crash) + nightly backup
+if [ "${1:-}" = "install-service" ]; then
+  if ! command -v systemctl >/dev/null 2>&1; then echo "systemd is not available here (Codespaces): nothing to install"; exit 1; fi
+  # update 139: MongoDB as a system package (mongod) or in Docker (any Ubuntu, e.g. 26.04 before MongoDB supports it)
+  MONGO_UNIT=mongod.service
+  if ! command -v mongod >/dev/null 2>&1 && command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+    MONGO_UNIT=docker.service
+    sudo systemctl enable --now docker >/dev/null 2>&1 || true
+    if ! docker start aoi-mongo >/dev/null 2>&1; then
+      echo "== Starting MongoDB 7 in Docker (container aoi-mongo, data in the volume aoi-mongo-data)"
+      docker run -d --name aoi-mongo --restart unless-stopped --ulimit nofile=64000:64000 -p 127.0.0.1:27017:27017 \
+        -v aoi-mongo-data:/data/db mongo:7 >/dev/null
+    fi
+    docker update --restart unless-stopped aoi-mongo >/dev/null      # comes back by itself after a power cut
+    for i in $(seq 1 30); do "$PY" -m scripts.check_db >/dev/null 2>&1 && break; sleep 1; done
+  fi
+  if ! mongo_ready_quick=$("$PY" -m scripts.check_db 2>&1); then echo "$mongo_ready_quick"
+    echo "Start MongoDB first: sudo systemctl enable --now mongod  - or install Docker (sudo apt install -y docker.io; sudo usermod -aG docker \$USER; log out and in) and run this again"; exit 1; fi
+  "$PY" -m scripts.seed
+  DIR=$(pwd); WHO=$(id -un)
+  sudo tee /etc/systemd/system/aoi.service >/dev/null <<UNIT
+[Unit]
+Description=AOI Labs server
+After=network-online.target ${MONGO_UNIT}
+Wants=network-online.target ${MONGO_UNIT}
+
+[Service]
+User=${WHO}
+WorkingDirectory=${DIR}
+Environment=PYTHONUNBUFFERED=1
+ExecStartPre=/bin/sh -c 'for i in \$\$(seq 1 60); do ${PY} -m scripts.check_db >/dev/null 2>&1 && exit 0; sleep 1; done; exit 0'
+ExecStart=${PY} run.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+  sudo tee /etc/systemd/system/aoi-backup.service >/dev/null <<UNIT
+[Unit]
+Description=AOI Labs database backup
+After=${MONGO_UNIT}
+
+[Service]
+Type=oneshot
+User=${WHO}
+WorkingDirectory=${DIR}
+ExecStart=${PY} -m scripts.backup
+UNIT
+  sudo tee /etc/systemd/system/aoi-backup.timer >/dev/null <<UNIT
+[Unit]
+Description=AOI Labs nightly backup at 23:00
+
+[Timer]
+OnCalendar=*-*-* 23:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+UNIT
+  sudo systemctl daemon-reload
+  sudo systemctl enable --now aoi.service aoi-backup.timer
+  sudo systemctl restart aoi.service
+  echo "== AOI now runs as the service 'aoi' (starts at boot, restarts after a crash); backup every night at 23:00 in backups/"
+  echo "   status: systemctl status aoi    log: journalctl -u aoi -f    stop: sudo systemctl stop aoi"
+  echo "   after installing an update zip run  bash start.sh install-service  again (packages, new data, restart) - not bash start.sh"
+  exit 0
+fi
 
 if [ "${1:-}" = "demo" ]; then
   echo "== Demo mode: no database, nothing is saved"
@@ -66,12 +149,12 @@ start_mongo() {
       fi
     fi
     if ! docker start aoi-mongo >/dev/null 2>&1; then
-      if ! docker run -d --name aoi-mongo --ulimit nofile=64000:64000 -p 127.0.0.1:27017:27017 \
+      if ! docker run -d --name aoi-mongo --restart unless-stopped --ulimit nofile=64000:64000 -p 127.0.0.1:27017:27017 \
              -v aoi-mongo-data:/data/db mongo:7 >/dev/null 2>&1; then
         # this Docker does not allow the higher limit: run with its default instead
         docker rm -f aoi-mongo >/dev/null 2>&1 || true
         touch .mongo-no-ulimit
-        docker run -d --name aoi-mongo -p 127.0.0.1:27017:27017 -v aoi-mongo-data:/data/db mongo:7 >/dev/null
+        docker run -d --name aoi-mongo --restart unless-stopped -p 127.0.0.1:27017:27017 -v aoi-mongo-data:/data/db mongo:7 >/dev/null
       fi
     fi
   else

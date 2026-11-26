@@ -40,8 +40,10 @@
       });
     }
     function render() {
-      var amount = 0, qty = 0;
+      var amount = 0, qty = 0, m = form.querySelector(".bs-moist"), pct = m ? Number(m.value) || 0 : 0;
       rows().forEach(function (r) {
+        // update 137: paddy weight deducted to 15% moisture (the server works it out the same way)
+        if (pct > 15 && pct <= 40 && r.tr.hasAttribute("data-paddy")) r.qty = Math.round(r.qty * (100 - pct) / 85 * 1000) / 1000;
         var sum = r.rate * r.qty;
         r.tr.querySelector(".summary-cell").textContent = fmt(sum);
         amount += sum; qty += r.qty;

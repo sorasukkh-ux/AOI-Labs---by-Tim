@@ -340,6 +340,44 @@ are kept in `AOITS_SYSLOG` (14 days), the checks in `AOITS_HEALTH` (7 days).
 customer's LINE when "Also send to the customer's LINE" is ticked (shown for customers linked to LINE); "Send to LINE
 only" sends without printing. The same public https address is needed as for the queue QR (update 47).
 
+## MongoDB in Docker on the server (update 139, DB 1.82)
+
+Tim keeps Ubuntu 26.04 on the mini PC; MongoDB's own packages are made for 24.04, so MongoDB runs in Docker (the official mongo:7 image, the same as in Codespaces):
+
+    sudo apt install -y docker.io python3-venv git
+    sudo usermod -aG docker $USER        (then log out and log in once)
+    bash start.sh install-service
+
+`install-service` now starts the container `aoi-mongo` when there is no `mongod`, with `--restart unless-stopped` (it comes back after a power cut; data in the Docker volume `aoi-mongo-data`), makes the `aoi` service wait for Docker and for the database, and the nightly backup works the same. Check: `docker ps` shows aoi-mongo, `systemctl status aoi` is active.
+
+## Variety breakdown and miniLyzer results (update 138, DB 1.82)
+
+Tim's miniLyzer report shows every variety in the sample (e.g. หอมสยาม1 48.1%, ข้าวหอมมะลิ 24.2%, other 16.4% ...). AOI now keeps the whole breakdown with the grading result.
+
+- **Rice Quality Grading > Result from another analyser (miniLyzer)**: choose the buying order (or none, attach later), the scan code, and type one variety per line: `หอมสยาม1 153` (name, grains; a % after it is optional; CSV lines `name,grains,%` can be pasted). AOI works out the % from the grains; the largest share is the purity. Moisture / head rice / broken can be added (moisture deducts the paddy weight as in update 137).
+- The breakdown shows on the grading list, on the order card, on the printed result slip and the LINE card (every variety with its grains and %).
+- Device API: `"varieties": [{"name": "หอมสยาม1", "grains": 153, "pct": 48.1}, ...]` on `POST /api/v1/graders/<id>/results` (a future CSV import or a miniLyzer link can send this).
+
+## Paddy moisture on buying orders (update 137, DB 1.81)
+
+Tim: buying paddy deducts the weight to 15% moisture: **paid kg = weighed kg x (100 - moisture) / 85** (no change at 15% or below).
+
+- **Customer Service > Buy**: field *Paddy moisture (%)*. The sub-totals and the total follow on the screen; Open and Complete both save it.
+- **Update Buy/Sell Status**: an Open buying order with paddy has a *Save moisture* box. The order shows *weighed 1,000 kg -> paid 941.18 kg*; the bill shows it too. A new reading always starts again from the weighed kg (the newest wins). After the goods are received (Prepared) it no longer changes.
+- **Moisture meter with a data output** (USB / RS-232 / Bluetooth): add it as a device on *Rice Quality Grading* (e.g. "Moisture meter"), New key, then on the Pi / mini PC it is plugged into:
+  `pip install pyserial` and `python3 scripts/aoi_moisture.py --init`, `--list-ports`, then `python3 scripts/aoi_moisture.py` (listens). `--value 17.8` sends one reading by hand as a test. Choose the order and the meter with *Grade a sample* like the grader; the next reading goes to that order. Readings wait in `moisture_queue/` while AOI is offline. `moisture.json` holds the key (gitignored).
+- The meter model is not chosen yet: the script takes the number with a decimal point (5-40) from each line the meter prints. Set `port`, `baud` and `pattern` in moisture.json from the meter's manual.
+- Stock is received in paid (dry, 15%) kg: the inbound quantity is prefilled with it.
+
+## Server: own Python environment, system service, nightly backup (update 136, DB 1.80)
+
+For the mini PC server (Ubuntu 24.04) before go-live on 6 Dec 2026.
+
+- **`.venv`:** Ubuntu 24.04's Python refuses `pip install` ("externally managed"). start.sh now makes AOI's own environment in `.venv` once (needs `sudo apt install python3-venv`) and uses it from then on.
+- **`bash start.sh install-service`** (once, then after every update zip instead of `bash start.sh`): installs packages, seeds, and installs the systemd service `aoi` (starts at boot, restarts 5 s after a crash, after MongoDB) and the timer `aoi-backup` (every night 23:00). `systemctl status aoi`, `journalctl -u aoi -f`.
+- **`scripts/backup.py`** (Python only): `python3 -m scripts.backup` writes `backups/db-YYYYMMDD-HHMMSS.json.gz` with every AOI collection (kept 14 days); `--list`; `--restore FILE --yes` (type RESTORE; the data before the restore is backed up first). Copy the newest file to a USB drive weekly.
+- For the LAN: `AOI_HOST=0.0.0.0` in `.env`. No DB change.
+
 ## Results in baht & AI exams (update 135, DB 1.80)
 
 Two rules of "7 คาถากันตาย" (AI Expo Thailand). Page: AI > **วัดผลเป็นเงิน & ข้อสอบ AI** (`/automation/ai/check`, `models/evaluate.py`).

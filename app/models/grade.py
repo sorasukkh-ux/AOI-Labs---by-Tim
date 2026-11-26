@@ -7,6 +7,8 @@ The grader photographs a thin layer of grains, counts whole and broken ones and 
           "moisture": 14.2, "grains": 512, "whole": 82.4, "broken": 17.6, "head_rice": 48.9,
           "chalky": 3.1, "yellow": 0.8, "avg_len": 7.2, "avg_wid": 2.1, "note": "...",
           "variety": "ขาวดอกมะลิ 105" (optional, the variety recognised), "purity": 96.5 (optional, % of grains of it),
+          "varieties": [{"name": "หอมสยาม1", "grains": 153, "pct": 48.1}, ...] (optional, update 138: the breakdown;
+                       pct worked out from grains when missing; the largest gives variety / purity when not sent),
           "photo": "<base64 JPEG or PNG, at most 400 KB>" (optional), "time": ISO 8601 (optional)}
     GET  /api/v1/graders/<GRADER_ID>/orders    the open buying orders of the branch (to pick one on the Pi) and
                                                "target": the order the staff are waiting a sample for (update 128)
@@ -45,6 +47,72 @@ NUMBERS = {"moisture": ("MOISTURE_PCT", 0, 50, 1), "whole": ("WHOLE_PCT", 0, 100
            "head_rice": ("HEAD_RICE_PCT", 0, 100, 1), "chalky": ("CHALKY_PCT", 0, 100, 1), "yellow": ("YELLOW_PCT", 0, 100, 1),
            "avg_len": ("AVG_LEN_MM", 0, 20, 2), "avg_wid": ("AVG_WID_MM", 0, 10, 2),
            "purity": ("PURITY_PCT", 0, 100, 1)}      # update 127: share of grains of the variety found (needs a trained model on the grader)
+
+
+# ---------- update 138: variety breakdown (miniLyzer report: every variety found, its grains and %) ----------
+MAX_VARIETIES = 12
+MANUAL_ID = "MANUAL"
+
+
+def parse_varieties(value):
+    """[{NAME, GRAINS, PCT}] sorted by share, from the device API (a list of {"name", "grains", "pct"}) or from text
+    typed / pasted on the grading page: one variety per line, "name grains" or "name, grains, pct" (CSV lines work).
+    The % is worked out from the grains when it is missing. [] when there is nothing."""
+    import re
+    rows = []
+    if isinstance(value, list):
+        items = [(str(v.get("name") or "").strip(), v.get("grains"), v.get("pct")) for v in value if isinstance(v, dict)]
+    elif isinstance(value, str):
+        items = []
+        for line in value.replace("\r", "").split("\n"):
+            line = line.strip().strip(",")
+            if not line:
+                continue
+            m = re.match(r"^(.*?)[\s,;\t]+(\d+)(?:\s*(?:\u0e40\u0e21\u0e25\u0e47\u0e14|grains?))?(?:[\s,;\t]+(\d+(?:\.\d+)?)\s*%?)?\s*$", line)
+            if not m or not m.group(1).strip(" ,;"):
+                raise ValidationError("grErrVarLine", line=line[:40])
+            name, grains, pct = m.group(1).strip(" ,;\t"), m.group(2), m.group(3)
+            if pct and "%" not in line and "," not in line and ";" not in line and "\t" not in line and "." not in pct:
+                name, grains, pct = "%s %s" % (name, grains), pct, None     # "ปทุมธานี 1 13": the 1 is in the name
+            items.append((name, grains, pct))
+    elif value in (None, ""):
+        return []
+    else:
+        raise ValidationError("grErrBody")
+    for name, grains, pct in items:
+        try:
+            grains = None if grains in (None, "") else int(float(grains))
+            pct = to_number(pct)
+        except (ValueError, TypeError):
+            raise ValidationError("grErrNumber", field="varieties")
+        if not name or (grains is None and pct is None) or (grains is not None and not 0 <= grains <= 100000) \
+                or (pct is not None and not 0 <= pct <= 100):
+            raise ValidationError("grErrNumber", field="varieties")
+        rows.append({"NAME": clean_text(name, 40), "GRAINS": grains, "PCT": pct})
+    if len(rows) > MAX_VARIETIES:
+        raise ValidationError("grErrVarMany", n=MAX_VARIETIES)
+    total = sum(r["GRAINS"] or 0 for r in rows)
+    for r in rows:
+        if r["PCT"] is None:
+            if not total:
+                raise ValidationError("grErrNumber", field="varieties")
+            r["PCT"] = round_half_up(100.0 * r["GRAINS"] / total, 1)
+        r["PCT"] = round_half_up(r["PCT"], 1)
+    if sum(r["PCT"] for r in rows) > 100.5:
+        raise ValidationError("grErrVarSum")
+    return sorted(rows, key=lambda r: -r["PCT"])
+
+
+def _with_varieties(values, varieties, grains):
+    """VARIETIES + the main variety / purity / grain count taken from them when not given."""
+    values["VARIETIES"] = varieties or None
+    if varieties:
+        values["VARIETY"] = values.get("VARIETY") or varieties[0]["NAME"]
+        if values.get("PURITY_PCT") is None:
+            values["PURITY_PCT"] = varieties[0]["PCT"]
+        if grains is None and all(v["GRAINS"] is not None for v in varieties):
+            grains = sum(v["GRAINS"] for v in varieties)
+    return grains
 
 
 # ---------- the grader devices ----------
@@ -132,7 +200,9 @@ def save_result(dev, body):
         if v is not None and not (low <= v <= high):
             raise ValidationError("grErrNumber", field=name)
         values[field] = None if v is None else round_half_up(v, places)
-    if values["WHOLE_PCT"] is None and values["BROKEN_PCT"] is None and values["HEAD_RICE_PCT"] is None and values["MOISTURE_PCT"] is None:
+    varieties = parse_varieties(body.get("varieties"))           # update 138
+    if values["WHOLE_PCT"] is None and values["BROKEN_PCT"] is None and values["HEAD_RICE_PCT"] is None and values["MOISTURE_PCT"] is None \
+            and values["PURITY_PCT"] is None and not varieties:
         raise ValidationError("grErrEmpty")
     if values["WHOLE_PCT"] is not None and values["BROKEN_PCT"] is not None and values["WHOLE_PCT"] + values["BROKEN_PCT"] > 100.5:
         raise ValidationError("grErrSum")
@@ -145,6 +215,8 @@ def save_result(dev, body):
     material = str(body.get("material") or "").strip().upper() or None
     if material and material not in MATERIALS:
         raise ValidationError("grErrMaterial")
+    values["VARIETY"] = clean_text(body.get("variety"), 40) or None
+    grains = _with_varieties(values, varieties, grains)
     when = now_utc()
     if body.get("time"):
         try:
@@ -166,14 +238,49 @@ def save_result(dev, body):
     doc = dict(values, GRADE_ID="GR%06d" % Counter.next("GRADE"), BRANCH_ID=dev["BRANCH_ID"], GRADER_ID=dev["GRADER_ID"],
                SAMPLE_NO=clean_text(body.get("sample"), 30) or None, MAT_CODE=material or (order or {}).get("MAT_CODE"),
                GRAINS=None if grains is None else int(grains), NOTE=clean_text(body.get("note"), 200) or None,
-               VARIETY=clean_text(body.get("variety"), 40) or None,          # update 127: the variety the grader recognised, as text
+               # update 127: VARIETY (text) in values; update 138: VARIETIES = the whole breakdown
                VERSION=clean_text(body.get("version"), 20) or None,          # update 135: the grader program version (exams)
                PHOTO_FLG=bool(photo), ORD_ID=order["ORD_ID"] if order else None, LINK_USER=(by_staff or "device:" + dev["GRADER_ID"]) if order else None,
                LINK_DATE=now_utc() if order else None, TEST_DATE=when, REGIST_DATE=now_utc())
     col(COL).insert_one(dict(doc))
     if photo:
         col(PHOTO).insert_one({"GRADE_ID": doc["GRADE_ID"], "MIME": mime, "DATA": base64.b64encode(photo).decode("ascii"), "REGIST_DATE": now_utc()})
+    if order and doc["MOISTURE_PCT"] is not None:          # update 137: a moisture reading deducts the paddy weight
+        from . import moisture
+        moisture.from_device(BuySellOrder.find(order["ORD_ID"]), doc["MOISTURE_PCT"], dev["GRADER_ID"])
     seen(dev)             # update 129: the chosen order stays chosen - one order can be graded several times
+    return doc
+
+
+def save_manual(branch_id, form, ope_user):
+    """Update 138: a result typed on the grading page from another analyser's report (miniLyzer: the variety
+    breakdown, its scan code, optionally moisture / head rice), kept with a buying order when one is chosen."""
+    varieties = parse_varieties(form.get("VARIETIES") or "")
+    values = {}
+    for name, (field, low, high, places) in NUMBERS.items():
+        try:
+            v = to_number(form.get(name))
+        except (ValueError, TypeError):
+            raise ValidationError("grErrNumber", field=name)
+        if v is not None and not (low <= v <= high):
+            raise ValidationError("grErrNumber", field=name)
+        values[field] = None if v is None else round_half_up(v, places)
+    if not varieties and all(v is None for v in values.values()):
+        raise ValidationError("grErrEmpty")
+    values["VARIETY"] = None
+    grains = _with_varieties(values, varieties, None)
+    order = _buy_order(branch_id, form["ORD_ID"]) if (form.get("ORD_ID") or "").strip() else None
+    source = clean_text(form.get("SOURCE"), 30) or "miniLyzer"
+    doc = dict(values, GRADE_ID="GR%06d" % Counter.next("GRADE"), BRANCH_ID=branch_id, GRADER_ID=MANUAL_ID, SOURCE=source,
+               SAMPLE_NO=clean_text(form.get("SAMPLE_NO"), 30) or None, MAT_CODE=(order or {}).get("MAT_CODE"),
+               GRAINS=grains, NOTE=clean_text(form.get("NOTE"), 200) or None, VERSION=None, PHOTO_FLG=False,
+               ORD_ID=order["ORD_ID"] if order else None, LINK_USER=ope_user if order else None,
+               LINK_DATE=now_utc() if order else None, TEST_DATE=now_utc(), REGIST_DATE=now_utc(), OPE_USER=ope_user)
+    col(COL).insert_one(dict(doc))
+    if order and doc["MOISTURE_PCT"] is not None:          # update 137: the paddy weight follows the moisture
+        from . import moisture
+        if moisture.applies(order) and moisture.LOW <= doc["MOISTURE_PCT"] <= moisture.HIGH:
+            moisture.apply(order, doc["MOISTURE_PCT"], "typed", ope_user)
     return doc
 
 
@@ -337,6 +444,10 @@ def attach(branch_id, grade_id, ord_id, ope_user):
     if not g.get("MAT_CODE"):
         values["MAT_CODE"] = order.get("MAT_CODE")
     col(COL).update_one({"GRADE_ID": g["GRADE_ID"]}, {"$set": values})
+    if g.get("MOISTURE_PCT") is not None:                  # update 137
+        from . import moisture
+        if moisture.applies(order) and moisture.LOW <= g["MOISTURE_PCT"] <= moisture.HIGH:
+            moisture.apply(order, g["MOISTURE_PCT"], "device:" + g["GRADER_ID"], ope_user)
     return get(g["GRADE_ID"])
 
 
@@ -375,7 +486,19 @@ def report_rows(g, lang=None):
     """[(label, value text)] of the values the grader measured (missing ones left out)."""
     from ..i18n import t, t_in
     tr = (lambda k: t_in(lang, k)) if lang else t
-    return [(tr(key), "%s%s" % (g[field], unit)) for field, key, unit in REPORT_FIELDS if g.get(field) is not None]
+    rows = []
+    for field, key, unit in REPORT_FIELDS:
+        if field == "VARIETY" and g.get("VARIETIES"):       # update 138: every variety found, main one first
+            if g.get("PURITY_PCT") is not None:
+                rows.append((tr("grPurity"), "%s%%" % g["PURITY_PCT"]))
+            rows += [("%s (%s)" % (v["NAME"], v["GRAINS"]) if v.get("GRAINS") is not None else v["NAME"], "%s%%" % v["PCT"])
+                     for v in g["VARIETIES"]]
+            continue
+        if field == "PURITY_PCT" and g.get("VARIETIES"):
+            continue
+        if g.get(field) is not None:
+            rows.append((tr(key), "%s%s" % (g[field], unit)))
+    return rows
 
 
 def report_context(g):

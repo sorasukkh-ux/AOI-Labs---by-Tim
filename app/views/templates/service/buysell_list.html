@@ -80,10 +80,21 @@
 
     {# update 126: rice quality results of the camera grader, kept with a buying order #}
     {% if order.ORD_TYPE == 'BY' %}
+    {# update 137: paddy moisture - weight deducted to 15% #}
+    {% for l in order.moist_lines %}
+    <p class="bs-note mt-on" data-moisture>&#128167; {{ t('mtLine', name=l.name, pct=l.MOISTURE_PCT, weighed=l.WEIGH_QTY|num, paid=l.ORD_QTY|num) }}</p>
+    {% endfor %}
+    {% if editable and order.moist_open %}
+    <form method="post" action="{{ url_for('service_buysell.set_moisture', ord_id=order.ORD_ID) }}" class="cpn-use mt-form">
+      {{ hidden() }}
+      <input type="number" name="MOISTURE" min="5" max="40" step="0.1" inputmode="decimal" required placeholder="{{ t('mtPh') }}" aria-label="{{ t('mtPh') }}"{% if order.MOISTURE_PCT is not none %} value="{{ order.MOISTURE_PCT }}"{% endif %}>
+      <button class="action small" type="submit">&#128167; {{ t('mtSave') }}</button>
+    </form>
+    {% endif %}
     {% set order_grades = grades.get(order.ORD_ID, []) %}
     {% for g in order_grades[:1] %}
     <p class="bs-note gr-on" data-grade="{{ g.GRADE_ID }}">&#128300; {{ t('grLabel') }}:
-      {% if g.VARIETY %}{{ g.VARIETY }}{% if g.PURITY_PCT is not none %} {{ g.PURITY_PCT }}%{% endif %} &middot; {% endif %}
+      {% if g.VARIETIES %}<span data-grade-varieties>{% for v in g.VARIETIES[:4] %}{{ v.NAME }} {{ v.PCT }}%{% if not loop.last %}, {% endif %}{% endfor %}{% if g.VARIETIES|length > 4 %} +{{ g.VARIETIES|length - 4 }}{% endif %}</span> &middot; {% elif g.VARIETY %}{{ g.VARIETY }}{% if g.PURITY_PCT is not none %} {{ g.PURITY_PCT }}%{% endif %} &middot; {% endif %}
       {% if g.HEAD_RICE_PCT is not none %}<b>{{ t('grHead') }} {{ g.HEAD_RICE_PCT }}%</b>{% endif %}
       {% if g.BROKEN_PCT is not none %}&middot; {{ t('grBroken') }} {{ g.BROKEN_PCT }}%{% endif %}
       {% if g.MOISTURE_PCT is not none %}&middot; {{ t('grMoisture') }} {{ g.MOISTURE_PCT }}%{% endif %}
@@ -101,7 +112,7 @@
     {% if order_grades|length > 1 %}<details class="gr-older"><summary>{{ t('grOlder', n=order_grades|length - 1) }}</summary>
     {% for g in order_grades[1:] %}
     <p class="bs-note gr-on" data-grade="{{ g.GRADE_ID }}">&#128300; {{ t('grLabel') }}:
-      {% if g.VARIETY %}{{ g.VARIETY }}{% if g.PURITY_PCT is not none %} {{ g.PURITY_PCT }}%{% endif %} &middot; {% endif %}
+      {% if g.VARIETIES %}<span data-grade-varieties>{% for v in g.VARIETIES[:4] %}{{ v.NAME }} {{ v.PCT }}%{% if not loop.last %}, {% endif %}{% endfor %}{% if g.VARIETIES|length > 4 %} +{{ g.VARIETIES|length - 4 }}{% endif %}</span> &middot; {% elif g.VARIETY %}{{ g.VARIETY }}{% if g.PURITY_PCT is not none %} {{ g.PURITY_PCT }}%{% endif %} &middot; {% endif %}
       {% if g.HEAD_RICE_PCT is not none %}<b>{{ t('grHead') }} {{ g.HEAD_RICE_PCT }}%</b>{% endif %}
       {% if g.BROKEN_PCT is not none %}&middot; {{ t('grBroken') }} {{ g.BROKEN_PCT }}%{% endif %}
       {% if g.MOISTURE_PCT is not none %}&middot; {{ t('grMoisture') }} {{ g.MOISTURE_PCT }}%{% endif %}

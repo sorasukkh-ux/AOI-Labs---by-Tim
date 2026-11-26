@@ -1901,3 +1901,6 @@ tr.bd-today td { background: #fdf2f8; }
 .ck-save { display: flex; align-items: flex-end; } .ck-save .action { width: auto; }
 .ck-hand { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; margin-bottom: 8px; }
 .ck-price-form { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; } .ck-price-form select { flex: 1; min-width: 180px; width: auto; } .ck-price-form .action { width: auto; margin: 0; }
+/* update 138: typed analyser result (miniLyzer) */
+.gr-manual-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0 12px; }
+.gr-manual-form textarea { width: 100%; font-family: inherit; }
