@@ -66,6 +66,11 @@ def start(app):
     global _started
     start_health(app)
     start_birthday(app)
+    try:                                                # update 141: print jobs left queued by a restart
+        from .models import printing
+        printing.resume(app)
+    except Exception:                                   # noqa: BLE001
+        app.logger.exception("Print resume")
     if _started or app.config.get("TESTING") or not app.config.get("MARKET_AUTO"):
         return
     _started = True

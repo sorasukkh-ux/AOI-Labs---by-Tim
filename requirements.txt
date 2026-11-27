@@ -6,3 +6,5 @@ pymongo>=4.6,<5
 python-dotenv>=1.0,<2
 # Reads the market price report (PDF) of the Thai Rice Millers Association
 pypdf>=4.0,<7
+# Update 141: server printing renders the queue card / receipt as a picture (Thai text, QR) for the printer
+Pillow>=10,<13

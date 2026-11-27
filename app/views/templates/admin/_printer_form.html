@@ -1,0 +1,19 @@
+<form method="post" class="pr-form" autocomplete="off"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  {% if f.PRINTER_ID %}<input type="hidden" name="PRINTER_ID" value="{{ f.PRINTER_ID }}">{% endif %}
+  <fieldset class="plain" {% if not editable %}disabled{% endif %}>
+  <div class="gr-manual-grid">
+    <div class="field-row"><label class="field-label">{{ t('prName') }}<input type="text" name="NAME" value="{{ f.NAME or 'Epson TM-T81III' }}" maxlength="60" required></label></div>
+    <div class="field-row"><label class="field-label">{{ t('prKind') }}<select name="KIND">{% for k in ('receipt', 'label') %}<option value="{{ k }}"{% if f.KIND == k %} selected{% endif %}>{{ t('prKind_' ~ k) }}</option>{% endfor %}</select></label></div>
+    <div class="field-row"><label class="field-label">{{ t('prLanguage') }}<select name="LANGUAGE"><option value="ESCPOS">ESC/POS</option></select></label></div>
+    <div class="field-row"><label class="field-label">{{ t('prConn') }}<select name="CONN">{% for c in ('USB', 'TCP') %}<option value="{{ c }}"{% if f.CONN == c %} selected{% endif %}>{{ t('prConn_' ~ c) }}</option>{% endfor %}</select></label></div>
+    <div class="field-row"><label class="field-label">{{ t('prDevice') }}<input type="text" name="DEVICE" value="{{ f.DEVICE or '' }}" maxlength="120" placeholder="/dev/usb/lp0"></label></div>
+    <div class="field-row"><label class="field-label">{{ t('prIp') }}<input type="text" name="IP" value="{{ f.IP or '' }}" maxlength="60" placeholder="192.168.1.50"></label></div>
+    <div class="field-row"><label class="field-label">{{ t('prPort') }}<input type="number" name="PORT" value="{{ f.PORT or 9100 }}" min="1" max="65535"></label></div>
+    <div class="field-row"><label class="field-label">DPI<input type="number" name="DPI" value="{{ f.DPI or 203 }}" min="150" max="600"></label></div>
+    <div class="field-row"><label class="field-label">{{ t('prWidth') }}<input type="number" name="WIDTH_MM" value="{{ f.WIDTH_MM or 80 }}" min="40" max="120" step="0.5"></label></div>
+  </div>
+  <label class="checkline"><input type="checkbox" name="DEFAULT_FLG" value="1"{% if f.DEFAULT_FLG %} checked{% endif %}><span>{{ t('prDefaultLabel') }}</span></label>
+  <label class="checkline"><input type="checkbox" name="ACTIVE_FLG" value="1"{% if f.ACTIVE_FLG %} checked{% endif %}><span>{{ t('prActive') }}</span></label>
+  {% if editable %}<button class="action primary mt6" type="submit" name="action" value="save">{{ t('btnSaveChanges') }}</button>{% endif %}
+  </fieldset>
+</form>

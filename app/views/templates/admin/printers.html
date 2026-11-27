@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% from "_macros.html" import page_head %}
+{% block content %}
+<div id="tab-printers">
+{{ page_head(t('tabPrinter'), url_for('home.index', g='AD')) }}
+<div class="card gap"><p class="desc-text">{{ t('prDesc') }}</p>
+  <p class="cap-note tight">{{ t('prUsbSeen') }}: {% for d in usb %}<code>{{ d }}</code>{% if not loop.last %}, {% endif %}{% else %}<b>{{ t('prUsbNone') }}</b>{% endfor %}</p></div>
+
+<div class="card mt14" id="pr-list">
+  <p class="card-title sub">{{ t('prList') }}</p>
+  {% for p in printers %}
+  <details class="pr-item"{% if not p.LAST_OK and not p.LAST_ERROR %} open{% endif %}>
+    <summary><b>{{ p.PRINTER_ID }}</b> &middot; {{ p.NAME }} &middot; {{ p.CONN }} {{ p.DEVICE if p.CONN == 'USB' else (p.IP ~ ':' ~ p.PORT) }}
+      {% if p.DEFAULT_FLG %}<span class="badge buy-type">{{ t('prDefault') }}</span>{% endif %}
+      {% if not p.ACTIVE_FLG %}<span class="badge neutral">{{ t('prOff') }}</span>{% elif p.LAST_ERROR %}<span class="badge cancelled" data-pr-error>{{ t('prError') }}</span>{% elif p.LAST_OK %}<span class="badge completed">{{ t('prOk') }}</span>{% endif %}</summary>
+    {% if p.LAST_ERROR %}<p class="cap-note bad">&#9888; {{ p.LAST_ERROR }}</p>{% endif %}
+    {% if p.LAST_OK %}<p class="cap-note tight">{{ t('prLastOk') }}: {{ fmt_datetime(p.LAST_OK) }}</p>{% endif %}
+    {% set f = p %}{% include "admin/_printer_form.html" %}
+    {% if editable %}<form method="post" class="mt6"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="PRINTER_ID" value="{{ p.PRINTER_ID }}">
+      <button class="action" type="submit" name="action" value="test" data-pr-test>&#128424; {{ t('prTest') }}</button></form>{% endif %}
+  </details>
+  {% else %}<p class="hint">{{ t('prNone') }}</p>{% endfor %}
+</div>
+
+{% if editable %}<div class="card mt14" id="pr-add">
+  <p class="card-title sub">&#10133; {{ t('prAdd') }}</p>
+  {% set f = {'KIND': 'receipt', 'LANGUAGE': 'ESCPOS', 'CONN': 'USB', 'DEVICE': usb[0] if usb else '/dev/usb/lp0', 'PORT': 9100, 'DPI': 203, 'WIDTH_MM': 80, 'DEFAULT_FLG': not printers, 'ACTIVE_FLG': true} %}
+  {% include "admin/_printer_form.html" %}
+</div>{% endif %}
+
+<div class="card mt14" id="pr-jobs">
+  <p class="card-title sub">{{ t('prJobs') }}</p>
+  <div class="inv-table-wrap"><table class="tv-table">
+    <thead><tr><th>{{ t('colDate') }}</th><th>{{ t('prDoc') }}</th><th>{{ t('prPrinter') }}</th><th>{{ t('colStatus') }}</th><th></th></tr></thead>
+    <tbody>{% for j in jobs %}
+    <tr data-job="{{ j.JOB_ID }}"><td>{{ fmt_datetime(j.CREATED) }}<br><small class="hint">{{ j.JOB_ID }} &middot; {{ j.USER_ID }}</small></td>
+      <td>{{ t('prDoc_' ~ j.DOC_KIND) }} {{ j.REF_TEXT or '' }}{% if j.COPIES > 1 %} &times;{{ j.COPIES }}{% endif %}{% if j.REPRINT_OF %}<br><small class="hint">{{ t('prReprintOf', id=j.REPRINT_OF) }}: {{ j.REASON }}</small>{% endif %}</td>
+      <td>{{ names.get(j.PRINTER_ID, j.PRINTER_ID) }}</td>
+      <td>{{ t({'Q': 'prStQ', 'P': 'prStP', 'F': 'prStF'}[j.STATUS]) }}{% if j.ERROR %}<br><small class="hint">{{ j.ERROR }}</small>{% endif %}</td>
+      <td>{% if editable and j.DOC_KIND != 'test' %}<form method="post" class="gr-attach-row"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="JOB_ID" value="{{ j.JOB_ID }}">
+        <input type="text" name="REASON" maxlength="200" required placeholder="{{ t('prReasonPh') }}" aria-label="{{ t('prReasonPh') }}">
+        <button class="action small" type="submit" name="action" value="reprint">{{ t('prReprint') }}</button></form>{% endif %}</td></tr>
+    {% else %}<tr><td colspan="5" class="hint center">{{ t('prNoJobs') }}</td></tr>{% endfor %}</tbody>
+  </table></div>
+</div>
+</div>
+{% endblock %}

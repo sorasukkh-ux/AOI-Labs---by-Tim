@@ -10,7 +10,7 @@
     <div class="qr-label" id="qr-label" data-label='{{ label|tojson }}'></div>
   </div>
   <div class="result-actions">
-    <button class="action" type="button" id="print-label-btn" data-print>{{ t('btnPrintQR') }}</button>
+    <button class="action" type="button" id="print-label-btn" data-print data-doc="label" data-ref="{{ order.ORD_ID }}">{{ t('btnPrintQR') }}</button>
     <a class="action" href="{{ url_for('service_milling.new_order') }}">{{ t('tabService') }}</a>
   </div>
 </div>

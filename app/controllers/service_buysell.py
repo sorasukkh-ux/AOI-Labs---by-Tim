@@ -453,8 +453,10 @@ def billing():
     if not orders:
         abort(404)
     customer = Customer.find(orders[0]["CUST_CODE"]) or {}
+    extras, ml_coupon = BuySellOrder.receipt_extras(orders)          # update 140: milling + delivery fee
     return render_template("service/_billing.html", orders=orders, customer=customer, mat_keys=MAT_KEYS, items_of=BuySellOrder.items_of,
-                           type_keys=TYPE_KEYS, total=sum(BuySellOrder.amount(o) for o in orders),
+                           extras=extras, ml_coupon=ml_coupon,
+                           type_keys=TYPE_KEYS, total=sum(BuySellOrder.amount(o) for o in orders) + sum(e["amount"] for e in extras),
                            printed=fmt_datetime(now_utc()), address=current_app.config["LABEL_ADDRESS_TH"],
                            address_en=current_app.config["LABEL_ADDRESS_EN"], tel=current_app.config["LABEL_TEL"],
                            line_ok=bool(customer.get("LINE_USER_ID")), ids=",".join(o["ORD_ID"] for o in orders))

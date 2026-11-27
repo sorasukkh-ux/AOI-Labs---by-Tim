@@ -1904,3 +1904,12 @@ tr.bd-today td { background: #fdf2f8; }
 /* update 138: typed analyser result (miniLyzer) */
 .gr-manual-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0 12px; }
 .gr-manual-form textarea { width: 100%; font-family: inherit; }
+/* update 141: server printing */
+#print-toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%) translateY(120px); z-index: 1200; max-width: 92vw;
+  background: #1f2937; color: #fff; padding: 10px 16px; border-radius: 10px; font-size: 14px; transition: transform .25s; pointer-events: none; }
+#print-toast.show { transform: translateX(-50%) translateY(0); }
+#print-toast.bad { background: #b91c1c; }
+@media print { #print-toast { display: none; } }
+.pr-item { border-top: 1px solid #e5e7eb; padding: 8px 0; } .pr-item summary { cursor: pointer; }
+.pr-form .field-label input, .pr-form .field-label select { display: block; width: 100%; margin-top: 4px; }
+.cap-note.bad { color: #b91c1c; }

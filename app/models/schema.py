@@ -20,6 +20,8 @@ COLLECTIONS = {
     "AOIMS_ROLE": [(["ROLE_CODE"], True)],
     "AOIMS_MENU": [(["MENU_CODE"], True)],
     "AOIMS_LINEMSG": [(["MSG_ID"], True)],
+    "AOIMS_PRINTER": [(["PRINTER_ID"], True), (["BRANCH_ID"], False)],          # update 141
+    "AOITS_PRINTJOB": [(["JOB_ID"], True), (["BRANCH_ID", "CREATED"], False)],
     "AOIMS_ROLEAUTH": [(["ROLE_CODE", "MENU_CODE"], True)],
     # ---- transactions ----
     "AOITS_ORDMILLING": [(["ORD_ID"], True), (["BRANCH_ID", "MILL_STATUS"], False), (["CUST_CODE"], False)],

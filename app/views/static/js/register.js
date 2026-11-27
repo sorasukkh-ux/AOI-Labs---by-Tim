@@ -154,6 +154,16 @@
     });
   }
   function printThenAsk(result) {
+    if (window.AOIPrint && result.ord_id) {              // update 141: the server prints the queue card
+      return window.AOIPrint("label", result.ord_id).then(function (res) {
+        if (res && res.fallback) return browserPrintThenAsk(result);
+        if (res && res.message) result.message += "\n" + res.message;
+        askNext(result);
+      });
+    }
+    return browserPrintThenAsk(result);
+  }
+  function browserPrintThenAsk(result) {
     if (!window.AOILabel) return askNext(result);
     window.AOILabel.render(byId("reg-qr-label"), result.label);              // the real queue number, not the preview
     var asked = false;

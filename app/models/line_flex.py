@@ -92,7 +92,8 @@ def receipt(title, orders_no, customer, date, lines, total, base=None, labels=No
         return {"type": "box", "layout": "vertical", "contents": [
             _text(name, "sm", "bold"),
             {"type": "box", "layout": "horizontal", "contents": [
-                _text("%s kg x %s" % (kg, price), "xs", color=MUTED, flex=3), _text(amount, "sm", flex=2, align="end")]}]}
+                _text(kg if price is None else "%s kg x %s" % (kg, price), "xs", color=MUTED, flex=3) if (kg or price is not None) else {"type": "filler", "flex": 3},
+                _text(amount, "sm", flex=2, align="end")]}]}
 
     head = [{"type": "box", "layout": "vertical", "contents": [_logo(base)], "paddingStart": "60px", "paddingEnd": "60px"}] if base else []
     return {"type": "bubble", "size": "mega", "body": {"type": "box", "layout": "vertical", "spacing": "md", "paddingAll": "16px",

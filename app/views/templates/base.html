@@ -26,6 +26,7 @@
 </div>
 
 {% if user %}
+<div id="aoi-print" hidden data-url="{{ url_for('printing.print_doc') }}" data-csrf="{{ csrf_token() }}"></div>
 <div id="session-bar" class="show">
   <div class="session-who"><span id="session-user">{{ user.USER_NAME }} ({{ user.USER_ID }}) &middot; {{ role_name }}</span><span class="badge buy-type" id="session-branch">{{ branch_label(op_branch) }}</span></div>
   <form method="post" action="{{ url_for('auth.logout') }}">

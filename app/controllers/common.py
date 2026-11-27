@@ -11,6 +11,7 @@ MENU_ENDPOINTS = {
     "SV_PRICE": "service_info.current_price",
     "AD_MILLANALYSIS": "automation.ai_milling",
     "AD_LINEMSG": "admin_line.messages",
+    "AD_PRINTER": "admin_printer.maintenance",
     "SV_BSSTATUS": "service_buysell.order_list",
     "IV_LIST": "inventory.item_list",
     "IV_HISTORY": "inventory.history",

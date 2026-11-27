@@ -16,15 +16,19 @@
         <tr><td>{{ mat_name(l.MAT_CODE) }}</td><td class="num">{{ l.ORD_QTY|num }}</td><td class="num">{{ l.PRICING_UINT|num }}</td><td class="num">{{ l.ORD_AMOUNT|num }}</td></tr>
         {% if l.WEIGH_QTY is not none and l.MOISTURE_PCT is not none %}<tr class="bill-moist"><td colspan="4"><small>&#128167; {{ t('mtBill', pct=l.MOISTURE_PCT, weighed=l.WEIGH_QTY|num, paid=l.ORD_QTY|num) }}</small></td></tr>{% endif %}
       {% endfor %}{% endfor %}
+      {# update 140: what the milling order adds - the receipt total = the queue card's Payment #}
+      {% for e in extras %}
+        <tr class="bill-fee"><td>{{ t('rcMillFee' if e.kind == 'fee' else 'rcDeliveryFee', no=e.qr) }}</td><td class="num">{% if e.kind == 'fee' %}{{ e.paddy|num }}{% endif %}</td><td class="num"></td><td class="num">{{ e.amount|num }}</td></tr>
+      {% endfor %}
       </tbody>
       <tfoot><tr><td colspan="3">{{ t('totalLabel') }}</td><td class="num">{{ total|num }}</td></tr>
-      {% set cpn = orders|selectattr('COUPON_AMT')|map(attribute='COUPON_AMT')|sum %}
+      {% set cpn = (orders|selectattr('COUPON_AMT')|map(attribute='COUPON_AMT')|sum) + ml_coupon %}
       {% if cpn %}<tr><td colspan="3">&#127903; {{ t('cpnLabel') }} {% for o in orders if o.COUPON_ID %}{{ o.COUPON_ID }} {% endfor %}</td><td class="num">-{{ cpn|num }}</td></tr>
       <tr><td colspan="3"><b>{{ t('cpnToPay') }}</b></td><td class="num"><b>{{ (total - cpn)|num }}</b></td></tr>{% endif %}</tfoot>
     </table>
   </div>
   <div class="rc-actions">
-    <button type="button" class="action primary rc-print-btn" data-print-receipt>&#128424; {{ t('btnPrintBilling') }}</button>
+    <button type="button" class="action primary rc-print-btn" data-print-receipt data-doc="receipt" data-ref="{{ ids }}">&#128424; {{ t('btnPrintBilling') }}</button>
     {% if line_ok %}
     <button type="button" class="action rc-line-btn" data-receipt-line="{{ url_for('service_buysell.billing_line') }}" data-ids="{{ ids }}"
             data-csrf="{{ csrf_token() }}">&#128172; {{ t('btnSendLine') }}</button>

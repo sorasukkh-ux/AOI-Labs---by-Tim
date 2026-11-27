@@ -18,10 +18,25 @@
       .then(function (res) { say(res.message || "", !res.ok); if (!res.ok) sent = false; })
       .catch(function () { sent = false; say("LINE: no connection", true); });
   }
+  function serverPrint() {                               // update 141: the server prints the card(s)
+    var data = new FormData(), csrf = printBtn.getAttribute("data-csrf");
+    data.set("doc", "card"); data.set("ref", printBtn.getAttribute("data-ref")); data.set("copies", printBtn.getAttribute("data-copies") || 1);
+    data.set("csrf_token", csrf);
+    return fetch(printBtn.getAttribute("data-print-url"), { method: "POST", body: data, credentials: "same-origin",
+                 headers: { "Accept": "application/json", "X-CSRF-Token": csrf } })
+      .then(function (r) { return r.json().catch(function () { return { ok: false, message: "Print: error " + r.status }; }); })
+      .catch(function () { return { ok: false, message: "Print: no connection" }; });
+  }
   if (printBtn) printBtn.addEventListener("click", function () {
     var tick = document.getElementById("cc-line-on");
     if (tick && tick.checked) sendLine();
-    window.print();
+    if (!printBtn.getAttribute("data-print-url")) return window.print();
+    printBtn.disabled = true;
+    serverPrint().then(function (res) {
+      printBtn.disabled = false;
+      if (res.fallback) return window.print();
+      say("\uD83D\uDDA8 " + (res.message || ""), !res.ok);
+    });
   });
   var only = document.getElementById("cc-line-send");
   if (only) only.addEventListener("click", function () { sent = false; sendLine(); });

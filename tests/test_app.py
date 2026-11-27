@@ -303,7 +303,7 @@ class Administration(Base):
         rows = {r["MENU_CODE"]: r for r in self.db("AOIMS_ROLEAUTH") if r["ROLE_CODE"] == "SUPERVISOR"}
         self.assertTrue(rows["SV_SERVICE"]["CAN_VIEW"] and rows["SV_SERVICE"]["CAN_CREATE"])
         self.assertFalse(rows["AD_USER"]["CAN_EDIT"])                    # dropped: the screen cannot be viewed
-        self.assertEqual(len(rows), 24)                                  # one row per menu (update 31: SCADA)
+        self.assertEqual(len(rows), 25)                                  # one row per menu (update 31: SCADA, 141: printers)
         self.assertIn("already exists", self.post("/admin/roles/save", data, "/admin/roles/").get_data(as_text=True))
 
     def test_role_in_use_cannot_be_made_inactive_and_admin_stays_full(self):
@@ -6437,3 +6437,88 @@ class Update138(Update126):
         self.assertIn("2.8%", report)
         self.post("/service/buysell/grades", {"action": "manual", "VARIETIES": ""}, "/service/buysell/grades")
         self.assertEqual(len([x for x in self.db("AOITS_GRADE") if x.get("GRADER_ID") == "MANUAL"]), 1)
+
+
+class Update140(Base):
+    """The receipt of a milling order's take-home order adds the milling fee (and delivery): total = queue card Payment."""
+
+    def test_receipt_total(self):
+        from app.models.milling_order import MillingOrder
+        self.login("admin")
+        self.client.get("/lang/en")
+        o = self.new_order(REGIST_PADDY="900", BRAN_ORDER="10", BROKE_ORDER="5")
+        sl = [x for x in self.db("AOITS_ORDBUYSELL") if x.get("REF_ORD_ID") == o["ORD_ID"]][0]
+        self.assertTrue(o["EST_PAY_MILLFEE"] > 0)
+        page = self.text("/service/buysell/billing?ids=" + sl["ORD_ID"])
+        self.assertIn("Milling fee (queue #%s)" % o["QR_ID"], page)
+        self.assertIn("{:,.2f}".format(MillingOrder.pay_total(o)), page)
+        with self.app.app_context():
+            from app.models import notify
+            from app.models.buysell_order import BuySellOrder
+            extras, coupon = BuySellOrder.receipt_extras([sl, sl])
+            self.assertEqual(len([e for e in extras if e["kind"] == "fee"]), 1)       # once per milling order
+            sent = []
+            orig = notify.send
+            notify.send = lambda doc: sent.append(doc) or doc
+            try:
+                notify.send_receipt([BuySellOrder.find(sl["ORD_ID"])], {"CUST_NAME": "x", "LINE_USER_ID": "U1"})
+            finally:
+                notify.send = orig
+            self.assertIn("{:,.2f}".format(MillingOrder.pay_total(o)), sent[0]["NOTIFY_MESSAGE"] + str(sent[0]["NOTIFY_FLEX"]))
+            self.assertIn("ค่าสีข้าว", str(sent[0]["NOTIFY_FLEX"]))
+
+
+class Update141(Base):
+    """Server printing: Printer Maintenance, POST /print (queue card, customer card, receipt, grading slip), ESC/POS to USB."""
+
+    def test_server_printing(self):
+        import tempfile
+        self.login("admin")
+        self.client.get("/lang/en")
+        self.assertIn('id="pr-add"', self.text("/admin/printers/"))
+        o = self.new_order(REGIST_PADDY="900", BRAN_ORDER="10", BROKE_ORDER="5")
+        r = self.post("/print", {"doc": "label", "ref": o["ORD_ID"]})
+        self.assertEqual(r.status_code, 422)
+        self.assertTrue(r.get_json()["fallback"])                     # no printer: the browser prints
+        dev = os.path.join(tempfile.mkdtemp(), "lp0")
+        self.post("/admin/printers/", {"action": "save", "NAME": "Epson TM-T81III", "KIND": "receipt", "LANGUAGE": "ESCPOS", "CONN": "USB",
+                                       "DEVICE": dev, "PORT": "9100", "DPI": "203", "WIDTH_MM": "80", "DEFAULT_FLG": "1", "ACTIVE_FLG": "1"}, "/admin/printers/")
+        p = self.db("AOIMS_PRINTER")
+        self.assertEqual((len(p), p[0]["PRINTER_ID"], p[0]["DEFAULT_FLG"]), (1, "PR001", True))
+        sl = [x for x in self.db("AOITS_ORDBUYSELL") if x.get("REF_ORD_ID") == o["ORD_ID"]][0]
+        for doc, ref in (("label", o["ORD_ID"]), ("card", "C261001001"), ("receipt", sl["ORD_ID"]), ("test", "")):
+            open(dev, "wb").close()
+            res = self.post("/print", {"doc": doc, "ref": ref}).get_json()
+            self.assertEqual((res["ok"], res["status"]), (True, "P"), (doc, res))
+            with open(dev, "rb") as f:
+                data = f.read()
+            self.assertTrue(data.startswith(b"\x1b@") and b"\x1dv0\x00H\x00" in data and data.endswith(b"\x1dVB\x00"), doc)
+        self.assertEqual(self.client.get("/print/jobs/%s" % res["job"]).get_json()["status"], "P")
+        self.assertEqual(self.post("/print", {"doc": "label", "ref": "ML-NOPE"}).status_code, 422)
+        # printer unplugged: Failed with the reason, shown on Printer Maintenance; reprint needs a reason
+        self.post("/admin/printers/", {"action": "save", "PRINTER_ID": "PR001", "NAME": "Epson", "KIND": "receipt", "CONN": "USB",
+                                       "DEVICE": "/nonexistent/usb/lp0", "DPI": "203", "WIDTH_MM": "80", "DEFAULT_FLG": "1", "ACTIVE_FLG": "1"}, "/admin/printers/")
+        res = self.post("/print", {"doc": "card", "ref": "C261001001"}).get_json()
+        self.assertEqual((res["ok"], res["status"]), (False, "F"))
+        self.assertIn("device not found", res["message"])
+        page = self.text("/admin/printers/")
+        self.assertIn("data-pr-error", page)
+        n = len(self.db("AOITS_PRINTJOB"))
+        self.post("/admin/printers/", {"action": "reprint", "JOB_ID": res["job"], "REASON": ""}, "/admin/printers/")
+        self.assertEqual(len(self.db("AOITS_PRINTJOB")), n)
+        self.post("/admin/printers/", {"action": "reprint", "JOB_ID": res["job"], "REASON": "paper jam"}, "/admin/printers/")
+        self.assertEqual(self.db("AOITS_PRINTJOB")[-1]["REPRINT_OF"], res["job"])
+        # rights: an operator prints the queue card but cannot open Printer Maintenance or print a test page
+        self.client.post("/logout", data={"csrf_token": self.token("/")})
+        self.login("somchai.k", branch="factory1")
+        self.assertEqual(self.client.get("/admin/printers/").status_code, 403)
+        self.assertEqual(self.post("/print", {"doc": "test", "ref": ""}).status_code, 403)
+
+    def test_render(self):
+        with self.app.test_request_context():
+            from app.models import printing
+            img, label = printing.render("test", "Epson")
+            self.assertEqual(img.size[0], 576)
+            self.assertTrue(200 < img.size[1] < 2000)
+            data = printing.escpos(img)
+            self.assertEqual(data[:2], b"\x1b@")

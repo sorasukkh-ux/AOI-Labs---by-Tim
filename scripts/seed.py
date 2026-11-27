@@ -83,6 +83,7 @@ MENUS = [  # MENU_CODE, MENU_NAME, MENU_GROUP, MENU_SUBGROUP, MENU_SEQ
     ("AT_SCADA", "SCADA", "AT", "", 0),
     ("AD_CUSTOMER", "Customer Registration", "AD", "CUST", 5),
     ("AD_LINEMSG", "LINE Message Maintenance", "AD", "CUST", 6),
+    ("AD_PRINTER", "Printer Maintenance", "AD", "MILL", 3),          # update 141: server printing
 ]
 ROLES = [("ADMIN", "Administrator", "Full access to every screen"),
          ("MANAGER", "Manager", "Runs service and inventory, approves prices"),
@@ -91,7 +92,7 @@ ROLES = [("ADMIN", "Administrator", "Full access to every screen"),
 # v = view, c = create, e = edit, d = delete/cancel, a = approve. ADMIN needs no rows: it always has full access.
 ROLE_AUTH = {
     "MANAGER": {"SV_SERVICE": "vced", "SV_PRICE": "v", "SV_MILLSTATUS": "veda", "SV_BSSTATUS": "vea",
-                "AD_MILLANALYSIS": "v", "AD_LINEMSG": "ve", "IV_LIST": "vced", "IV_HISTORY": "v", "IV_DASHBOARD": "v", "FN_PRICING": "vea",
+                "AD_MILLANALYSIS": "v", "AD_LINEMSG": "ve", "AD_PRINTER": "ve", "IV_LIST": "vced", "IV_HISTORY": "v", "IV_DASHBOARD": "v", "FN_PRICING": "vea",
                 "FN_MARGIN": "ve", "FN_ACCOUNT": "v", "FN_MARKETING": "ve", "FN_INVEST": "vce", "AD_CUSTOMER": "vced", "AD_MILLTIME": "ve",
                 "AD_MILLPROD": "ve", "AD_USER": "v", "AT_AI": "vc", "AT_HARDWARE": "vcea", "AT_ELECTRIC": "vcea",
                 "AT_MACHINE": "v", "AT_SCADA": "v"},

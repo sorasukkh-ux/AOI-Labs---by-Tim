@@ -5,7 +5,7 @@
 <div class="cc-tools">
   <form method="get" class="cc-copies"><label for="cc-n">{{ t('custCardCopies') }}</label>
     <select id="cc-n" name="n" data-autosubmit>{% for n in (1, 2, 4, 6, 8, 10) %}<option value="{{ n }}"{% if n == copies %} selected{% endif %}>{{ n }}</option>{% endfor %}</select></form>
-  <button class="action primary" type="button" id="cc-print">{{ t('custCardPrint') }}</button>
+  <button class="action primary" type="button" id="cc-print" data-print-url="{{ url_for('printing.print_doc') }}" data-csrf="{{ csrf_token() }}" data-ref="{{ c.CUST_CODE }}" data-copies="{{ copies }}">{{ t('custCardPrint') }}</button>
   {% if line_ready %}
   <form class="cc-line" id="cc-line-form" method="post" action="{{ url_for('admin_customers.customer_card_line', code=c.CUST_CODE) }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="PUBLIC_BASE" value="">

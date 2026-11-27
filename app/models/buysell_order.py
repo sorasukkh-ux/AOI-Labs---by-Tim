@@ -251,6 +251,29 @@ class BuySellOrder:
         cls._log(order["ORD_ID"])
         return cls.find(order["ORD_ID"])
 
+    @classmethod
+    def receipt_extras(cls, orders):
+        """Update 140: the milling fee and delivery fee of the milling order a take-home order comes from, so the
+        receipt totals what the customer pays (the queue card's Payment). [{kind, qr, paddy, amount}], coupon THB
+        of those milling orders. Each milling order once."""
+        from .milling_order import MillingOrder
+        seen, extras, coupon = set(), [], 0.0
+        for o in orders:
+            ref = o.get("REF_ORD_ID") if o.get("REF_ORD_TYPE") == "ML" else None
+            if not ref or ref in seen:
+                continue
+            seen.add(ref)
+            m = MillingOrder.find(ref)
+            if not m:
+                continue
+            paddy = m.get("ACT_PADDY") or m.get("REGIST_PADDY") or 0
+            for kind, field in (("fee", "EST_PAY_MILLFEE"), ("delivery", "EST_PAY_DELIVERY")):
+                if m.get(field):
+                    extras.append({"kind": kind, "qr": m.get("QR_ID") or m["ORD_ID"], "paddy": paddy,
+                                   "amount": round_half_up(m[field], 2)})
+            coupon += m.get("COUPON_AMT") or 0
+        return extras, round_half_up(coupon, 2)
+
     @staticmethod
     def amount(order):
         if order.get("ORD_AMOUNT") is not None:

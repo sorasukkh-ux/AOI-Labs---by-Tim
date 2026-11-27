@@ -78,6 +78,11 @@ if [ "${1:-}" = "install-service" ]; then
     echo "Start MongoDB first: sudo systemctl enable --now mongod  - or install Docker (sudo apt install -y docker.io; sudo usermod -aG docker \$USER; log out and in) and run this again"; exit 1; fi
   "$PY" -m scripts.seed
   DIR=$(pwd); WHO=$(id -un)
+  # update 141: server printing - the AOI user may write to the USB printer (/dev/usb/lp0); a Thai font for the pictures
+  sudo usermod -aG lp "$WHO" 2>/dev/null || true
+  if command -v fc-list >/dev/null 2>&1 && [ -z "$(fc-list :lang=th 2>/dev/null | head -1)" ] && command -v apt-get >/dev/null 2>&1; then
+    echo "== Installing a Thai font for printing (fonts-thai-tlwg)"; sudo apt-get install -y fonts-thai-tlwg >/dev/null 2>&1 || true
+  fi
   sudo tee /etc/systemd/system/aoi.service >/dev/null <<UNIT
 [Unit]
 Description=AOI Labs server

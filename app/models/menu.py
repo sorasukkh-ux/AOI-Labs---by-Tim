@@ -6,7 +6,7 @@ SUBGROUP_LABELS = {"MILL": "subAdminMilling", "USER": "subAdminUser", "CUST": "s
 # Translation key of each screen name (MENU_NAME is used when a menu has no key here).
 LABEL_KEYS = {
     "SV_SERVICE": "tabService", "SV_PRICE": "tabCurrentServices", "SV_MILLSTATUS": "tabUpdateStatus",
-    "SV_BSSTATUS": "tabUpdateBuySellStatus", "AD_MILLANALYSIS": "tabMillAnalysis", "AD_LINEMSG": "tabLineMsg",
+    "SV_BSSTATUS": "tabUpdateBuySellStatus", "AD_MILLANALYSIS": "tabMillAnalysis", "AD_LINEMSG": "tabLineMsg", "AD_PRINTER": "tabPrinter",
     "IV_LIST": "tabInventoryList", "IV_HISTORY": "tabInventoryHistory", "IV_DASHBOARD": "tabInventoryDashboard",
     "FN_PRICING": "tabPricing", "FN_MARGIN": "tabMargin", "FN_ACCOUNT": "tabAccount", "FN_MARKETING": "tabMarketing", "FN_INVEST": "tabInvest",
     "AD_MILLPROD": "tabMillingProduction", "AD_MILLTIME": "tabMillingTime", "AD_USER": "tabUser", "AD_ROLE": "tabRole",
@@ -15,7 +15,7 @@ LABEL_KEYS = {
 }
 ICONS = {
     "SV_SERVICE": "\U0001F9FE", "SV_PRICE": "\U0001F4FA", "SV_MILLSTATUS": "\U0001F504",
-    "SV_BSSTATUS": "\U0001F6D2", "AD_MILLANALYSIS": "\U0001F4CA", "AD_LINEMSG": "\U0001F4AC", "IV_LIST": "\U0001F4E6", "IV_HISTORY": "\U0001F4DC",
+    "SV_BSSTATUS": "\U0001F6D2", "AD_MILLANALYSIS": "\U0001F4CA", "AD_LINEMSG": "\U0001F4AC", "AD_PRINTER": "\U0001F5A8\uFE0F", "IV_LIST": "\U0001F4E6", "IV_HISTORY": "\U0001F4DC",
     "IV_DASHBOARD": "\U0001F4C8", "FN_PRICING": "\U0001F3F7", "FN_MARGIN": "\U0001F4D0", "FN_ACCOUNT": "\U0001F4D2",
     "FN_MARKETING": "\U0001F4E3", "FN_INVEST": "\U0001F4B0", "AD_MILLPROD": "\U0001F3ED", "AD_MILLTIME": "⏱", "AD_USER": "\U0001F465",
     "AD_ROLE": "\U0001F510", "AD_CUSTOMER": "\U0001F464",

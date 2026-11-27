@@ -306,6 +306,16 @@ def send_receipt(orders, customer, browser_origin=None):
     lines = [(mat_name(l["MAT_CODE"], "th"), "{:,.2f}".format(l.get("ORD_QTY") or 0), "{:,.2f}".format(l.get("PRICING_UINT") or 0),
               "{:,.2f}".format(l.get("ORD_AMOUNT") or 0))
              for o in orders for l in BuySellOrder.items_of(o) if (l.get("ORD_QTY") or 0) > 0]
+    extras, ml_coupon = BuySellOrder.receipt_extras(orders)          # update 140: milling + delivery fee
+    for e in extras:
+        lines.append((t_in("th", "rcMillFee" if e["kind"] == "fee" else "rcDeliveryFee").replace("{no}", str(e["qr"])),
+                      t_in("th", "rcPaddyKg").replace("{kg}", "{:,.2f}".format(e["paddy"])) if e["kind"] == "fee" else "",
+                      None, "{:,.2f}".format(e["amount"])))
+    total += sum(e["amount"] for e in extras)
+    coupon = sum(o.get("COUPON_AMT") or 0 for o in orders) + ml_coupon
+    if coupon:
+        lines.append((t_in("th", "cpnLabel"), "", None, "-{:,.2f}".format(coupon)))
+        total -= coupon
     name = customer.get("CUST_NAME") or first["CUST_CODE"]
     now = now_utc()
     seq = Counter.next("NT-" + first["ORD_ID"])

@@ -21,7 +21,7 @@
     <p class="rc-note">{{ t('grPrinted') }} {{ printed }} &middot; {{ g.GRADER_ID }}</p>
   </div>
   <div class="rc-actions">
-    <button type="button" class="action primary rc-print-btn" data-print-receipt>&#128424; {{ t('grPrint') }}</button>
+    <button type="button" class="action primary rc-print-btn" data-print-receipt data-doc="grade" data-ref="{{ g.GRADE_ID }}">&#128424; {{ t('grPrint') }}</button>
     {% if line_ok %}
     <button type="button" class="action rc-line-btn" data-receipt-line="{{ url_for('service_buysell.grade_line') }}" data-ids="{{ g.GRADE_ID }}"
             data-csrf="{{ csrf_token() }}">&#128172; {{ t('btnSendLine') }}</button>

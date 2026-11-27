@@ -340,6 +340,20 @@ are kept in `AOITS_SYSLOG` (14 days), the checks in `AOITS_HEALTH` (7 days).
 customer's LINE when "Also send to the customer's LINE" is ticked (shown for customers linked to LINE); "Send to LINE
 only" sends without printing. The same public https address is needed as for the queue QR (update 47).
 
+## Server printing (update 141, DB 1.83)
+
+Phones and tablets never print: every Print button (queue card at registration and in the order details, customer card, Print Billing receipt, grading slip) asks the server (`POST /print`), which prints on the branch's default printer. The server draws the document as a black-and-white picture (Thai text and QR) and sends ESC/POS to the printer: USB on the NUC (`/dev/usb/lp0`, Epson TM-T81III) or LAN port 9100 later. Retry 3 times 10 s apart, then Failed with the reason; Reprint (with a reason) on the job list. Without a printer (Codespaces) the screens still print through the browser.
+
+On the NUC after this update:
+
+    bash start.sh install-service       (adds the AOI user to the lp group, installs a Thai font if missing, restarts AOI)
+
+Then **Administration > Printer Maintenance**: the page lists the USB printers the server sees; add the printer (Kind receipt, ESC/POS, USB, `/dev/usb/lp0`, 203 dpi, 80 mm, default) and press **Test page**. If the test fails with "permission denied", reboot the NUC once (the new group takes effect).
+
+## Receipt includes the milling fee (update 140, DB 1.82)
+
+Tim's first end-to-end test: the queue card said Payment 4,177.50 but the receipt of the take-home order totalled 3,961.50 (the 216 THB milling fee was missing). The receipt (Print Billing and Send LINE) of an order that comes from a milling order now adds a line "ค่าสีข้าว (คิว #0001)" with the paddy kg, and the delivery fee when there is one, so its total equals the queue card's Payment. A milling-order coupon is shown and taken off as well. Ledger unchanged (the milling order still posts its own fee).
+
 ## MongoDB in Docker on the server (update 139, DB 1.82)
 
 Tim keeps Ubuntu 26.04 on the mini PC; MongoDB's own packages are made for 24.04, so MongoDB runs in Docker (the official mongo:7 image, the same as in Codespaces):

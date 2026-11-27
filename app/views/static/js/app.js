@@ -169,14 +169,57 @@
       }, 60);
     });
   });
-  // Print Billing: only the receipt is printed (see @media print in app.css)
-  document.addEventListener("click", function (event) {
-    if (!event.target.closest("[data-print-receipt]")) return;
+  // ----- update 141: server printing. Print asks the AOI server (POST /print); the server prints on the branch's
+  // printer and the screen shows the job state. No printer set up (Codespaces) -> fallback = the browser print. -----
+  function printToast(text, bad) {
+    var box = document.getElementById("print-toast");
+    if (!box) { box = document.createElement("div"); box.id = "print-toast"; box.setAttribute("role", "status"); document.body.appendChild(box); }
+    box.textContent = text; box.className = bad ? "bad show" : "show";
+    clearTimeout(box._t); box._t = setTimeout(function () { box.className = ""; }, bad ? 9000 : 4000);
+  }
+  window.AOIPrint = function (doc, ref, copies) {
+    var conf = document.getElementById("aoi-print");
+    if (!conf) return Promise.resolve({ ok: false, fallback: true });
+    var data = new FormData();
+    data.set("doc", doc); data.set("ref", ref || ""); data.set("copies", copies || 1); data.set("csrf_token", conf.getAttribute("data-csrf"));
+    var get = function (r) { return r.json().catch(function () { return { ok: false, message: "Print: error " + r.status }; }); };
+    return fetch(conf.getAttribute("data-url"), { method: "POST", body: data, credentials: "same-origin",
+                 headers: { "Accept": "application/json", "X-CSRF-Token": conf.getAttribute("data-csrf") } })
+      .then(get)
+      .then(function (res) {
+        if (res.fallback) return res;
+        printToast("\uD83D\uDDA8 " + (res.message || ""), !res.ok);
+        if (!res.ok || res.status !== "Q") return res;
+        var tries = 0;
+        return new Promise(function (done) {
+          (function poll() {
+            tries += 1;
+            fetch(res.url, { credentials: "same-origin", headers: { "Accept": "application/json" } }).then(get).then(function (now) {
+              if (now.status === "Q" && tries < 20) return setTimeout(poll, 2000);
+              printToast("\uD83D\uDDA8 " + (now.message || ""), !now.ok); done(now);
+            }).catch(function () { done(res); });
+          })();
+        });
+      })
+      .catch(function () { printToast("Print: no connection to the server", true); return { ok: false }; });
+  };
+  function browserPrintReceipt() {
     document.body.classList.add("print-receipt");
     var done = function () { document.body.classList.remove("print-receipt"); };
     if ("onafterprint" in window) window.addEventListener("afterprint", done, { once: true });
     window.print();
     if (!("onafterprint" in window)) done();
+  }
+  // Print Billing / grading slip: the server prints it; the browser prints only when no printer is set up
+  document.addEventListener("click", function (event) {
+    var button = event.target.closest("[data-print-receipt]");
+    if (!button) return;
+    if (!button.getAttribute("data-doc")) return browserPrintReceipt();
+    button.disabled = true;
+    window.AOIPrint(button.getAttribute("data-doc"), button.getAttribute("data-ref")).then(function (res) {
+      button.disabled = false;
+      if (res && res.fallback) browserPrintReceipt();
+    });
   });
   // update 62: Send LINE in the receipt pop-up (the pop-up is filled later, so the click is caught on the page)
   document.addEventListener("click", function (event) {
@@ -200,7 +243,14 @@
       .catch(function () { say("LINE: no connection", true); button.disabled = false; });
   });
   document.querySelectorAll("[data-print]").forEach(function (button) {
-    button.addEventListener("click", function () { window.print(); });
+    button.addEventListener("click", function () {
+      if (!button.getAttribute("data-doc")) return window.print();
+      button.disabled = true;
+      window.AOIPrint(button.getAttribute("data-doc"), button.getAttribute("data-ref")).then(function (res) {
+        button.disabled = false;
+        if (res && res.fallback) window.print();
+      });
+    });
   });
 
   // ----- notices from the server: shown in the pop-up, like the prototype's alerts -----
